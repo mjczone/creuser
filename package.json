@@ -1,0 +1,56 @@
+{
+  "name": "creuser",
+  "version": "0.0.1",
+  "description": "Creuser monorepo orchestration scripts (.NET solution + Quasar SPA + Vitest).",
+  "private": true,
+  "scripts": {
+    "prepare": "husky",
+    "postinstall": "run-s install:all tools:restore",
+    "tools:restore": "dotnet tool restore",
+    "install:all": "run-s install:spa install:spa-tests",
+    "install:spa": "npm --prefix src/Creuser.Web.Spa install",
+    "install:spa-tests": "npm --prefix tests/Creuser.Web.Spa.Tests install",
+    "build": "run-s build:dotnet codegen:spa build:spa",
+    "build:spa": "npm --prefix src/Creuser.Web.Spa run build",
+    "build:dotnet": "dotnet build Creuser.slnx -c Release",
+    "codegen": "run-s build:dotnet codegen:spa",
+    "codegen:spa": "npm --prefix src/Creuser.Web.Spa run codegen",
+    "test": "run-s test:dotnet test:spa",
+    "test:dotnet": "dotnet test Creuser.slnx --nologo",
+    "test:spa": "npm --prefix tests/Creuser.Web.Spa.Tests test",
+    "lint": "run-s lint:dotnet lint:spa",
+    "lint:dotnet": "dotnet csharpier check .",
+    "lint:spa": "npm --prefix src/Creuser.Web.Spa run lint",
+    "lint:fix": "run-s lint:dotnet:fix lint:spa:fix",
+    "lint:dotnet:fix": "dotnet csharpier format .",
+    "lint:spa:fix": "npm --prefix src/Creuser.Web.Spa run lint:fix",
+    "format": "run-s format:dotnet format:spa",
+    "format:dotnet": "dotnet csharpier format .",
+    "format:spa": "npm --prefix src/Creuser.Web.Spa run format",
+    "typecheck": "npm --prefix tests/Creuser.Web.Spa.Tests run typecheck",
+    "dev:spa": "npm --prefix src/Creuser.Web.Spa run dev",
+    "dev:dotnet": "dotnet watch --project src/Creuser.Web/Creuser.Web.csproj",
+    "dev": "run-p dev:spa dev:dotnet",
+    "clean": "run-s clean:dotnet clean:spa",
+    "clean:dotnet": "dotnet clean Creuser.slnx",
+    "clean:spa": "npm --prefix src/Creuser.Web.Spa run clean --if-present",
+    "services:up": "run-s services:up:start services:wire",
+    "services:up:start": "docker compose -f docker/docker-compose.dev.yml up -d --wait",
+    "services:wire": "node scripts/wire-dev-services.mjs",
+    "services:down": "docker compose -f docker/docker-compose.dev.yml down",
+    "services:logs": "docker compose -f docker/docker-compose.dev.yml logs -f",
+    "services:purge": "docker compose -f docker/docker-compose.dev.yml down -v --remove-orphans"
+  },
+  "lint-staged": {
+    "*.cs": "dotnet csharpier format --no-msbuild-check"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "npm-run-all2": "^8.0.0"
+  },
+  "engines": {
+    "node": "^28 || ^26 || ^24 || ^22.12",
+    "npm": ">= 10"
+  }
+}

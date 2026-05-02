@@ -1,0 +1,64 @@
+{
+  "name": "creuser-web-spa",
+  "version": "0.0.1",
+  "description": "An open-source workflow and agent orchestration platform for monorepo operations.",
+  "productName": "Creuser",
+  "author": "mjc <mjc@mjczone.com>",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "lint": "eslint -c ./eslint.config.js \"./src*/**/*.{ts,js,cjs,mjs,vue}\"",
+    "lint:fix": "eslint --fix -c ./eslint.config.js \"./src*/**/*.{ts,js,cjs,mjs,vue}\"",
+    "format": "prettier --write \"**/*.{js,ts,vue,css,scss,html,md,json}\" --ignore-path .gitignore",
+    "test": "echo \"No test specified\" && exit 0",
+    "dev": "quasar dev -m spa",
+    "build": "quasar build -m spa",
+    "codegen": "openapi-ts",
+    "postinstall": "quasar prepare"
+  },
+  "dependencies": {
+    "@formkit/tempo": "^1.0.0",
+    "@quasar/extras": "^1.16.4",
+    "@vueuse/core": "^14.3.0",
+    "@vueuse/gesture": "^2.0.0",
+    "@vueuse/integrations": "^14.3.0",
+    "@vueuse/motion": "^3.0.3",
+    "@vueuse/router": "^14.3.0",
+    "@vueuse/rxjs": "^14.3.0",
+    "pinia": "^3.0.1",
+    "quasar": "^2.16.0",
+    "unhead": "^3.0.0-beta.9",
+    "vue": "^3.5.22",
+    "vue-i18n": "^11.3.0",
+    "vue-router": "^5.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@hey-api/openapi-ts": "^0.97.0",
+    "@intlify/unplugin-vue-i18n": "^11.0.0",
+    "@quasar/app-vite": "^2.5.1",
+    "@types/node": "^22.19.11",
+    "@vue/eslint-config-prettier": "^10.2.0",
+    "@vue/eslint-config-typescript": "^14.7.0",
+    "autoprefixer": "^10.4.27",
+    "eslint": "^9.39.4",
+    "eslint-plugin-vue": "^10.8.0",
+    "glob": "^13.0.6",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3",
+    "vite-plugin-checker": "^0.12.0",
+    "vue-eslint-parser": "^10.4.0",
+    "vue-tsc": "^3.2.6"
+  },
+  "resolutions": {
+    "glob": "^13.0.6",
+    "vue-i18n": "^11.3.0"
+  },
+  "engines": {
+    "node": "^28 || ^26 || ^24 || ^22.12",
+    "npm": ">= 6.13.4",
+    "yarn": ">= 1.21.1",
+    "pnpm": ">= 10.0.0"
+  }
+}

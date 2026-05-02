@@ -1,0 +1,17 @@
+tmp/
+node_modules/
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# SPA build output is emitted into Creuser.Web/wwwroot by `quasar build`
+# (see quasar.config.ts → build.distDir). Don't commit the artifacts.
+src/Creuser.Web/wwwroot/
+
+# Per-developer ASP.NET Core settings overrides — populated by
+# `npm run services:up` with the random host ports of the dev containers.
+appsettings.*.local.json

@@ -1,0 +1,61 @@
+# Local development backing services.
+#
+# Runs Postgres (with pgvector) and Redis as containers; the .NET backend
+# and SPA dev server run on the host (not in containers) for fast feedback.
+#
+# Host ports are intentionally RANDOM (Docker assigns ephemeral ports on
+# 127.0.0.1) so this stack coexists with other compose projects on the
+# same dev machine that may already own 5432 / 6379. After `up`, the
+# wire-dev-services script reads the assigned ports and writes them to
+# src/Creuser.Web/appsettings.Development.local.json (gitignored) so the
+# .NET app picks up the right connection strings automatically.
+#
+# Use the root npm scripts:
+#
+#   npm run services:up      # start + wire connection strings
+#   npm run services:down    # stop (data volumes preserved)
+#   npm run services:logs    # tail logs
+#   npm run services:purge   # stop AND delete volumes (clean slate)
+#
+# Credentials are intentionally weak — this file is for local dev only.
+# Production deployments use docker/docker-compose.yml with ${POSTGRES_PASSWORD}.
+
+name: creuser-dev
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: creuser-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: creuser
+      POSTGRES_USER: creuser
+      POSTGRES_PASSWORD: creuser_dev
+    ports:
+      - "127.0.0.1::5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U creuser -d creuser"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: creuser-dev-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "127.0.0.1::6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:

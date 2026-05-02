@@ -1,0 +1,23 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/Creuser.Agents/Creuser.Agents.csproj" />
+    <Project Path="src/Creuser.Auth.Abstractions/Creuser.Auth.Abstractions.csproj" />
+    <Project Path="src/Creuser.Auth.Core/Creuser.Auth.Core.csproj" />
+    <Project Path="src/Creuser.Auth.Providers.Google/Creuser.Auth.Providers.Google.csproj" />
+    <Project Path="src/Creuser.Auth.Providers.Local/Creuser.Auth.Providers.Local.csproj" />
+    <Project Path="src/Creuser.Core/Creuser.Core.csproj" />
+    <Project Path="src/Creuser.Git/Creuser.Git.csproj" />
+    <Project Path="src/Creuser.Persistence/Creuser.Persistence.csproj" />
+    <Project Path="src/Creuser.Scripting/Creuser.Scripting.csproj" />
+    <Project Path="src/Creuser.Web/Creuser.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Creuser.Core.Tests/Creuser.Core.Tests.csproj" />
+    <Project Path="tests/Creuser.Integration.Tests/Creuser.Integration.Tests.csproj" />
+  </Folder>
+</Solution>

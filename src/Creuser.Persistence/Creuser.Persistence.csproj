@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.72" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.7" />
+    <PackageReference Include="MJCZone.DapperMatic" Version="0.1.8" />
+    <PackageReference Include="Npgsql" Version="10.0.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Creuser.Auth.Abstractions\Creuser.Auth.Abstractions.csproj" />
+    <ProjectReference Include="..\Creuser.Auth.Core\Creuser.Auth.Core.csproj" />
+  </ItemGroup>
+</Project>

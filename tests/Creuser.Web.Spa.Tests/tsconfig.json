@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "jsx": "preserve",
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": ["vitest/globals", "node", "vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "src": ["../../src/Creuser.Web.Spa/src"],
+      "src/*": ["../../src/Creuser.Web.Spa/src/*"],
+      "stores": ["../../src/Creuser.Web.Spa/src/stores"],
+      "stores/*": ["../../src/Creuser.Web.Spa/src/stores/*"],
+      "components": ["../../src/Creuser.Web.Spa/src/components"],
+      "components/*": ["../../src/Creuser.Web.Spa/src/components/*"],
+      "layouts": ["../../src/Creuser.Web.Spa/src/layouts"],
+      "layouts/*": ["../../src/Creuser.Web.Spa/src/layouts/*"],
+      "pages": ["../../src/Creuser.Web.Spa/src/pages"],
+      "pages/*": ["../../src/Creuser.Web.Spa/src/pages/*"],
+      "assets": ["../../src/Creuser.Web.Spa/src/assets"],
+      "assets/*": ["../../src/Creuser.Web.Spa/src/assets/*"],
+      "boot": ["../../src/Creuser.Web.Spa/src/boot"],
+      "boot/*": ["../../src/Creuser.Web.Spa/src/boot/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "setup.ts", "vitest.config.ts"]
+}

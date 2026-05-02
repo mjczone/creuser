@@ -1,0 +1,47 @@
+# Overlay that fronts Creuser with Caddy for automatic HTTPS via Let's Encrypt.
+#
+# Use with the production compose file (NOT standalone — requires services
+# defined in docker-compose.yml):
+#
+#   echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> .env
+#   echo "CREUSER_DOMAIN=creuser.example.com"        >> .env
+#   docker compose -f docker/docker-compose.yml \
+#                  -f docker/docker-compose.caddy.yml up -d
+#
+# Requirements:
+#   - DNS A record for $CREUSER_DOMAIN pointing at this host BEFORE first run
+#     (Caddy completes the ACME challenge on the host's :80 / :443).
+#   - Ports 80, 443, and 443/udp free on the host.
+#
+# What this overlay changes:
+#   - Removes the host port mapping from `creuser` (only Caddy is exposed
+#     externally; creuser is reachable on the internal docker network).
+#   - Adds a Caddy container fronting :80 / :443 / :443/udp.
+#
+# Cert state lives in the caddy-data volume — back this up if you don't
+# want to re-issue certs after a host migration.
+
+services:
+  creuser:
+    # Strip the public port; Caddy is the only externally-reachable service.
+    ports: !reset []
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      CREUSER_DOMAIN: ${CREUSER_DOMAIN:?CREUSER_DOMAIN is required for HTTPS}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - creuser
+
+volumes:
+  caddy-data:
+  caddy-config:

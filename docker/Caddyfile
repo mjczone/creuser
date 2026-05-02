@@ -1,0 +1,5 @@
+# Fronts Creuser with HTTPS (Let's Encrypt, auto-renewed).
+# Used by docker-compose.caddy.yml. Set $CREUSER_DOMAIN in .env.
+{$CREUSER_DOMAIN} {
+    reverse_proxy creuser:8080
+}
