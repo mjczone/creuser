@@ -713,6 +713,8 @@ public sealed class JobExecutor
 
         if (frontmatter.Type == "llm-chat" && !merged.ContainsKey("prompt"))
             merged["prompt"] = body;
+        if (frontmatter.Type == "llm-tool-loop" && !merged.ContainsKey("goal"))
+            merged["goal"] = body;
         if (frontmatter.Type == "shell" && !merged.ContainsKey("script"))
             merged["script"] = body;
         if (frontmatter.Type == "csharp" && !merged.ContainsKey("script"))

@@ -43,7 +43,22 @@ public sealed class AgentClientResolver : IChatClientResolver
         CancellationToken ct
     )
     {
-        var outcome = await ResolveAsync(provider, modelOverride, ct);
+        var outcome = await ResolveAsync(provider, modelOverride, useFunctionInvocation: true, ct);
+        return new ChatClientResolution(
+            Client: outcome.Client?.Client,
+            Provider: outcome.Client?.Provider,
+            Model: outcome.Client?.Model,
+            Reason: outcome.Reason
+        );
+    }
+
+    async Task<ChatClientResolution> IChatClientResolver.ResolveRawAsync(
+        string? provider,
+        string? modelOverride,
+        CancellationToken ct
+    )
+    {
+        var outcome = await ResolveAsync(provider, modelOverride, useFunctionInvocation: false, ct);
         return new ChatClientResolution(
             Client: outcome.Client?.Client,
             Provider: outcome.Client?.Provider,
@@ -72,9 +87,22 @@ public sealed class AgentClientResolver : IChatClientResolver
     /// Resolve an <see cref="IChatClient"/> for a specific provider, or for
     /// the configured default when <paramref name="provider"/> is null.
     /// </summary>
-    public async Task<ResolveOutcome> ResolveAsync(
+    public Task<ResolveOutcome> ResolveAsync(
         string? provider = null,
         string? modelOverride = null,
+        CancellationToken ct = default
+    ) => ResolveAsync(provider, modelOverride, useFunctionInvocation: true, ct);
+
+    /// <summary>
+    /// Same as <see cref="ResolveAsync(string?, string?, CancellationToken)"/>
+    /// but lets the caller suppress the <c>UseFunctionInvocation()</c>
+    /// middleware. The tool-loop runner uses this so it can drive its own
+    /// ReAct loop with explicit per-turn budget enforcement.
+    /// </summary>
+    public async Task<ResolveOutcome> ResolveAsync(
+        string? provider,
+        string? modelOverride,
+        bool useFunctionInvocation,
         CancellationToken ct = default
     )
     {
@@ -88,13 +116,24 @@ public sealed class AgentClientResolver : IChatClientResolver
 
         return resolvedProvider switch
         {
-            "openai" => await ResolveOpenAIAsync(env.AiProviders.OpenAI, modelOverride, ct),
+            "openai" => await ResolveOpenAIAsync(
+                env.AiProviders.OpenAI,
+                modelOverride,
+                useFunctionInvocation,
+                ct
+            ),
             "anthropic" => await ResolveAnthropicAsync(
                 env.AiProviders.Anthropic,
                 modelOverride,
+                useFunctionInvocation,
                 ct
             ),
-            "local" => await ResolveLocalAsync(env.AiProviders.Local, modelOverride, ct),
+            "local" => await ResolveLocalAsync(
+                env.AiProviders.Local,
+                modelOverride,
+                useFunctionInvocation,
+                ct
+            ),
             _ => Missing($"Unknown provider '{resolvedProvider}'."),
         };
     }
@@ -102,6 +141,7 @@ public sealed class AgentClientResolver : IChatClientResolver
     private async Task<ResolveOutcome> ResolveLocalAsync(
         LocalProviderConfig? config,
         string? modelOverride,
+        bool useFunctionInvocation,
         CancellationToken ct
     )
     {
@@ -130,7 +170,13 @@ public sealed class AgentClientResolver : IChatClientResolver
         }
 
         // "local" is OpenAI-wire-compatible — same factory path, custom endpoint.
-        var client = _factory.Create("openai", apiKey, model, config.BaseUrl);
+        var client = _factory.Create(
+            "openai",
+            apiKey,
+            model,
+            config.BaseUrl,
+            useFunctionInvocation
+        );
         return client is null
             ? Missing("Failed to construct the local OpenAI-compatible client.")
             : Resolved(new ResolvedClient("local", model, config.BaseUrl, client));
@@ -139,6 +185,7 @@ public sealed class AgentClientResolver : IChatClientResolver
     private async Task<ResolveOutcome> ResolveAnthropicAsync(
         AnthropicConfig? config,
         string? modelOverride,
+        bool useFunctionInvocation,
         CancellationToken ct
     )
     {
@@ -151,7 +198,13 @@ public sealed class AgentClientResolver : IChatClientResolver
             );
 
         var model = modelOverride ?? config?.DefaultModel ?? "claude-opus-4-7";
-        var client = _factory.Create("anthropic", apiKey, model, config?.BaseUrl);
+        var client = _factory.Create(
+            "anthropic",
+            apiKey,
+            model,
+            config?.BaseUrl,
+            useFunctionInvocation
+        );
         return client is null
             ? Missing("Failed to construct the Anthropic client.")
             : Resolved(new ResolvedClient("anthropic", model, config?.BaseUrl, client));
@@ -160,6 +213,7 @@ public sealed class AgentClientResolver : IChatClientResolver
     private async Task<ResolveOutcome> ResolveOpenAIAsync(
         OpenAIConfig? config,
         string? modelOverride,
+        bool useFunctionInvocation,
         CancellationToken ct
     )
     {
@@ -172,7 +226,13 @@ public sealed class AgentClientResolver : IChatClientResolver
             );
 
         var model = modelOverride ?? config?.DefaultModel ?? "gpt-5";
-        var client = _factory.Create("openai", apiKey, model, config?.BaseUrl);
+        var client = _factory.Create(
+            "openai",
+            apiKey,
+            model,
+            config?.BaseUrl,
+            useFunctionInvocation
+        );
         return client is null
             ? Missing("Failed to construct the OpenAI client.")
             : Resolved(new ResolvedClient("openai", model, config?.BaseUrl, client));

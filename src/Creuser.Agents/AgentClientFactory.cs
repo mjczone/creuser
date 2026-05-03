@@ -17,8 +17,22 @@ public sealed class AgentClientFactory
     /// <summary>
     /// Construct a chat client for the named provider. Returns <c>null</c>
     /// if the provider is unknown or required parameters are missing.
+    ///
+    /// <para>
+    /// <paramref name="useFunctionInvocation"/> defaults to <c>true</c>.
+    /// Set to <c>false</c> when the caller drives its own ReAct loop —
+    /// e.g. <c>LlmToolLoopStepRunner</c> needs explicit per-turn budget
+    /// enforcement and tool-log recording, which the auto-invocation
+    /// middleware would short-circuit.
+    /// </para>
     /// </summary>
-    public IChatClient? Create(string provider, string apiKey, string model, string? baseUrl = null)
+    public IChatClient? Create(
+        string provider,
+        string apiKey,
+        string model,
+        string? baseUrl = null,
+        bool useFunctionInvocation = true
+    )
     {
         if (
             string.IsNullOrWhiteSpace(provider)
@@ -29,13 +43,18 @@ public sealed class AgentClientFactory
 
         return provider.ToLowerInvariant() switch
         {
-            "openai" => CreateOpenAI(apiKey, model, baseUrl),
-            "anthropic" => CreateAnthropic(apiKey, model, baseUrl),
+            "openai" => CreateOpenAI(apiKey, model, baseUrl, useFunctionInvocation),
+            "anthropic" => CreateAnthropic(apiKey, model, baseUrl, useFunctionInvocation),
             _ => null,
         };
     }
 
-    private static IChatClient CreateOpenAI(string apiKey, string model, string? baseUrl)
+    private static IChatClient CreateOpenAI(
+        string apiKey,
+        string model,
+        string? baseUrl,
+        bool useFunctionInvocation
+    )
     {
         // The OpenAI .NET SDK is the official client; M.E.AI.OpenAI's
         // `AsIChatClient()` extension wraps an OpenAI ChatClient as an
@@ -53,15 +72,18 @@ public sealed class AgentClientFactory
             options.Endpoint = new Uri(baseUrl);
 
         var client = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), options);
-        return client
-            .GetChatClient(model)
-            .AsIChatClient()
-            .AsBuilder()
-            .UseFunctionInvocation()
-            .Build();
+        var builder = client.GetChatClient(model).AsIChatClient().AsBuilder();
+        if (useFunctionInvocation)
+            builder = builder.UseFunctionInvocation();
+        return builder.Build();
     }
 
-    private static IChatClient CreateAnthropic(string apiKey, string model, string? baseUrl)
+    private static IChatClient CreateAnthropic(
+        string apiKey,
+        string model,
+        string? baseUrl,
+        bool useFunctionInvocation
+    )
     {
         // Anthropic.SDK exposes IChatClient via Messages.AsBuilder(). Note:
         // the `model` argument is unused at construction time — Anthropic.SDK
@@ -76,6 +98,9 @@ public sealed class AgentClientFactory
         _ = baseUrl;
         _ = model;
         var anthropic = new AnthropicClient(new APIAuthentication(apiKey));
-        return anthropic.Messages.AsBuilder().UseFunctionInvocation().Build();
+        var builder = anthropic.Messages.AsBuilder();
+        if (useFunctionInvocation)
+            builder = builder.UseFunctionInvocation();
+        return builder.Build();
     }
 }

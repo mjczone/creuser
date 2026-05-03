@@ -20,10 +20,11 @@
         Single-step jobs declare a top-level <code>type:</code> + body; multi-step
         jobs declare a <code>steps:</code> array with <code>depends_on</code> +
         <code>$step_id.field</code> bindings between them. Available step types:
-        <code>llm-chat</code>, <code>shell</code>, <code>csharp</code>,
-        <code>python</code>, <code>node</code>, <code>file-mutate</code>,
-        <code>file-frontmatter</code>, and <code>http</code>. The agentic /
-        plan-then-execute patterns land in subsequent passes.
+        <code>llm-chat</code>, <code>llm-tool-loop</code>, <code>shell</code>,
+        <code>csharp</code>, <code>python</code>, <code>node</code>,
+        <code>file-mutate</code>, <code>file-frontmatter</code>, and
+        <code>http</code>. The plan-then-execute pattern (<code>llm-planner</code>)
+        lands in a subsequent pass.
       </p>
     </header>
 

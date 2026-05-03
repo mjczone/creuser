@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 
 namespace Creuser.Integration.Tests;
@@ -20,6 +21,14 @@ public sealed class CreuserApiFactory : WebApplicationFactory<Program>
     /// 30s production default in place (no tick during a typical test).
     /// </summary>
     public int? SchedulerIntervalMs { get; init; }
+
+    /// <summary>
+    /// Optional hook for replacing services in the WAF's container — used
+    /// by tests that need to swap in a stub <c>IChatClientResolver</c>
+    /// (the llm-tool-loop suite) or other infra fakes. Mutates the same
+    /// <see cref="IServiceCollection"/> the production wiring populated.
+    /// </summary>
+    public Action<Microsoft.Extensions.DependencyInjection.IServiceCollection>? ConfigureTestServices { get; init; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -42,5 +51,9 @@ public sealed class CreuserApiFactory : WebApplicationFactory<Program>
                 cfg.AddInMemoryCollection(settings);
             }
         );
+        if (ConfigureTestServices is { } configure)
+        {
+            builder.ConfigureTestServices(configure);
+        }
     }
 }

@@ -6,6 +6,7 @@ using Creuser.Core.Execution;
 using Creuser.Persistence;
 using Creuser.Persistence.Repositories;
 using Creuser.Scripting;
+using Creuser.Scripting.ToolLoop;
 using Creuser.Web.Agents;
 using Creuser.Web.Agents.Capabilities;
 using Creuser.Web.Branding;
@@ -99,6 +100,14 @@ builder.Services.AddKeyedScoped<IStepRunner, PythonStepRunner>("python");
 builder.Services.AddKeyedScoped<IStepRunner, NodeStepRunner>("node");
 builder.Services.AddKeyedScoped<IStepRunner, FileFrontmatterStepRunner>("file-frontmatter");
 builder.Services.AddKeyedScoped<IStepRunner, HttpStepRunner>("http");
+builder.Services.AddKeyedScoped<IStepRunner, LlmToolLoopStepRunner>("llm-tool-loop");
+
+// Tool registries contributed to the agentic llm-tool-loop runner.
+// Multi-binding — every IToolLoopToolRegistry the runner finds in DI gets
+// composed; the runner validates the per-step tool allow-list against the
+// union and dispatches by tool name. Plugins (when the loader lands)
+// register additional registries here, e.g. for projection / domain tools.
+builder.Services.AddScoped<IToolLoopToolRegistry, WorkspaceToolLoopRegistry>();
 
 // HTTP step runner uses IHttpClientFactory for socket + DNS lifecycle.
 // Two named clients differ on redirect behavior; the runner picks at
