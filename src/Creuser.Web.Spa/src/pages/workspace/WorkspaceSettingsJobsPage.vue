@@ -15,12 +15,14 @@
       </div>
       <p class="cr-jobs-subhead">
         Job scripts compose steps (LLM calls, scripts, file mutations, frontmatter
-        edits) into runs. Each run is recorded with full audit — inputs, outputs,
-        token usage, file changes, commit SHAs, replay handles. v0.1 supports
-        single-step <code>llm-chat</code>, <code>shell</code>, <code>csharp</code>,
+        edits, HTTP requests) into runs. Each run is recorded with full audit —
+        inputs, outputs, token usage, file changes, commit SHAs, replay handles.
+        Single-step jobs declare a top-level <code>type:</code> + body; multi-step
+        jobs declare a <code>steps:</code> array with <code>depends_on</code> +
+        <code>$step_id.field</code> bindings between them. Available step types:
+        <code>llm-chat</code>, <code>shell</code>, <code>csharp</code>,
         <code>python</code>, <code>node</code>, <code>file-mutate</code>,
-        <code>file-frontmatter</code>, and <code>http</code> jobs; multi-step
-        DAGs and the agentic /
+        <code>file-frontmatter</code>, and <code>http</code>. The agentic /
         plan-then-execute patterns land in subsequent passes.
       </p>
     </header>

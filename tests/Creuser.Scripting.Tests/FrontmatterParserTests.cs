@@ -179,6 +179,45 @@ public class FrontmatterParserTests
     }
 
     [Fact]
+    public void ParseFrontmatter_MultiStepDag_DeserializesSteps()
+    {
+        var yaml = """
+            pattern: deterministic
+            steps:
+              - id: fetch
+                type: http
+                inputs:
+                  url: https://example.com/feed.xml
+              - id: parse
+                type: llm-chat
+                depends_on:
+                  - fetch
+                inputs:
+                  prompt: "Extract titles."
+                  input: $fetch.body
+              - id: write
+                type: file-mutate
+                depends_on:
+                  - parse
+                inputs:
+                  ops:
+                    - op: create
+                      path: out.json
+                      content: $parse.text
+            """;
+
+        var result = FrontmatterParser.ParseFrontmatter(yaml);
+
+        Assert.Equal(3, result.Steps.Count);
+        Assert.Equal("fetch", result.Steps[0].Id);
+        Assert.Equal("http", result.Steps[0].Type);
+        Assert.Equal("parse", result.Steps[1].Id);
+        Assert.Equal(new List<string> { "fetch" }, result.Steps[1].DependsOn);
+        Assert.Equal("$fetch.body", result.Steps[1].Inputs["input"]);
+        Assert.Equal("write", result.Steps[2].Id);
+    }
+
+    [Fact]
     public void ParseFrontmatter_UnknownProperties_AreIgnored()
     {
         // The parser must tolerate unknown keys so future frontmatter additions

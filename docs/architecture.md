@@ -745,13 +745,13 @@ The minimal pragmatic slice that exercises the model end-to-end:
 
 1. `IStepRunner` interface + `StepResult` / `FileChange` / `StepArtifact` records in `Creuser.Core`.
 2. `LlmChatStepRunner` in `Creuser.Scripting` — first registered runner. Uses existing `AgentClientResolver`. Supports JSON-Schema response format. Caches in `cr.llm_cache`.
-3. YAML frontmatter parser (YamlDotNet) — single-step jobs only at this stage; no multi-step DAG yet.
-4. `JobExecutor` — in-process synchronous runner that resolves inputs, invokes the runner, persists `JobRun` + `JobRunStep`, applies `FileChange` ops, commits.
+3. YAML frontmatter parser (YamlDotNet) — both single-step (top-level `type:` + body) and multi-step (`steps:` array with `depends_on` + `$step_id.field` bindings).
+4. `JobExecutor` — in-process synchronous runner that resolves inputs, invokes the runner, persists `JobRun` + `JobRunStep`, applies `FileChange` ops, commits. Multi-step path: `DagValidator` (Kahn-based topological sort) + `StepBindingResolver` ($step_id.field / $params.name navigation, raises `StepBindingException` with operator diagnostics on lookup failure). Cancellation propagates from failed upstreams to dependents.
 5. `cr.job_scripts`, `cr.job_runs`, `cr.job_run_steps`, `cr.llm_cache` tables (DapperMatic).
 6. CRUD endpoints for Jobs (admin); `POST /api/workspaces/{slug}/jobs/{jobId}/run` to trigger.
 7. SPA: workspace settings → Jobs page (list + edit + run), workspace home → recent runs.
 
-Subsequent slices add `shell` / `csharp` / `file-mutate` / `file-frontmatter` runners, then multi-step DAGs, then `llm-tool-loop`, then `llm-planner`, then schedules, then Wolverine.
+Subsequent slices add `llm-tool-loop`, `llm-planner`, then schedules, then Wolverine for durable execution.
 
 ### Sandbox model (forward-looking)
 

@@ -107,20 +107,21 @@ public static class FrontmatterParser
 public sealed record ParsedScript(string Frontmatter, string Body);
 
 /// <summary>
-/// Typed representation of frontmatter for v0.1 single-step jobs. The
-/// multi-step <c>steps:</c> shape lands when the DAG executor does — until
-/// then jobs are <c>type:</c> + body, and the executor wraps the whole
-/// thing as a single inline step.
+/// Typed representation of frontmatter. Two shapes are supported:
+/// <list type="bullet">
+///   <item><b>Single-step</b> — top-level <see cref="Type"/> + body. The body becomes the step's content (prompt for llm-chat, script for shell/csharp/python/node). <see cref="Inputs"/> carries any additional configuration.</item>
+///   <item><b>Multi-step</b> — top-level <see cref="Steps"/> array, each entry a <see cref="JobScriptStepDecl"/>. Steps reference each other via <c>depends_on</c>, and inputs can reference upstream outputs via <c>$step_id.output_name</c> bindings. The body is documentation only when steps are declared.</item>
+/// </list>
 /// </summary>
 public sealed class JobScriptFrontmatter
 {
-    /// <summary>One of <c>llm-chat</c>, <c>shell</c>, <c>csharp</c>, <c>file-mutate</c>, etc. Determines the runner.</summary>
+    /// <summary>For single-step jobs: the runner type. Ignored when <see cref="Steps"/> is non-empty (each step declares its own type).</summary>
     public string Type { get; set; } = "llm-chat";
 
     /// <summary>One of <c>deterministic</c>, <c>plan-then-execute</c>, <c>agentic</c>. Defaults to deterministic.</summary>
     public string Pattern { get; set; } = "deterministic";
 
-    /// <summary>Optional runner-specific configuration block. Each runner's input schema defines what's expected here.</summary>
+    /// <summary>For single-step jobs: runner-specific inputs. Ignored when <see cref="Steps"/> is non-empty (each step declares its own inputs).</summary>
     public Dictionary<string, object?> Inputs { get; set; } = new();
 
     /// <summary>Free-text declaration of secret filenames the runner may read via SecretsService.</summary>
@@ -135,6 +136,9 @@ public sealed class JobScriptFrontmatter
     /// <summary>Optional schedule. v0.1 doesn't run a scheduler yet, but we round-trip the value.</summary>
     public ScheduleBlock? Schedule { get; set; }
 
+    /// <summary>Multi-step DAG declaration. Empty means "single-step job" (use <see cref="Type"/> + body). Non-empty switches the executor into DAG mode.</summary>
+    public List<JobScriptStepDecl> Steps { get; set; } = new();
+
     public sealed class BudgetsBlock
     {
         public int? MaxDurationSeconds { get; set; }
@@ -147,6 +151,29 @@ public sealed class JobScriptFrontmatter
         public string? Cron { get; set; }
         public List<string> TriggerOn { get; set; } = new();
     }
+}
+
+/// <summary>
+/// One step in a multi-step job's DAG. Steps execute in topological order
+/// of their <see cref="DependsOn"/> edges; outputs flow forward via
+/// <c>$step_id.field</c> bindings inside subsequent steps' inputs.
+/// </summary>
+public sealed class JobScriptStepDecl
+{
+    /// <summary>Stable identifier within the job. Must be unique. Used as the binding namespace (<c>$id.output</c>) and as the audit position label.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>Optional human-readable name for the audit UI. Defaults to <see cref="Id"/> when absent.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Runner type — same set as single-step jobs (<c>llm-chat</c>, <c>shell</c>, <c>csharp</c>, <c>python</c>, <c>node</c>, <c>file-mutate</c>, <c>file-frontmatter</c>, <c>http</c>).</summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>List of step ids this step depends on. Empty = root step (executes first).</summary>
+    public List<string> DependsOn { get; set; } = new();
+
+    /// <summary>Step-specific inputs. String values matching the <c>$step_id.field</c> binding syntax are resolved at execution time from upstream outputs.</summary>
+    public Dictionary<string, object?> Inputs { get; set; } = new();
 }
 
 public sealed class FrontmatterParseException : Exception

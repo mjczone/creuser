@@ -107,9 +107,6 @@ public sealed class JobExecutor
 
         try
         {
-            // v0.1: parse frontmatter, treat as single-step job. The body of
-            // the script becomes the step's `prompt` input for llm-chat
-            // types; for other types the binding rules will differ.
             var frontmatter = FrontmatterParser.ParseFrontmatter(script.Frontmatter);
 
             // Resolve the workspace + working tree once per run so the step
@@ -130,41 +127,61 @@ public sealed class JobExecutor
                 ? null
                 : await _workingTree.ResolveHeadShaAsync(workspace, workingTreePath, ct);
 
-            var stepInputs = BuildStepInputs(frontmatter, script.Body, parameters);
-            var (stepResult, stepCommitSha) = await ExecuteSingleStepAsync(
-                script,
-                runId,
-                frontmatter,
-                workspace,
-                workingTreePath,
-                stepInputs,
-                ct
-            );
+            var normalizedParams = InputsNormalizer.NormalizeRoot(parameters);
+
+            // Multi-step branch: frontmatter declares a `steps:` array.
+            // Single-step branch: legacy shape — top-level type + body.
+            RunOutcome outcome;
+            if (frontmatter.Steps.Count > 0)
+            {
+                outcome = await ExecuteMultiStepAsync(
+                    script,
+                    runId,
+                    frontmatter,
+                    workspace,
+                    workingTreePath,
+                    normalizedParams,
+                    ct
+                );
+            }
+            else
+            {
+                var stepInputs = BuildStepInputs(frontmatter, script.Body, parameters);
+                var (singleResult, singleSha) = await ExecuteOneStepAsync(
+                    script,
+                    runId,
+                    position: 0,
+                    stepId: Guid.NewGuid(),
+                    stepName: script.Name,
+                    stepType: frontmatter.Type,
+                    declaredAllowedCommands: frontmatter.AllowedCommands,
+                    declaredRequiredSecrets: frontmatter.RequiredSecrets,
+                    budgets: BuildBudgets(frontmatter),
+                    workspace: workspace,
+                    workingTreePath: workingTreePath,
+                    inputs: stepInputs,
+                    ct: ct
+                );
+                outcome = new RunOutcome(
+                    Status: MapToRunStatus(singleResult.Status),
+                    LastCommitSha: singleSha,
+                    FailureMessage: singleResult.ErrorMessage,
+                    TotalTokensUsed: singleResult.TokensUsed,
+                    TotalCostUsd: singleResult.CostUsd
+                );
+            }
 
             totalSw.Stop();
-            var status = stepResult.Status switch
-            {
-                StepStatus.Succeeded => JobRunStatus.Succeeded,
-                StepStatus.Skipped => JobRunStatus.Succeeded,
-                StepStatus.Failed => JobRunStatus.Failed,
-                StepStatus.Paused => JobRunStatus.Paused,
-                _ => JobRunStatus.Failed,
-            };
-
-            // EndCommitSha = the SHA produced by the last step's commit, or
-            // StartCommitSha if no step produced changes (git no-op runs).
-            // Null for non-git workspaces.
-            var endSha = stepCommitSha ?? startSha;
-
+            var endSha = outcome.LastCommitSha ?? startSha;
             var finalRun = initialRun with
             {
-                Status = status,
+                Status = outcome.Status,
                 CompletedAt = _time.GetUtcNow().UtcDateTime,
                 StartCommitSha = startSha,
                 EndCommitSha = endSha,
-                FailureMessage = stepResult.ErrorMessage,
-                TotalTokensUsed = stepResult.TokensUsed,
-                TotalCostUsd = stepResult.CostUsd,
+                FailureMessage = outcome.FailureMessage,
+                TotalTokensUsed = outcome.TotalTokensUsed,
+                TotalCostUsd = outcome.TotalCostUsd,
                 DurationMs = totalSw.ElapsedMilliseconds,
             };
             await _runs.SaveRunAsync(finalRun, ct);
@@ -186,31 +203,183 @@ public sealed class JobExecutor
         }
     }
 
-    private async Task<(StepResult Result, string? CommitSha)> ExecuteSingleStepAsync(
+    /// <summary>Outcome bundle the run-level finalizer reads to roll up status + commit SHA + totals.</summary>
+    private sealed record RunOutcome(
+        JobRunStatus Status,
+        string? LastCommitSha,
+        string? FailureMessage,
+        long? TotalTokensUsed,
+        decimal? TotalCostUsd
+    );
+
+    private static JobRunStatus MapToRunStatus(StepStatus s) =>
+        s switch
+        {
+            StepStatus.Succeeded => JobRunStatus.Succeeded,
+            StepStatus.Skipped => JobRunStatus.Succeeded,
+            StepStatus.Failed => JobRunStatus.Failed,
+            StepStatus.Paused => JobRunStatus.Paused,
+            StepStatus.Cancelled => JobRunStatus.Cancelled,
+            _ => JobRunStatus.Failed,
+        };
+
+    /// <summary>
+    /// Walks a multi-step DAG. Validates structure, topologically sorts,
+    /// resolves <c>$step_id.field</c> bindings against the accumulator of
+    /// upstream outputs, runs each step, propagates cancellation when an
+    /// upstream fails, accumulates token/cost totals, and tracks the last
+    /// produced commit SHA so the run-level <c>EndCommitSha</c> matches
+    /// the final mutation.
+    /// </summary>
+    private async Task<RunOutcome> ExecuteMultiStepAsync(
         JobScript script,
         Guid runId,
         JobScriptFrontmatter frontmatter,
+        Workspace workspace,
+        string workingTreePath,
+        IReadOnlyDictionary<string, object?> parameters,
+        CancellationToken ct
+    )
+    {
+        var validation = DagValidator.Validate(frontmatter.Steps);
+        if (validation.Error is not null)
+        {
+            // Persist a synthetic failed step so the audit timeline carries
+            // the validation error rather than burying it on the JobRun.
+            await PersistDagValidationFailureAsync(script, runId, validation.Error, ct);
+            return new RunOutcome(
+                Status: JobRunStatus.Failed,
+                LastCommitSha: null,
+                FailureMessage: validation.Error,
+                TotalTokensUsed: null,
+                TotalCostUsd: null
+            );
+        }
+
+        var stepOutputs = new Dictionary<string, IReadOnlyDictionary<string, object?>>(
+            StringComparer.Ordinal
+        );
+        var stepStatuses = new Dictionary<string, StepStatus>(StringComparer.Ordinal);
+        long? totalTokens = null;
+        decimal? totalCost = null;
+        string? lastCommitSha = null;
+        var anyFailed = false;
+        string? firstFailureMessage = null;
+
+        for (var position = 0; position < validation.Sorted.Count; position++)
+        {
+            var stepDecl = validation.Sorted[position];
+
+            // Cancellation propagation: if any upstream this step depends
+            // on (transitively, via the topological walk) failed or was
+            // cancelled, this step never runs.
+            var blockedBy = stepDecl.DependsOn.FirstOrDefault(id =>
+                stepStatuses.GetValueOrDefault(id) is StepStatus.Failed or StepStatus.Cancelled
+            );
+            if (blockedBy is not null)
+            {
+                await PersistCancelledStepAsync(script, runId, stepDecl, position, blockedBy, ct);
+                stepStatuses[stepDecl.Id] = StepStatus.Cancelled;
+                continue;
+            }
+
+            // Resolve bindings before normalizing — the binding resolver
+            // expects the canonical shape.
+            IReadOnlyDictionary<string, object?> resolvedInputs;
+            try
+            {
+                var normalizedDeclaredInputs = InputsNormalizer.NormalizeRoot(stepDecl.Inputs);
+                resolvedInputs = StepBindingResolver.Resolve(
+                    normalizedDeclaredInputs,
+                    stepOutputs,
+                    parameters
+                );
+            }
+            catch (StepBindingException ex)
+            {
+                await PersistBindingFailureAsync(script, runId, stepDecl, position, ex, ct);
+                stepStatuses[stepDecl.Id] = StepStatus.Failed;
+                anyFailed = true;
+                firstFailureMessage ??= ex.Message;
+                continue;
+            }
+
+            var stepName = string.IsNullOrWhiteSpace(stepDecl.Name) ? stepDecl.Id : stepDecl.Name;
+            var (result, commitSha) = await ExecuteOneStepAsync(
+                script,
+                runId,
+                position: position,
+                stepId: Guid.NewGuid(),
+                stepName: stepName,
+                stepType: stepDecl.Type,
+                declaredAllowedCommands: frontmatter.AllowedCommands,
+                declaredRequiredSecrets: frontmatter.RequiredSecrets,
+                budgets: BuildBudgets(frontmatter),
+                workspace: workspace,
+                workingTreePath: workingTreePath,
+                inputs: resolvedInputs,
+                ct: ct
+            );
+
+            stepStatuses[stepDecl.Id] = result.Status;
+            stepOutputs[stepDecl.Id] = result.Outputs;
+            if (commitSha is not null)
+                lastCommitSha = commitSha;
+            if (result.TokensUsed is { } tokens)
+                totalTokens = (totalTokens ?? 0) + tokens;
+            if (result.CostUsd is { } cost)
+                totalCost = (totalCost ?? 0m) + cost;
+
+            if (result.Status is StepStatus.Failed)
+            {
+                anyFailed = true;
+                firstFailureMessage ??= result.ErrorMessage;
+            }
+        }
+
+        return new RunOutcome(
+            Status: anyFailed ? JobRunStatus.Failed : JobRunStatus.Succeeded,
+            LastCommitSha: lastCommitSha,
+            FailureMessage: firstFailureMessage,
+            TotalTokensUsed: totalTokens,
+            TotalCostUsd: totalCost
+        );
+    }
+
+    /// <summary>
+    /// Run a single step with the supplied identity + budgets. Used by
+    /// both the single-step and multi-step paths so the audit shape +
+    /// apply-and-commit semantics are identical.
+    /// </summary>
+    private async Task<(StepResult Result, string? CommitSha)> ExecuteOneStepAsync(
+        JobScript script,
+        Guid runId,
+        int position,
+        Guid stepId,
+        string stepName,
+        string stepType,
+        IReadOnlyList<string> declaredAllowedCommands,
+        IReadOnlyList<string> declaredRequiredSecrets,
+        StepBudgets budgets,
         Workspace workspace,
         string workingTreePath,
         IReadOnlyDictionary<string, object?> inputs,
         CancellationToken ct
     )
     {
-        var stepType = frontmatter.Type;
-        var stepId = Guid.NewGuid();
         var stepStartedAt = _time.GetUtcNow().UtcDateTime;
         var inputsJson = JsonSerializer.Serialize(inputs);
         var inputsHash = Sha256(inputsJson);
-        var idempotencyKey = Sha256(stepType + "|" + inputsHash);
+        var idempotencyKey = Sha256(stepName + "|" + stepType + "|" + inputsHash);
 
         // Persist the step record up-front so audit shows "running" even if
         // the host crashes during execution.
         var stepRecord = new JobRunStep(
             Id: stepId,
             RunId: runId,
-            Position: 0,
+            Position: position,
             StepType: stepType,
-            Name: script.Name,
+            Name: stepName,
             Status: StepStatus.Running,
             IdempotencyKey: idempotencyKey,
             CachedFromStepId: null,
@@ -244,15 +413,15 @@ public sealed class JobExecutor
         }
 
         var allowedCommands =
-            frontmatter.AllowedCommands.Count == 0
+            declaredAllowedCommands.Count == 0
                 ? null
                 : (IReadOnlySet<string>)
-                    new HashSet<string>(frontmatter.AllowedCommands, StringComparer.Ordinal);
+                    new HashSet<string>(declaredAllowedCommands, StringComparer.Ordinal);
         var requiredSecrets =
-            frontmatter.RequiredSecrets.Count == 0
+            declaredRequiredSecrets.Count == 0
                 ? null
                 : (IReadOnlySet<string>)
-                    new HashSet<string>(frontmatter.RequiredSecrets, StringComparer.Ordinal);
+                    new HashSet<string>(declaredRequiredSecrets, StringComparer.Ordinal);
 
         var ctx = new StepContext(
             RunId: runId,
@@ -260,8 +429,8 @@ public sealed class JobExecutor
             WorkspaceSlug: workspace.Slug,
             WorkingTreePath: workingTreePath,
             StepId: stepId,
-            StepName: script.Name,
-            Budgets: BuildBudgets(frontmatter),
+            StepName: stepName,
+            Budgets: budgets,
             Logger: _services.GetRequiredService<ILoggerFactory>().CreateLogger(stepType),
             AllowedCommands: allowedCommands,
             RequiredSecrets: requiredSecrets,
@@ -294,7 +463,7 @@ public sealed class JobExecutor
         {
             try
             {
-                var commitMessage = BuildCommitMessage(script, runId, stepId, result);
+                var commitMessage = BuildCommitMessage(stepName, runId, stepId, result);
                 var apply = await _workingTree.ApplyAndCommitAsync(
                     workspace,
                     workingTreePath,
@@ -335,8 +504,132 @@ public sealed class JobExecutor
         return (result, commitSha);
     }
 
-    private static string BuildCommitMessage(
+    /// <summary>
+    /// Persist a synthetic step record carrying the DAG-validation error so
+    /// the audit timeline shows where the run died. The record sits at
+    /// position 0 with a marker step type so the UI can render it
+    /// distinctly.
+    /// </summary>
+    private async Task PersistDagValidationFailureAsync(
         JobScript script,
+        Guid runId,
+        string error,
+        CancellationToken ct
+    )
+    {
+        var now = _time.GetUtcNow().UtcDateTime;
+        await _runs.SaveStepAsync(
+            new JobRunStep(
+                Id: Guid.NewGuid(),
+                RunId: runId,
+                Position: 0,
+                StepType: "_dag_validation",
+                Name: "DAG validation",
+                Status: StepStatus.Failed,
+                IdempotencyKey: Sha256("_dag_validation|" + script.Id),
+                CachedFromStepId: null,
+                InputsJson: "{}",
+                OutputsJson: null,
+                InputsHash: Sha256("_dag_validation"),
+                FileChangeCount: 0,
+                CommitSha: null,
+                StartedAt: now,
+                CompletedAt: now,
+                DurationMs: 0,
+                TokensUsed: null,
+                CostUsd: null,
+                ErrorMessage: error,
+                ResumeToken: null
+            ),
+            ct
+        );
+    }
+
+    /// <summary>
+    /// Persist a Cancelled step record when an upstream step failed. Captures
+    /// which upstream blocked it so the audit UI can render the dependency
+    /// chain.
+    /// </summary>
+    private async Task PersistCancelledStepAsync(
+        JobScript script,
+        Guid runId,
+        JobScriptStepDecl stepDecl,
+        int position,
+        string blockedBy,
+        CancellationToken ct
+    )
+    {
+        var now = _time.GetUtcNow().UtcDateTime;
+        await _runs.SaveStepAsync(
+            new JobRunStep(
+                Id: Guid.NewGuid(),
+                RunId: runId,
+                Position: position,
+                StepType: stepDecl.Type,
+                Name: string.IsNullOrWhiteSpace(stepDecl.Name) ? stepDecl.Id : stepDecl.Name,
+                Status: StepStatus.Cancelled,
+                IdempotencyKey: Sha256("cancelled|" + script.Id + "|" + stepDecl.Id),
+                CachedFromStepId: null,
+                InputsJson: JsonSerializer.Serialize(stepDecl.Inputs),
+                OutputsJson: null,
+                InputsHash: Sha256(JsonSerializer.Serialize(stepDecl.Inputs)),
+                FileChangeCount: 0,
+                CommitSha: null,
+                StartedAt: now,
+                CompletedAt: now,
+                DurationMs: 0,
+                TokensUsed: null,
+                CostUsd: null,
+                ErrorMessage: $"Cancelled — upstream step '{blockedBy}' did not succeed.",
+                ResumeToken: null
+            ),
+            ct
+        );
+    }
+
+    /// <summary>
+    /// Persist a failed step record when binding resolution can't satisfy
+    /// the step's inputs (typo in $step.field, missing parameter, etc.).
+    /// </summary>
+    private async Task PersistBindingFailureAsync(
+        JobScript script,
+        Guid runId,
+        JobScriptStepDecl stepDecl,
+        int position,
+        StepBindingException ex,
+        CancellationToken ct
+    )
+    {
+        var now = _time.GetUtcNow().UtcDateTime;
+        await _runs.SaveStepAsync(
+            new JobRunStep(
+                Id: Guid.NewGuid(),
+                RunId: runId,
+                Position: position,
+                StepType: stepDecl.Type,
+                Name: string.IsNullOrWhiteSpace(stepDecl.Name) ? stepDecl.Id : stepDecl.Name,
+                Status: StepStatus.Failed,
+                IdempotencyKey: Sha256("binding|" + script.Id + "|" + stepDecl.Id),
+                CachedFromStepId: null,
+                InputsJson: JsonSerializer.Serialize(stepDecl.Inputs),
+                OutputsJson: null,
+                InputsHash: Sha256(JsonSerializer.Serialize(stepDecl.Inputs)),
+                FileChangeCount: 0,
+                CommitSha: null,
+                StartedAt: now,
+                CompletedAt: now,
+                DurationMs: 0,
+                TokensUsed: null,
+                CostUsd: null,
+                ErrorMessage: ex.Message,
+                ResumeToken: null
+            ),
+            ct
+        );
+    }
+
+    private static string BuildCommitMessage(
+        string stepName,
         Guid runId,
         Guid stepId,
         StepResult result
@@ -346,10 +639,7 @@ public sealed class JobExecutor
         //   [creuser] <step.name> (run=<run_id> step=<step_id>)
         //   ...
         var sb = new StringBuilder();
-        sb.Append("[creuser] ")
-            .Append(script.Name)
-            .Append(" (run=")
-            .Append(runId.ToString("N")[..8]);
+        sb.Append("[creuser] ").Append(stepName).Append(" (run=").Append(runId.ToString("N")[..8]);
         sb.Append(" step=").Append(stepId.ToString("N")[..8]).Append(')');
 
         if (result.FileChanges.Count > 0)
