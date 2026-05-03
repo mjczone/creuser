@@ -18,7 +18,7 @@ Creuser is the platform. The IP boundary is strict: Creuser exists only to help 
 
 **Single image, single command.** The deployment story is `docker compose up`. Three services (Creuser, Postgres, Redis), two connection-string environment variables (Postgres and Redis), one persistent volume mounted at `/data`. Everything else — secrets, branding, plugins, scripts — lives on the volume and is configured in-app.
 
-**On-premise, single-tenant.** Each organization runs its own Creuser instance. No multi-tenancy in the core. This simplifies the security model, the data model, and the operational story.
+**On-premise, single-tenant.** Creuser is a productivity toolkit for one person or one organization to organize, run, expand, and enhance a codebase, manage a knowledge tree, conduct strategically-aligned research, and communicate findings — read-only via dashboards and via full agentic capabilities for workspace owners and developers. Each organization runs its own Creuser instance; **co-mingling multiple tenants' workspaces on a single filesystem is architecturally disallowed** for IP, security, and isolation reasons. If multi-tenant deployment is ever needed, the path is **separate environments per tenant** — separate Docker stacks with independent mounted `/data` volumes, served on separate domains, with no shared persistence layer. That keeps the v1 security model intentionally simple: filesystem isolation + per-org auth, never tenant-aware ACLs over a shared store.
 
 **Database is projection-of-record.** Git (or S3) is the source-of-record for the *content*. Postgres is the source-of-record for *everything else* and the queryable projection of content. Workflows and agents query Postgres for discovery; they touch the working tree only when they need to read or mutate specific files.
 
@@ -1021,6 +1021,127 @@ Once `cr.entities` + `cr.entity_refs` exists, the workspace IS a typed knowledge
 
 Matrix views are the **data layer**; the dashboard composer is the **host**. The data composes with anything (a simple HTML grid, a CDN-loaded chart lib, an external Grafana, a bespoke client UI), so it lands first and pays for itself on its own — the existing pages (Workspace Home, Operations dashboards) gain matrix-view tiles immediately. The composer becomes meaningfully more compelling once analytical widgets exist; "drag in a matrix-view widget" is a richer demo than "drag in a log-tail widget." Implementation order in the timeline reflects this: matrix views ship first, composer ships second.
 
+## JS widgets and CDN-loaded libraries (post-v0.1)
+
+Creuser core ships **no charting library** and **no presentation primitives beyond Quasar**. Workspace owners author widgets in JavaScript inside the platform's Monaco editor, against whatever library they want loaded — d3, plotly, ECharts, leaflet, mermaid, antv/g6, three.js, prismjs, mathjax. The platform provides the data and the host; the workspace decides the rendering.
+
+This is forward-looking architecture for the dashboard composer slice (timeline item 14). Three primitives:
+
+### 1. CDN registration — workspace-scoped `head_scripts`
+
+A new admin settings page lets workspace owners register dependencies:
+
+```yaml
+head_scripts:
+  - id: echarts
+    name: Apache ECharts
+    src: https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js
+    integrity: sha384-...        # SRI hash, optional but encouraged
+    license_key_secret: null      # filename under /data/secrets/, for paid libs
+    scope: dashboards             # | "all" — when widgets need it before login pages
+  - id: d3
+    name: D3 v7
+    src: https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js
+  - id: plotly
+    name: Plotly.js
+    src: https://cdn.plot.ly/plotly-2.35.2.min.js
+```
+
+Stored in `cr.workspace_assets` (or extension of the existing branding store). The SPA's branding bootstrap fetches this list on workspace load and dynamically injects `<script>` tags before the dashboard composer mounts. Libs become globals (`window.echarts`, `window.d3`, `window.Plotly`); widget code references them directly.
+
+License keys for paid libs (amcharts is the canonical case) live as filenames under `/data/secrets/` referenced from `cr.workspace_assets`; the SPA never receives the key value, only the asset record. The widget reads `ctx.licenseKeys.amcharts` server-side via a thin endpoint that injects the key into the page at load time. Free libs that watermark the free tier (amcharts, highcharts) keep their logo when no license is present — that's the licensing trade.
+
+The same plumbing serves any CDN dep, not just charting. Mermaid for diagrams, monaco itself for embedded editors in widgets, prismjs for code highlighting, antv/g6 for graph viz of `cr.entity_refs`, three.js for 3D visualizations — one registration mechanism, all uniformly available.
+
+### 2. Widget context — Monaco produces a function body
+
+A new widget type `JsWidget` in `cr.dashboard_widgets`:
+
+```typescript
+interface JsWidget {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description: string;
+  jsSource: string;          // Monaco-edited body
+  versions: JsWidgetVersion[]; // see Versioning below
+}
+```
+
+When the dashboard composer renders a widget instance, it wraps `jsSource` in `new Function('ctx', source)` and invokes with a typed `ctx`:
+
+```typescript
+ctx = {
+  workspace: { slug, id },
+  dom: HTMLElement,            // root element the widget owns
+  options: Record<string, unknown>,  // widget-instance props from the dashboard config
+
+  // Data primitives — wrap the existing API endpoints
+  fetchMatrix(id: string, params?: object): Promise<MatrixData>;
+  fetchEntities(query: EntityQuery): Promise<Entity[]>;
+  fetchEntity(kind: string, slug: string): Promise<EntityWithRefs>;
+  fetchOrphans(kind?: string): Promise<EntityRef[]>;
+  fetchUnresolvedRefs(targetKind?: string): Promise<EntityRef[]>;
+  runQuery(spec: QuerySpec): Promise<unknown>;   // future: declarative SQL-ish queries
+
+  // Reactive — SignalR-backed
+  signals: {
+    onProjectionUpdate(callback: (report: ProjectionReport) => void): () => void;
+    onWorkspaceSync(callback: () => void): () => void;
+    onRunFinish(callback: (run: JobRunResult) => void): () => void;
+  };
+
+  // Cleanup hook for the widget to register teardown
+  onUnmount(callback: () => void): void;
+}
+```
+
+Each `fetch*` hits endpoints we already shipped (`/api/workspaces/{slug}/entities`, `/api/workspaces/{slug}/matrices/{id}`) using the user's session cookie. The widget runs in the user's browser; auth Just Works.
+
+Monaco gets a `.d.ts` for `ctx` so authors get autocomplete on the platform API. We also lazily fetch `@types/d3`, `@types/plotly.js`, `@types/echarts` (etc.) into the Monaco TS service so chart-library APIs autocomplete too — Monaco's `monaco.languages.typescript.typescriptDefaults.addExtraLib` is the seam. The set of TS lib bundles loaded into the editor is itself a workspace setting, paired with the `head_scripts` registration: register the CDN script + load its types together, so authoring stays type-safe.
+
+### 3. Data binding — declarative matrix YAML is the seam
+
+The matrix-view layer (timeline item 13) returns chart-ready JSON. A typical widget body becomes five lines:
+
+```javascript
+async function render(ctx) {
+  const data = await ctx.fetchMatrix('pmbok-ittl');
+  const chart = echarts.init(ctx.dom);
+  chart.setOption(buildEchartsOption(data));
+  ctx.signals.onProjectionUpdate(() => render(ctx));   // live-refresh on next sync
+  ctx.onUnmount(() => chart.dispose());
+}
+return render(ctx);
+```
+
+Data flows: matrix YAML → matrix-query endpoint → typed JSON → widget code → chart library. The matrix-view layer compresses 10k+ entities into the cells the chart expects; the widget translates cells into the lib's option shape; the lib renders. Five lines of plumbing per widget once the matrix is declared.
+
+A **starter widget gallery** seeds new widgets with canonical patterns: heatmap-echarts, force-graph-d3, sankey-plotly, treemap-echarts, sunburst-d3, scatter-plotly, network-antv-g6, choropleth-leaflet. Workspace owners pick a starter, point it at their matrix, save, and get a working widget without writing the chart-lib boilerplate. Saved widgets become starters for the next person — shareable through a workspace export bundle.
+
+### Trust, CSP, and the security model
+
+Single-tenant means the threat model is "an admin authoring a buggy widget breaks their own dashboard" — not "a tenant exfiltrates another tenant's data." Widget JS runs in the SPA's own origin, no iframe sandboxing in v1. This is the correct trade for the deployment shape: a workspace owner with admin already has full filesystem + DB access, so sandboxing the widget JS adds friction without raising the practical security floor.
+
+CSP gets relaxed per-workspace based on registered `head_scripts`: the SPA's `Content-Security-Policy` `script-src` directive is generated to include the registered CDN domains. A workspace with no registered scripts gets a tight policy; one with d3 + ECharts gets `script-src 'self' cdn.jsdelivr.net cdn.plot.ly`. Same for `connect-src` if the widget makes outbound CDN calls (most don't). The CSP is generated server-side and shipped as a header on the dashboard route, so a workspace switch resets it cleanly.
+
+If the deployment ever needs multi-tenant isolation, the path stays consistent with the rest of the architecture: **separate Docker stacks per tenant**, each with their own `/data` volume + domain + CSP. Iframe-sandboxed widgets become an option for a future multi-tenant variant; they don't need to land in the on-prem v1.
+
+### Versioning
+
+Each widget save creates a `cr.dashboard_widget_revisions` row (`id`, `widget_id`, `version`, `js_source`, `created_at`, `created_by`). Dashboards reference a specific `version`, so an in-progress edit doesn't break a published dashboard until the dashboard owner explicitly upgrades. The widget editor shows a version history; "revert to previous" is one click; "publish this version" is the action that ripples into dashboards configured to auto-upgrade.
+
+This is also the path for sharing a widget across workspaces on the same instance: a workspace owner can copy a `js_source` from one workspace's widget into another (workspace isolation means there's no cross-workspace symbolic linking; explicit copy is the model). When plugin loader lands, plugins can ship widgets as JS bundles registered against `IWidgetRegistration`.
+
+### Why this composes cleanly with what's already shipped
+
+- **Conventions + projections** (item 9, shipped) supply the entity graph.
+- **Matrix views** (item 13, post-v0.1) supply the chart-ready JSON shape.
+- **CDN-loaded libs + JsWidget** (this section, with item 14) supply the rendering.
+- **Dashboard composer** (item 14) supplies the host.
+
+Each layer is independently authored, replaceable, and stands on the layers below. A workspace can use widgets without using matrix views (just calling `fetchEntities` directly). A dashboard can render matrix data without a CDN lib (the simple HTML grid). The composer hosts widgets but doesn't generate them. Loose coupling, generic primitives, opinionated defaults at the seams — same architectural posture as the rest of the platform.
+
 ## Dashboard composer
 
 A **dashboard** is a saved dockview layout plus a set of widget instances, scoped to a workspace, accessed at `/w/:slug/d/:dashboardSlug`. **dockview-vue** is the layout primitive — splittable, dockable, resizable panels — which is what gives Creuser its "stock-trading-system feel" without fighting Quasar's grid. The earlier Section → Row → Column → Widget grid model was retired in favor of dockview during planning; it didn't survive contact with the use case.
@@ -1547,7 +1668,7 @@ These are deliberately deferred to keep v1 scope tight:
 - Workflow / job-script import/export
 - Embedded observability dashboard
 - Real sandboxing for arbitrary code execution (Firecracker / gVisor)
-- Multi-tenant deployment mode (currently architecturally excluded)
+- Multi-tenant deployment mode (architecturally excluded from a single filesystem; the supported path if ever needed is **one Docker stack per tenant** with independent `/data` volumes + domains, never co-mingled — see "On-premise, single-tenant" in Design principles)
 - HTTP step caching (parallel to `cr.llm_cache`); the wire shape is forward-compatible
 - Per-job time zones for cron schedules (UTC-only in v1)
 
