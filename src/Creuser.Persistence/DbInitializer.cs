@@ -1,5 +1,6 @@
 using Creuser.Auth.Core;
 using Creuser.Persistence.Tables;
+using Dapper;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MJCZone.DapperMatic;
@@ -51,6 +52,30 @@ public sealed class DbInitializer : IHostedService
             await conn.CreateTableIfNotExistsAsync<users>(
                 tx: null,
                 cancellationToken: cancellationToken
+            );
+            await conn.CreateTableIfNotExistsAsync<app_settings>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
+            await conn.CreateTableIfNotExistsAsync<workspaces>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
+
+            // Additive migrations on cr.workspaces. Postgres' `IF NOT EXISTS`
+            // makes this idempotent — the columns get added once on the first
+            // boot after the feature lands and are no-ops afterward. Drop a
+            // line here when adding new columns; never use destructive ALTERs.
+            await conn.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    ALTER TABLE cr.workspaces ADD COLUMN IF NOT EXISTS last_sync_at      timestamptz;
+                    ALTER TABLE cr.workspaces ADD COLUMN IF NOT EXISTS last_sync_sha     varchar(64);
+                    ALTER TABLE cr.workspaces ADD COLUMN IF NOT EXISTS last_sync_status  varchar(16);
+                    ALTER TABLE cr.workspaces ADD COLUMN IF NOT EXISTS last_sync_message varchar(2048);
+                    """,
+                    cancellationToken: cancellationToken
+                )
             );
         }
 

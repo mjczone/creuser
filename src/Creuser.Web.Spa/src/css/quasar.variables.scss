@@ -1,25 +1,25 @@
 // Quasar Sass (& SCSS) Variables
 // --------------------------------------------------
-// To customize the look and feel of this app, you can override
-// the Sass/SCSS variables found in Quasar's source Sass/SCSS files.
+// These are *defaults baked at build time*. They are the seed values for
+// Quasar's `--q-primary`, `--q-secondary`, etc. CSS variables. The branding
+// store overrides those CSS variables at runtime via `setBrand()` — see
+// stores/branding.ts and css/theme.scss. Don't put a domain-specific or
+// customer-specific identity here: keep it on the Creuser brand so
+// fresh deployments look correct out of the box.
+//
+// Creuser-specific chrome variables (header bg, sidebar bg, borders, etc.)
+// are *not* part of Quasar's brand palette — they live in `theme.scss` as
+// `--cr-*` CSS variables and are consumed directly by component styles.
 
-// Check documentation for full list of Quasar variables
+// Creuser brand palette — sourced from the logo (sage on dark teal-forest).
+$primary: #5c7e62; // sage green — the brand accent
+$secondary: #7c9a82; // slightly lighter sage — secondary actions
+$accent: #d7a06b; // warm complement — pops against the green chrome
 
-// Your own variables (that are declared here) and Quasar's own
-// ones will be available out of the box in your .vue/.scss/.sass files
+$dark: #143734; // dark teal-forest — surface anchor for dark mode
+$dark-page: #0c2422; // a touch deeper than $dark for page background
 
-// It's highly recommended to change the default colors
-// to match your app's branding.
-// Tip: Use the "Theme Builder" on Quasar's documentation website.
-
-$primary: #1976d2;
-$secondary: #26a69a;
-$accent: #9c27b0;
-
-$dark: #1d1d1d;
-$dark-page: #121212;
-
-$positive: #21ba45;
-$negative: #c10015;
-$info: #31ccec;
-$warning: #f2c037;
+$positive: #22c55e; // green-500 (kept generic — semantic, not brand)
+$negative: #ef4444; // red-500
+$info: #0ea5e9; // sky-500
+$warning: #f59e0b; // amber-500

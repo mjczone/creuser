@@ -1,7 +1,7 @@
 # Creuser Architecture
 
 > **Status:** Pre-release. Architecture document for v0.1.0 and the path to v1.0.
-> **Last updated:** 2026-05-01
+> **Last updated:** 2026-05-02
 > **Authors:** Matt Cowan (MJCZone Inc.)
 
 ## What Creuser is
@@ -26,42 +26,83 @@ Creuser is the platform. The IP boundary is strict: Creuser exists only to help 
 
 **White-labelable from day one.** Branding (name, logo, colors, copy) is in-app configuration, not environment variables. Creuser deployments can rebrand to any desired branding and name without rebuilding the image.
 
+## What ships in v0.1 (status snapshot)
+
+The architecture below describes both the v1 destination and the current state. To keep readers oriented:
+
+**Shipped:**
+
+- Authentication (cookie sessions, Argon2id, bootstrap admin, force-password-change), `Creuser.Auth.*` projects with the `IAuthProvider` seam. Local provider; Google provider stub.
+- Admin Users page (invite, reset password, promote/demote, deactivate, delete) with last-admin / self-action guards.
+- White-labeling: branding doc with palette presets, runtime CSS variable injection, content-addressed asset uploads, theme mode (dark/light/auto), bundled variable fonts.
+- Environment configuration page with `SecretsService` (`/data/secrets/<filename>`, chmod 600, value-never-returned). Per-provider "Test connection" hits a sub-cent health probe.
+- `Microsoft.Extensions.AI` 10.3.0 wired with Anthropic, OpenAI, and Local providers; `AgentClientFactory` + `AgentClientResolver` with structured `ResolveOutcome`.
+- In-app AI assistant: right-side chat panel, `POST /api/agents/chat`, capability registry (`ICapabilityProvider` + `CoreCapabilityProvider`), `navigate` / `describe_capabilities` tools, role-filtered, deep-link rendering with `?expand=` deep-open semantics.
+- **Workspaces foundation**: `cr.workspaces` with type discriminator (git/local; s3 reserved), JSONB settings deserialized to typed records, settings CRUD, test-connection (HTTPS smart-HTTP probe + real SSH `git ls-remote`), sync (init / fetch source / try-fetch working / `checkout -B` / `reset --hard` / `clean -fd`), per-slug `SemaphoreSlim` concurrency, dirty-state detection with `?force=true` confirmation flow, sync state columns on the table, last-sync UI in the workspaces list.
+- SignalR notifications hub (`/hub/notifications`) with `Subscribe` / `Unsubscribe` / `Broadcast`; branding store subscribes to live updates.
+- Reusable SPA components: `StatusBanner`, `CollapsibleSection`, `SecretInput`, with mode-aware `--cr-link` tokens and themed scrollbars.
+
+**Deferred (in priority order):**
+
+- Stage 2 of the capability registry (`[AiCapability]` attribute + assembly scanner) — small follow-up.
+- Per-workspace plugin enablement UI + `cr.workspace_plugins` join table — fits cleanly under the existing workspace settings shell.
+- Workflow engine (Marten + Wolverine + sagas) and the `cr.entities` projection.
+- Job scripts + first runners (`shell`, `csharp`, `llm-chat` reusing `AgentClientResolver`).
+- libgit2sharp for in-process git ops; the shell-out path stays for ops that need the porcelain.
+- Plugin loader (`/data/plugins/*.dll` discovery + manifest parsing).
+- Dashboard composer (`dockview-vue`, widget registry, Monaco-based job editor).
+- SMTP-driven flows (invite-by-email, full forgot-password); release CI workflows; Dockerfile finalization.
+
+The detail sections below mark each piece accordingly.
+
 ## Stack
 
-**Backend**
+**Backend (currently in the codebase)**
 
 - .NET 10
 - ASP.NET Core minimal APIs
-- ASP.NET Core SignalR (real-time push to the dashboard; many concurrent dev/operator sessions)
-- Marten (event-sourced documents, sagas, JSONB-native queries)
-- Wolverine (durable message dispatch, scheduling, sagas)
-- MJCZone.DapperMatic (DDL abstraction and migrations for relational tables, DML auto-mapping for Dapper)
-- libgit2sharp (git operations) with shell-out to `git` binary as fallback
-- Microsoft.Extensions.AI (LLM abstraction; Anthropic + OpenAI providers)
-- Serilog (structured logging)
-- OpenTelemetry (traces and metrics)
+- ASP.NET Core SignalR (`/hub/notifications`; real-time push for dashboards / status banners)
+- MJCZone.DapperMatic (DDL abstraction + idempotent migrations for the `cr.*` tables; DML auto-mapping for Dapper)
+- Dapper (parameterized SQL for repository implementations)
+- Microsoft.Extensions.AI 10.3.0 (LLM abstraction, pinned to match Anthropic.SDK 5.10.0)
+- Anthropic.SDK 5.10.0 (Anthropic provider) + Microsoft.Extensions.AI.OpenAI (OpenAI / Azure OpenAI / OpenAI-compatible local providers — Ollama, LM Studio, vLLM)
+- FluentValidation (request validation at the endpoint layer)
+- Konscious.Security.Cryptography.Argon2 (password hashing)
 - Microsoft.AspNetCore.OpenApi (native OpenAPI 3.1 generation)
 - Scalar (interactive API docs at `/scalar`)
+- Serilog (structured logging)
 - CSharpier (formatter; pinned via `dotnet-tools.json`, enforced by pre-commit hook)
+- Shell-out to host `git` and `ssh` binaries for workspace clone / fetch / SSH key auth
 
-**Frontend**
+**Backend (deferred; named here so the eventual landing fits the rest of the stack)**
+
+- Marten — adopted when sagas, run records, and `AgentTrace` documents need event sourcing. The `mt` Postgres schema is reserved.
+- Wolverine — durable message dispatch + saga driver, lands with the workflow engine.
+- libgit2sharp — in-process git, replacing the shell-out path for the operations that don't need the full porcelain.
+- OpenTelemetry — observability.
+
+**Frontend (currently in the codebase)**
 
 - Quasar 2 (Vue 3 Composition API)
 - TypeScript strict mode
 - Vite (via Quasar CLI in SPA mode)
-- dockview-vue (dense tiling/docking dashboards)
-- Pinia (state management)
-- Monaco Editor (script editing)
+- Pinia (state management; user, branding, theme-mode, assistant-history stores)
 - @hey-api/openapi-ts (TypeScript client generation from OpenAPI)
-- @microsoft/signalr (SignalR JS client for real-time dashboard updates)
+- @microsoft/signalr (SignalR JS client; subscribed today for branding live updates)
+- Fontsource variable fonts (Inter, IBM Plex Sans, Source Sans 3, JetBrains Mono, Fira Code, Source Code Pro), code-split per-font
 - Vitest + @vue/test-utils + jsdom (SPA unit tests; project at `tests/Creuser.Web.Spa.Tests/`)
 - husky + lint-staged (pre-commit: CSharpier on staged `*.cs`)
 - Node 24 LTS, npm only (no pnpm or yarn)
 
+**Frontend (deferred)**
+
+- dockview-vue — dense tiling / docking layout for the dashboard composer.
+- Monaco Editor — job script editor.
+
 **Infrastructure**
 
 - Postgres 17 with pgvector extension
-- Redis 7
+- Redis 7 (provisioned in the dev compose file; not yet a runtime dependency in code — reserved for Wolverine / SignalR backplane / cache)
 - Docker (single image, multi-stage build)
 
 ## Solution layout
@@ -70,23 +111,32 @@ Creuser is the platform. The IP boundary is strict: Creuser exists only to help 
 creuser/
 ├── src/
 │   ├── Creuser.Core/                       # Domain primitives, no infra deps
-│   │   ├── Workflows/                      # Saga base classes, step definitions
-│   │   ├── Jobs/                           # JobScript, frontmatter parser, JobType
-│   │   ├── Repositories/                   # Workspace, RepoFile, FileProjection
-│   │   ├── Agents/                         # IAgent, AgentRequest, AgentResponse
-│   │   └── Dashboards/                     # Dashboard, Section, Row, Column, Widget
-│   ├── Creuser.Persistence/                # Marten + Wolverine config, migrations
-│   ├── Creuser.Git/                        # libgit2sharp wrapper, branch strategies
-│   ├── Creuser.Scripting/                  # Shell/Node/Python/.NET runners
-│   ├── Creuser.Agents/                     # M.E.AI wiring + ToolLoopRunner
-│   ├── Creuser.Auth.Abstractions/          # IUserStore, IPasswordHasher, IAuthProvider
-│   ├── Creuser.Auth.Core/                  # Implementation
-│   ├── Creuser.Auth.Providers.Local/       # Username/email + password
-│   ├── Creuser.Auth.Providers.Google/      # OAuth (stubbed in v1)
+│   │   └── Repositories/                   # Workspace record, IWorkspaceStore,
+│   │                                       # GitWorkspaceSettings, LocalWorkspaceSettings
+│   ├── Creuser.Persistence/                # DapperMatic table classes + repositories
+│   │   ├── DbInitializer.cs                # Idempotent schema bootstrap (cr.* tables, additive ALTERs)
+│   │   ├── Tables/                         # Lowercase row classes (users, workspaces, app_settings)
+│   │   └── Repositories/                   # Dapper-backed implementations of Core interfaces
+│   ├── Creuser.Auth.Abstractions/          # IUserStore, IPasswordHasher, IAuthProvider, User record
+│   ├── Creuser.Auth.Core/                  # Argon2id hasher, BootstrapAdminService, cookie helpers
+│   ├── Creuser.Auth.Providers.Local/       # Username/email + password (default IAuthProvider)
+│   ├── Creuser.Auth.Providers.Google/      # OAuth — stub returning AuthResult.NotSupported
+│   ├── Creuser.Agents/                     # AgentClientFactory + provider wiring
+│   ├── Creuser.Git/                        # Reserved for libgit2sharp; today empty (workspaces shell out to git)
+│   ├── Creuser.Scripting/                  # Reserved for job runners; empty in v0.1 scaffold
 │   ├── Creuser.Web/                        # ASP.NET host, serves SPA
-│   │   ├── Program.cs
-│   │   ├── Endpoints/                      # Grouped endpoint extensions
-│   │   ├── Branding/                       # White-label config + middleware
+│   │   ├── Program.cs                      # DI registrations, middleware, endpoint mapping
+│   │   ├── Endpoints/                      # Grouped endpoint extensions (Auth, AdminUsers,
+│   │   │                                   #   Workspaces, Branding, Environment, Agents, Ping, Echo)
+│   │   ├── Agents/                         # AgentClientResolver, AgentTools (navigate/describe),
+│   │   │                                   #   Capabilities/ (ICapabilityProvider + registry)
+│   │   ├── Branding/                       # BrandingAssetsService + branding endpoints
+│   │   ├── Environment/                    # SecretsService, environment-config endpoints
+│   │   ├── Workspaces/                     # WorkspaceFilesystemService (owns <data>/workspaces/<slug>/)
+│   │   ├── Hubs/                           # NotificationsHub (SignalR pub/sub)
+│   │   ├── Validation/                     # FluentValidation validators
+│   │   ├── Contracts/                      # Request / response DTOs (PascalCase, JSON-serialized)
+│   │   ├── Problems.cs                     # ProblemDetails factory helpers
 │   │   └── wwwroot/                        # SPA build output lands here
 │   └── Creuser.Web.Spa/                    # Quasar/Vue/TS app
 │       ├── quasar.config.ts
@@ -95,16 +145,16 @@ creuser/
 │       └── src/
 │           ├── boot/
 │           ├── layouts/
-│           ├── pages/
-│           ├── components/
-│           │   ├── widgets/                # WidgetRegistry components
-│           │   └── dock/                   # dockview-vue integration
-│           ├── stores/                     # Pinia
-│           ├── composables/
+│           ├── pages/                      # Settings shell + login + assistant content
+│           ├── components/                 # StatusBanner, CollapsibleSection, SecretInput,
+│           │                               #   AssistantPanel, branding/, env/
+│           ├── stores/                     # Pinia (auth, branding, themeMode, assistant)
+│           ├── composables/                # useT (i18n + branding overrides), useLocalStorage
+│           ├── css/                        # theme.scss (--cr-* tokens, palette presets)
 │           └── api/                        # Generated TS client (hey-api)
 ├── tests/
 │   ├── Creuser.Core.Tests/
-│   ├── Creuser.Integration.Tests/          # Testcontainers for Postgres
+│   ├── Creuser.Integration.Tests/          # WebApplicationFactory + Testcontainers Postgres
 │   └── Creuser.Web.Spa.Tests/              # Vitest
 ├── docker/
 │   ├── Dockerfile                          # Multi-stage: SPA → .NET → runtime
@@ -112,23 +162,25 @@ creuser/
 │   └── docker-compose.dev.yml              # Local dev (separate SPA dev server)
 ├── docs/
 │   ├── architecture.md                     # This document
-│   ├── job-script-format.md                # Frontmatter spec
-│   └── widget-development.md               # How to build custom widgets
-├── .github/workflows/
-│   ├── ci.yml                              # Build + test on PR
-│   ├── edge.yml                            # Push to main → GHCR :edge
-│   └── release.yml                         # Tag v* → GHCR + Docker Hub
-├── .husky/
-│   └── pre-commit                          # Runs `npx lint-staged`
+│   ├── docker-variants.md                  # `:latest` (fat) vs `:slim` policy
+│   ├── job-script-format.md                # Frontmatter spec (forward-looking)
+│   ├── widget-development.md               # How to build custom widgets (forward-looking)
+│   └── wip/timeline.md                     # Active build plan
+├── scripts/
+│   └── wire-dev-services.mjs               # Reads dev-compose ephemeral ports → appsettings
+├── .github/workflows/                      # ci / edge / release (release wiring TBD)
+├── .husky/pre-commit                       # Runs `npx lint-staged` (CSharpier on staged *.cs)
 ├── README.md                               # Includes LGPL-3.0 license summary
 ├── LICENSE                                 # LGPL-3.0 full text
 ├── CONTRIBUTING.md
 ├── Creuser.slnx                            # XML solution format (.NET 10)
 ├── dotnet-tools.json                       # Pinned local .NET tools (CSharpier)
 ├── global.json                             # Pin .NET 10 SDK
-├── package.json                            # Root orchestration: build / test / dev / lint
+├── package.json                            # Root orchestration: build / test / dev / lint / codegen / services
 └── package-lock.json
 ```
+
+`Creuser.Git` and `Creuser.Scripting` are scaffold projects from the original Saturday plan — they exist in the solution but ship no code in v0.1. Workspace git operations currently live in `Creuser.Web/Endpoints/WorkspacesEndpoints.cs` (shell-out to `git` and `ssh`) plus `Creuser.Web/Workspaces/WorkspaceFilesystemService.cs`. They migrate into `Creuser.Git` / `Creuser.Scripting` when the workflow engine lands and the job-runner abstraction needs the seam.
 
 ## Data model
 
@@ -136,35 +188,56 @@ creuser/
 
 Two schemas in one database:
 
-- `mt` — Marten-managed document tables (workflows, runs, run steps, agent traces, branding config, secrets metadata, anything event-sourced or JSONB-native)
-- `cr` — Creuser relational tables (DapperMatic-managed; entities, workspaces, job scripts, plugin registry, hot-path read models)
+- `cr` — Creuser relational tables, DapperMatic-managed. **Live today.**
+- `mt` — Marten-managed document tables (workflows, runs, run steps, agent traces, append-only audit log, anything event-sourced or JSONB-native). **Reserved**; Marten lands with the workflow engine. Singleton platform config (branding, environment) currently lives in `cr.app_settings` and stays there even once Marten lands — it's read-mostly config, not event-sourced state.
 
-The split rule: append-mostly with rich JSONB querying → Marten. Relational with hot reads and explicit indexes → DapperMatic. Don't fight either tool by misusing it for the other's strengths.
+The split rule (forward-looking): append-mostly with rich JSONB querying → Marten. Relational with hot reads and explicit indexes → DapperMatic. Don't fight either tool by misusing it for the other's strengths.
 
 ### Core tables (DapperMatic-managed, schema `cr`)
 
 See <https://dappermatic.mjczone.com/llms-full.txt>.
 
+**Shipped in v0.1:**
+
 ```txt
-cr.workspaces              -- Configured repository connections
-cr.workspace_settings      -- Type-specific configuration (git/s3/local)
+cr.users                   -- Authentication users (id, email, display_name,
+                              password_hash, role, must_change_password,
+                              is_active, last_login_at, created_at, updated_at)
+cr.workspaces              -- Configured connections to a content source.
+                              type discriminator (git/s3/local) + URL-safe slug.
+                              settings jsonb (typed per workspace type — see
+                              "Workspace abstraction"). Sync state columns
+                              (last_sync_at, last_sync_sha, last_sync_status,
+                              last_sync_message) drive the UI status chip.
+cr.app_settings            -- Singleton platform config (key text PK, value
+                              jsonb). Well-known keys: 'branding',
+                              'environment'. Secret-backed values reference
+                              filenames in /data/secrets/ (never values).
+```
+
+**Designed; landing alongside their feature:**
+
+```txt
+cr.workspace_members       -- Per-workspace access grants (Editor/Viewer per user)
+cr.workspace_plugins       -- Per-workspace plugin enablement (workspace_id, plugin_id, enabled)
 cr.entities                -- Generic projection: (id, kind, schema_version, source_ref, data jsonb, projections jsonb)
 cr.entity_refs             -- Edges between entities (graph queries for traceability)
 cr.job_scripts             -- Frontmatter-parsed scripts (DB is canonical; filesystem is materialized)
 cr.workflows               -- Workflow definitions (DB-canonical)
-cr.dashboards              -- Dashboard layouts (sections, rows, columns, widgets)
+cr.dashboard_groups        -- UI grouping for dashboards in the workspace icon bar
+cr.dashboards              -- Saved dockview layouts + widget instances; either standalone (own icon) or grouped
 cr.plugins                 -- Registered plugin metadata
-cr.users                   -- Authentication users
-cr.user_sessions           -- Active sessions
+cr.user_sessions           -- Active sessions (today: ASP.NET cookie auth + data-protection-keys on disk; revisit if we need server-side revocation)
 ```
 
-### Marten document types (schema `mt`)
+Workspace settings live in the JSONB `cr.workspaces.settings` column rather than a separate `cr.workspace_settings` table — every type discriminator deserializes to a typed C# record (`GitWorkspaceSettings`, `LocalWorkspaceSettings`), keeping the on-disk schema stable while letting type-specific fields evolve without DDL churn. Future workspace types add their own record; the table doesn't change.
+
+### Marten document types (schema `mt`, deferred)
 
 ```
 WorkflowRun                -- Saga state, event-sourced; canonical run record
 RunStep                    -- Individual step execution within a run
 AgentTrace                 -- Full LLM conversation + tool-call trace per agentic step
-BrandingConfig             -- Single-document table; current branding state
 EmailTemplate              -- White-label email content
 AuditEvent                 -- Append-only audit log
 ```
@@ -209,48 +282,118 @@ This is what lets domain-specific consumers express cross-entity traceability as
 
 ## Workspace abstraction
 
-A workspace is a configured connection to a content source. Three implementations in v1 plans, with `Git` shipping in v0.1.0:
+A workspace is a configured connection to a content source. Three types are reserved by the discriminator:
+
+- **`git`** — clone of a remote git repository. **Shipped.**
+- **`local`** — pointer to a server-side filesystem path (mounted volume in Docker, any directory in dev/on-host). The simplest backend: read and (optionally) write the directory directly. No clone, no commits, no branches. **Shipped.**
+- **`s3`** — reserved for S3-backed workspaces. Disabled in the create UI until the implementation lands.
+
+Each workspace has a **URL-safe slug** (unique, kebab-case, e.g. `compas`, `acme-platform`) that appears in operator-facing URLs as `/w/:workspaceSlug/...`. Slugs are stable identifiers — the workspace's *display name* can change without breaking bookmarks or in-flight tabs.
+
+Workspaces are a **top-level operator context**, not a feature category. The SPA's primary navigation is workspace-scoped: an operator picks (or lands on) a workspace and the inner navigation (dashboards, runs, scripts, agents, plugins) is rooted under `/w/:slug/`. Multiple browser tabs can hold different workspaces simultaneously — each tab's URL carries its own slug, so there is no in-app "current workspace" global to fight with. Platform-level configuration (`/settings`, `/admin/users`) is unscoped.
+
+The reproducibility invariant: **everything in a workspace's working tree is the output of automation** (jobs, agents, scheduled rules), not hand-authored source. Anything that lives there should be reproducible by re-running the job that produced it. This is why destructive sync (see below) is architecturally safe — it doesn't lose work, it just re-mirrors the canonical state.
+
+### Domain model (current)
 
 ```csharp
-public interface IRepositoryWorkspace
-{
-    WorkspaceId Id { get; }
-    Task<IReadOnlyList<RepoFile>> ListFilesAsync(string? pathPrefix = null);
-    Task<RepoFileContent> ReadFileAsync(string path);
-    Task<WorkingTreeHandle> CheckoutAsync();        // Returns IDisposable lock
-    Task SyncProjectionAsync();                     // Re-parse, update cr.entities
-}
+public sealed record Workspace(
+    Guid Id, string Slug, string Name, string? Description,
+    string Type,                        // "git" | "local" | "s3"
+    string Settings,                    // JSON, deserialized per Type to a typed record
+    DateTime CreatedAt, DateTime UpdatedAt, Guid? CreatedBy,
+    DateTime? LastSyncAt = null,
+    string? LastSyncSha = null,
+    string? LastSyncStatus = null,      // "ok" | "failed" | null (never synced)
+    string? LastSyncMessage = null
+);
 
-public interface IWritableWorkspace : IRepositoryWorkspace
+public interface IWorkspaceStore
 {
-    Task<CommitResult> CommitChangesAsync(
-        WorkingTreeHandle handle,
-        IReadOnlyList<FileChange> changes,
-        CommitMessage message);
-    Task PushAsync(WorkingTreeHandle handle);
+    Task<Workspace?> FindByIdAsync(Guid id, CancellationToken ct = default);
+    Task<Workspace?> FindBySlugAsync(string slug, CancellationToken ct = default);
+    Task<bool> SlugExistsAsync(string slug, CancellationToken ct = default);
+    Task<IReadOnlyList<Workspace>> ListAsync(int skip, int take, CancellationToken ct = default);
+    Task SaveAsync(Workspace workspace, CancellationToken ct = default);
+    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+    Task UpdateSyncStatusAsync(Guid id, DateTime syncedAt, string status,
+        string? sha, string? message, CancellationToken ct = default);
 }
 ```
 
-### Git workspace specifics
+The `IRepositoryWorkspace` / `IWritableWorkspace` read/write interfaces are deferred — they land with the job runner, which is the first consumer that actually needs to read or mutate working-tree contents.
 
-Configuration:
+### Git workspace settings
 
-- Repository URL (HTTPS or SSH)
-- Authentication (SSH key path or PAT, stored in `/data/secrets/`)
-- **Working branch** (default: `creuser/main`, configurable — e.g. `myorg/development`)
-- **Source branch to sync from** (default: `main`, override per repo)
-- **Mode toggle:** "Direct push to working branch" (default) OR "Open pull request" (with CI-tax warning)
-- **Push frequency:** `every-commit` (real-time) OR `batched` (accumulate before push)
+```csharp
+public sealed record GitWorkspaceSettings(
+    string RepositoryUrl,
+    string AuthMode = "none",          // "none" | "https-pat" | "ssh-key"
+    string? AuthSecret = null,         // filename under /data/secrets/, e.g. workspace-<slug>.pat
+    string WorkingBranch = "creuser/main",
+    string SourceBranch = "main",
+    string Mode = "direct-push",       // "direct-push" | "pull-request"
+    string PushFrequency = "every-commit"  // | "batched"
+);
+```
 
-Operational vocabulary against git is small: `status`, `fetch`, `pull` (fast-forward only), `checkout`, `branch`, `add`, `commit`, `push`, `log`, `show`, `diff`, `rev-parse`, `ls-files`. No rebase, no merge-with-conflicts, no history rewriting. libgit2sharp handles everything; the `git` binary is in the image as fallback only.
+- **Repository URL** — HTTPS or SSH. The auth mode is selected per workspace, not inferred from URL scheme, so admins can use SSH-form URLs with no key (public mirrors) or HTTPS with PAT (private repos).
+- **Auth modes:** `none` (public), `https-pat` (HTTP Basic with username `git` + the PAT — works for GitHub, GitLab, Bitbucket, Azure DevOps, Gitea), `ssh-key` (OpenSSH-format private key). Credentials are written through `SecretsService` to `/data/secrets/workspace-<slug>.{pat,key}` (chmod 600), never stored in the DB. The DB stores only the filename in `AuthSecret`.
+- **Working branch** — branch the platform commits to (e.g. `creuser/main`, `compas/development`). Created locally on first sync if it doesn't yet exist on the remote (sync auto-falls-back to source branch).
+- **Source branch** — branch the working branch is rebased / pulled from when admins want fresh source content.
+- **Mode** — direct push (default) or pull-request (deferred to when the PR producer lands).
+- **Push frequency** — every-commit (real-time) or batched. Forward-looking; honoured once the commit/push side ships.
 
-### Concurrency model
+### Local workspace settings
 
-Concurrent step execution against the same workspace is serialized via Postgres advisory lock keyed on workspace ID. Different workspaces run in parallel; same workspace is single-writer. Avoids libgit2 thread-safety pitfalls and keeps the audit log linear.
+```csharp
+public sealed record LocalWorkspaceSettings(
+    string Path,        // absolute filesystem path; must exist when saving
+    bool Writable = true
+);
+```
 
-### Commit batching
+There is no path-allowlist in v1 — single-tenant on-premise + admin-only management means the trust boundary is the admin's own discretion. Multi-tenant deployments (post-v1) would need a path-prefix constraint here.
 
-A workflow saga step claims a workspace, gets a working tree at HEAD of the working branch, makes N file mutations, and at the end of the step produces exactly one commit with a structured message:
+### Test connection
+
+Before saving (or after rotating credentials), admins can click **Test connection**. The test exercises the same code path the eventual sync runs — what passes here is what'll work in production.
+
+- **HTTPS git** — smart-HTTP `GET <url>/info/refs?service=git-upload-pack` with `Authorization: Basic <base64(git:<pat>)>` when a PAT is supplied. 10-second timeout. Status codes are translated to actionable copy ("PAT may be expired or lack `repo` scope" for 401/403, "Repository not found" for 404).
+- **SSH git** — writes the inline private key to a chmod-600 temp file, sets `GIT_SSH_COMMAND` (`-i <key> -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR`), runs `git ls-remote --exit-code <url> HEAD`, parses stderr for known patterns (Permission denied, host unreachable, repo not found, key parse errors). The `LogLevel=ERROR` flag suppresses the "Permanently added 'host' to known_hosts" warning that would otherwise leak into the error parser.
+- **Local** — confirms the path exists, is a directory, is readable; if `Writable` is set, also verifies write access by creating + deleting a probe file. Latency is reported as 0ms (no network).
+
+### Sync (`POST /api/workspaces/{slug}/sync[?force=true]`)
+
+For git workspaces, the sync handler exercises one unified flow that handles both the first clone and subsequent updates:
+
+1. `git init --quiet` (if working tree doesn't exist yet) and `git remote add origin <url>`, otherwise `git remote set-url origin <url>` to honour edits to the workspace's URL.
+2. `git fetch --depth 1 origin <sourceBranch>` (must succeed — if it doesn't, the auth/URL/branch is wrong).
+3. `git fetch --depth 1 origin <workingBranch>` (best-effort — failure means the working branch is local-only, still pre-first-push).
+4. `git status --porcelain` to count uncommitted changes. If non-zero **and** the request didn't include `force=true`, the server returns `RequiresForce=true` + the dirty count and writes nothing. The SPA shows a "Discard N changes?" confirmation dialog and retries with `?force=true`.
+5. `git checkout -B <workingBranch> <target>` where `target` is `origin/<workingBranch>` if the fetch in (3) succeeded, otherwise `origin/<sourceBranch>` (so a fresh workspace is in lockstep with source until the first commit produces the working branch upstream).
+6. `git reset --hard <target>` and `git clean -fd`. The combined effect is byte-for-byte mirror of the remote target — destructive by design, since the working tree is reproducible job output. We deliberately omit `-x`, leaving gitignored scratch files alone.
+7. Resolve `git rev-parse HEAD` and persist the result in the `last_sync_*` columns.
+
+For local workspaces, sync is a path heartbeat: re-verify the directory exists, refresh `last_sync_at`. There's no remote to pull from — the working tree IS the source content, mediated only by the `Writable` flag.
+
+The full git porcelain isn't in scope for v1: `status`, `fetch`, `init`, `clone`, `remote add/set-url`, `checkout`, `reset`, `clean`, `rev-parse`, `add`, `commit`, `push` cover everything currently planned. No rebase, no merge-with-conflicts, no history rewriting. libgit2sharp will replace the shell-out path for the operations that don't need full porcelain (read-side ops, blame, log) once it's wired.
+
+### Concurrency
+
+Per-slug `SemaphoreSlim` in `WorkspacesEndpoints._syncLocks` so concurrent sync requests for the same workspace serialize, but different slugs run in parallel. **In-memory only — multi-instance deployments need a Postgres advisory lock here.** Single-tenant on-prem v1 is fine. The advisory lock plus libgit2 thread-safety guards land alongside the workflow engine, when multiple sagas may step against the same workspace.
+
+### Working tree layout
+
+```txt
+<dataDir>/workspaces/<slug>/
+```
+
+Owned by `WorkspaceFilesystemService`. Created on first sync, removed when the workspace is deleted. Operators don't reach in directly — admin actions go through sync / job runs.
+
+### Commit batching (forward-looking)
+
+When the workflow engine lands, a saga step claims a workspace, gets a working tree at HEAD of the working branch, makes N file mutations, and produces exactly one commit per step with a structured message:
 
 ```txt
 [creuser] <step.name> (run=<run_id> step=<step_id>)
@@ -264,9 +407,9 @@ Updated:
 
 Multiple steps in a workflow each produce their own commit. The sequential commit history on the working branch IS the audit log of what the platform did. `git log creuser/main` is itself a useful debugging tool.
 
-## Workflow engine
+## Workflow engine (deferred — design forward-looking)
 
-Workflows are Wolverine sagas backed by Marten's event store. A workflow definition is a class that yields steps. Steps are Wolverine messages.
+Lands once Marten + Wolverine are pulled in. Workflows are Wolverine sagas backed by Marten's event store. A workflow definition is a class that yields steps. Steps are Wolverine messages.
 
 Two flavors of step:
 
@@ -278,7 +421,9 @@ Example: a SQL-DDL-parsing step encounters an undocumented table. It spawns a di
 
 Planning is *explicit*, not hidden in an LLM loop. A `PlannerAgent` produces a `WorkflowPlan` (a structured list of step descriptors with dependencies). The plan becomes a Wolverine saga. The planner can only emit plans against registered step types. This is the discipline that keeps the system inspectable.
 
-## Job scripts
+## Job scripts (deferred — design forward-looking)
+
+The frontmatter contract and runner registry are designed but not yet implemented in v0.1. The smallest pragmatic first step is the `llm-chat` runner using the existing `AgentClientResolver` — saved-prompt-as-job — followed by `shell` and `csharp`. The full set below describes the v1 endpoint:
 
 A job script is YAML frontmatter plus a body. Frontmatter declares:
 
@@ -336,17 +481,20 @@ This dual-storage matters for LLM-generated jobs: agent writes to DB with `statu
 
 ## Agent layer
 
-Built on Microsoft.Extensions.AI as the abstraction. Concrete providers wired via plugins:
+Built on Microsoft.Extensions.AI as the abstraction. **Shipped today:**
 
-- Anthropic (Claude Opus 4.7 default)
-- OpenAI (GPT-5 family)
-- Future providers via `IAgentProvider` interface
+- **Anthropic provider** via `Anthropic.SDK` 5.10.0 (Claude Opus 4.7 default).
+- **OpenAI provider** via `Microsoft.Extensions.AI.OpenAI` (GPT-5 family + Azure OpenAI flavours).
+- **Local provider** — same OpenAI SDK pointed at Ollama / LM Studio / vLLM via a custom base URL. Smart preset URLs in the SPA select `localhost` vs `host.docker.internal` based on `window.location.hostname`. The compose file maps `host.docker.internal` to the host gateway so Linux Docker can reach the host.
+- **`AgentClientFactory`** (provider-agnostic, in `Creuser.Agents`) and **`AgentClientResolver`** (config + secrets → `IChatClient`, in `Creuser.Web/Agents/`). Resolver returns a `ResolveOutcome { Client, Reason }` so health probes and the chat endpoint surface specific "what's missing" messages instead of generic "not configured".
+- **Function invocation** — `UseFunctionInvocation()` on both Anthropic and OpenAI factory paths, which is what makes the in-app assistant's `navigate` / `describe_capabilities` tools execute end-to-end. Earlier OpenAI factory was missing this; explicitly required for Gemma/Llama via local OpenAI-compatible endpoints to actually run tool calls.
+- **`/api/agents/health?provider=...`** — sub-cent ping that the Environment page's "Test connection" button hits per provider.
 
-API keys live in `/data/secrets/` files (chmod 600), referenced from in-app config by filename, never stored in the database.
+API keys live in `/data/secrets/` files (chmod 600), referenced from `cr.app_settings.environment` by filename only — never stored in the database, never returned over the wire.
 
-### Tool namespaces
+### Tool namespaces (forward-looking — wires up with the job runner)
 
-Two distinct tool registries available to agents:
+Two distinct tool registries planned for autonomous agents:
 
 **Projection toolset** — hits Postgres directly. Cheap, fast, structured.
 
@@ -370,48 +518,161 @@ Two distinct tool registries available to agents:
 
 A well-designed agent uses projection tools for discovery and only drops to workspace tools for specific files. This is dramatically cheaper in tokens and faster than the naive "let the agent grep everything" approach.
 
-### ToolLoopRunner
+These tools are distinct from the **assistant** tool registry below — the assistant is for human-facing UI navigation (read-only navigation + capability description), agents will be for autonomous workflow execution (read + write + shell). The two surfaces share `AgentClientResolver` but compose different tool sets.
 
-Bounded ReAct implementation, ~200 lines. Takes a tool registry, a max-step budget, a max-token budget, and runs the loop. Tools are .NET methods decorated with attributes; the runner serializes them into the function-calling schema. Step transcripts are recorded as `AgentTrace` documents in Marten for inspection.
+### ToolLoopRunner (forward-looking)
 
-### Sandbox model
+Bounded ReAct implementation. Takes a tool registry, a max-step budget, a max-token budget, and runs the loop. Tools are .NET methods decorated with attributes; the runner serializes them into the function-calling schema. Step transcripts are recorded as `AgentTrace` documents in Marten for inspection. The current chat endpoint short-circuits the loop via M.E.AI's `UseFunctionInvocation()`; the dedicated runner lands when the agent layer needs explicit budget control and trace recording.
+
+### Sandbox model (forward-looking)
 
 `run_shell` enforces a command allow-list per job, declared in frontmatter. Anything outside the list returns "command not permitted" to the agent. The agent can then try alternatives or report back.
 
 For arbitrary code execution (agent writes a Python script and wants to run it), the runner spawns the script in a separate process under a non-root UID with bounded CPU/memory/timeout, in a working directory scoped to that run's tmp space. No Linux-namespace gymnastics in v1; just UID separation and ulimits. Sufficient for single-tenant on-premise; would need real sandboxing (Firecracker, gVisor) if multi-tenancy ever became a requirement.
 
+## In-app AI assistant
+
+A second AI surface, distinct from the autonomous agent layer above: a **right-side chat panel** (toggled from the header) that helps the operator find features, navigate the UI, and understand the platform. **Shipped in v0.1.** Powered by the same `AgentClientResolver` + `IChatClient` infrastructure as the agent runner — the in-app assistant is just another consumer of the configured provider. Conversation persistence is per-browser via `useLocalStorage('creuser.assistant.history')` today; promotes to a server-side `cr.user_preferences` shape later.
+
+### Capability discovery
+
+The assistant doesn't know about endpoints — it knows about **capabilities**. A `Capability` is a record describing one discoverable thing the platform can do (a settings surface, an admin action, an operator workflow), with fields:
+
+```csharp
+public sealed record Capability(
+    string Id,                       // e.g. "users.manage"
+    string Topic,                    // e.g. "users", "branding", "environment"
+    string Title,                    // human label
+    string Description,              // when-to-use-this, drives AI tool selection
+    IReadOnlyList<string> Intents,   // free-text phrases an operator might type
+    string? Route,                   // SPA route to send the user to
+    string? ExpandSection,           // section key the SPA auto-expands via ?expand=
+    string RequiresRole,             // "User" or "Admin"
+    bool Mutates                     // future: tools-that-write require UI confirmation
+);
+```
+
+Capabilities are produced by `ICapabilityProvider` implementations registered in DI. `CapabilityRegistry` composes them and filters by the calling user's role before exposing the result to the AI tool registry.
+
+### Three-stage evolution
+
+The capability source-of-truth is meant to grow without disrupting consumers (chat endpoint, AI tools, frontend deep-links):
+
+1. **Code-resident list (current).** `CoreCapabilityProvider` returns a hand-curated `Capability[]` literal in C#. Edited alongside endpoint changes — a PR that adds a feature touches the same file. Type-checked, refactor-safe, easy to keep honest in code review.
+2. **`[AiCapability]` attributes (next).** Endpoint methods opt into discovery by carrying an attribute. A startup-time scanner reflects over the assembly and builds the static catalog automatically. Adding a feature with the attribute = automatically discoverable. The XML doc comment serves both OpenAPI summaries and the capability description.
+3. **Plugin-contributed providers (when plugins land).** The architecture's plugin model already discovers DLLs from `/data/plugins/`; plugins implement `ICapabilityProvider` to declare their own capabilities. A consumer-application plugin contributing a `compas.process_map` entity kind ships a provider that emits `Capability` entries for editing process maps. **Plugins describe themselves to the AI** through the same registration mechanism they use for widgets and job runners — single contract, multiple sources.
+
+The AI tool registry, the chat endpoint, and the SPA's link-rendering all see capabilities through the same `CapabilityRegistry` interface regardless of which stage produced them.
+
+### Tool registry
+
+The assistant has a **deliberately small** tool registry — three tools by design, hand-written, all read-only in v1:
+
+- **`navigate(intent)`** — keyword-scored match into the registry. Returns the best `Capability` plus a hint to render a clickable markdown link in the reply (`[Anthropic settings](/settings/environment?expand=aiAnthropic)`). The destination page reads the `?expand=` query param to deep-open the relevant section.
+- **`describe_capabilities(topic?)`** — list capabilities visible to the calling user, optionally filtered by topic. For "what can I do?" / browsing intents.
+- **`call_api(method, path, body?)`** (deferred to v2) — execute a *whitelisted* API call. The whitelist is generated from `[AiTool]`-tagged endpoints; mutating actions emit a "proposed action" payload first that the SPA renders as a confirm dialog. The AI never silently writes anything.
+
+Tool selection quality drops past ~20 tools, so the registry stays small even as the platform grows. Capabilities (the catalog) grow without bound; tools (the AI's verbs) stay tight.
+
+### Per-screen context
+
+The SPA sends the current route in each chat request body (whitelist principle: only what we explicitly attach). The chat endpoint composes a system prompt with the user's role + current screen + tool-usage guidance. **Nothing introspected, nothing from `/data/secrets/`, no auto-attached config.** The assistant only sees what was deliberately put in front of it.
+
+### Security boundary
+
+Three rules, baked in:
+
+1. **Whitelist what reaches the LLM.** The user's message + an explicit per-screen context payload + tool descriptions go to the provider. Secrets, environment values, audit logs, and other user data never enter prompts.
+2. **Capabilities are role-filtered before tool invocation.** A `User`-role caller never sees `Admin`-only entries — protects against the assistant suggesting actions the user can't perform AND avoids leaking the existence of admin features. Filter lives in `CapabilityRegistry`, not the UI.
+3. **Tools are hand-written, not auto-derived from OpenAPI.** Auto-derivation creates an unmanageable surface; manual curation gives us per-tool authorization, budget caps, and confirmation-before-mutation.
+
+### Local-only deployments
+
+Operators who don't want any prompts leaving their machine configure the **Local** AI provider (Ollama, LM Studio, vLLM) as the default. The chat path routes through the same provider abstraction with a custom OpenAI-compatible endpoint; no prompts reach Anthropic or OpenAI. This is the architectural answer to "we don't trust the cloud with our queries".
+
+## Workspace navigation
+
+Inside a workspace (`/w/:slug/...`), the SPA shell is three tiers from left to right:
+
+```
+[icon bar]   [optional sub-sidebar]   [content area = dockview]
+```
+
+The **icon bar** carries:
+
+1. 🏠 **Home** — a non-deletable, admin-editable standalone dashboard. The workspace's overview screen.
+2. **Standalone dashboards** — each is a single user-built dashboard with its own icon + label. Click renders directly in the content area.
+3. **Dashboard groups** — each is a collection of dashboards rendered as one icon. Click opens the **sub-sidebar** listing the group's children; clicking a child renders it in content.
+4. ⚙ **Workspace Settings** (workspace admin) — workspace config, members, plugin enablement, sync schedule, parsers/projection rules. Lives at the bottom of the bar.
+5. ⚙ **Platform Settings** (platform admin) — branding, users, environment, the workspaces registry. Always present for platform admins regardless of workspace context.
+6. 🚪 **Logout**.
+
+The sub-sidebar only renders when a group icon is active; standalone dashboards, Home, and Settings collapse it entirely (no orphan rail).
+
+The right-side **AI assistant panel** is global (toggled from the header) and lives outside this tier model — it's a modeless companion accessible from anywhere, not a top-level nav destination.
+
+### Empty-state behavior
+
+When the user has zero accessible workspaces:
+
+```
+[no workspace selected]
+─────────────────────────
+0 workspaces available — contact an admin to be added
+─────────────────────────
+⚙ Platform Settings   ← only when user.role === Admin
+🚪 Logout
+```
+
+Platform admins land on the workspaces registry (`/settings/workspaces`) when they sign in with no recent workspace; non-admin users with zero accessible workspaces see the no-access landing.
+
 ## Dashboard composer
 
-Opinionated layout: **Section → Row → Column → Widget**. Each level is a JSON document, stored in `cr.dashboards`.
+A **dashboard** is a saved dockview layout plus a set of widget instances, scoped to a workspace, accessed at `/w/:slug/d/:dashboardSlug`. **dockview-vue** is the layout primitive — splittable, dockable, resizable panels — which is what gives Creuser its "stock-trading-system feel" without fighting Quasar's grid. The earlier Section → Row → Column → Widget grid model was retired in favor of dockview during planning; it didn't survive contact with the use case.
+
+A **dashboard group** is a UI collection of dashboards, surfaced as a single icon in the workspace nav. Groups are admin-curated; the dashboards they contain are otherwise ordinary. Group membership is a `dashboards.group_id` foreign key — the dashboard is the unit of identity, the group is just a sidebar arrangement.
 
 ```typescript
 interface Dashboard {
   id: string;
+  workspaceId: string;
+  groupId: string | null;   // null = standalone (own icon in the bar)
+  slug: string;
   name: string;
-  sections: Section[];
-}
-interface Section {
-  id: string;
-  title?: string;
-  rows: Row[];
-}
-interface Row {
-  id: string;
-  columns: Column[];      // Column widths sum to 12 (Bootstrap-style)
-}
-interface Column {
-  id: string;
-  width: number;          // 1-12
+  icon: string | null;      // material icon name; required for standalone
+  layout: DockviewLayoutState;
   widgets: WidgetInstance[];
+  position: number;         // ordering within group, or among standalones in the bar
+  isDefault: boolean;       // shipped by Creuser; admins can edit, hard-delete is gated
 }
+
+interface DashboardGroup {
+  id: string;
+  workspaceId: string;
+  slug: string;
+  name: string;
+  icon: string;
+  position: number;
+  isDefault: boolean;
+}
+
 interface WidgetInstance {
   id: string;
-  widgetType: string;     // Looked up in WidgetRegistry
-  props: Record<string, unknown>;  // Conforms to widget's prop schema
+  widgetType: string;       // looked up in WidgetRegistry
+  props: Record<string, unknown>;  // conforms to widget's prop schema
 }
 ```
 
-Widgets are Vue components registered in a `WidgetRegistry` by name. Each widget declares a JSON Schema for its props. The "widget designer" is form-driven: pick a widget from the registry, the form auto-renders from its schema, drop it into a tile.
+Widgets are Vue components registered in a `WidgetRegistry` by name. Each widget declares a JSON Schema for its props. The "widget designer" is form-driven: pick a widget from the registry, the form auto-renders from its schema, drop it into a dockview pane.
+
+### Defaults shipped with a new workspace
+
+Two icons appear out of the box; admins build out from there:
+
+- 🏠 **Home** (standalone dashboard) — recent runs, last-sync status, member count, quick links. Admin-editable, not user-deletable.
+- ⚡ **Operations** (group) — pre-built dashboards: *Runs*, *Scripts*, *Workflows*. Each is a thin dashboard wrapping the corresponding widget at full width. Admins can edit, reorder, dissolve the group, or convert children to standalone.
+
+The "Add new dashboard" flow defaults to **standalone**. Adding to a group is a deliberate choice. Group creation is a separate action ("New group") — a small friction tax to discourage premature 12-group / 2-dashboard-each fragmentation.
 
 ### Initial widget set (v1)
 
@@ -430,13 +691,79 @@ Widgets are Vue components registered in a `WidgetRegistry` by name. Each widget
 
 Plugin-provided widgets register at startup via `IWidgetRegistration` discovered from `/data/plugins/*.dll`.
 
-### Layout engine
+### Tables
 
-Quasar's `q-page` provides the outer shell. Inside the dashboard content area, **dockview-vue** handles the dense tiling — splittable, dockable, resizable panels. This is what gives Creuser its "stock-trading-system feel" without fighting Quasar's grid.
+```sql
+CREATE TABLE cr.dashboard_groups (
+  id            uuid PRIMARY KEY,
+  workspace_id  uuid NOT NULL REFERENCES cr.workspaces(id) ON DELETE CASCADE,
+  slug          text NOT NULL,
+  name          text NOT NULL,
+  icon          text NOT NULL,
+  position      int  NOT NULL DEFAULT 0,
+  is_default    boolean NOT NULL DEFAULT false,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  created_by    uuid REFERENCES cr.users(id),
+  UNIQUE (workspace_id, slug)
+);
 
-## Authentication
+CREATE TABLE cr.dashboards (
+  id            uuid PRIMARY KEY,
+  workspace_id  uuid NOT NULL REFERENCES cr.workspaces(id) ON DELETE CASCADE,
+  group_id      uuid REFERENCES cr.dashboard_groups(id) ON DELETE SET NULL,
+  slug          text NOT NULL,
+  name          text NOT NULL,
+  icon          text,                       -- required for standalone, optional in groups
+  layout        jsonb NOT NULL DEFAULT '{}', -- dockview layout state
+  widgets       jsonb NOT NULL DEFAULT '[]', -- widget instances + props
+  position      int  NOT NULL DEFAULT 0,
+  is_default    boolean NOT NULL DEFAULT false,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  created_by    uuid REFERENCES cr.users(id),
+  UNIQUE (workspace_id, slug)
+);
+```
+
+URLs always reference dashboards directly (`/w/:slug/d/:dashboardSlug`); the URL doesn't carry the group, since the group is just a UI grouping construct. The icon bar item carries either a dashboard slug (standalone) or a group slug (group); the sub-sidebar resolves group → dashboards via the `group_id` FK.
+
+## Authentication and authorization
 
 The audience is **internal teams at one org** — operators and analysts working in a single Creuser deployment. Account creation is **invite-only**; there is no self-serve sign-up. Cookie-based sessions, Argon2id hashing, account state in Postgres `cr.users`, providers behind `IAuthProvider` so Google OAuth and OIDC can land later without rewiring callers.
+
+### Authorization model
+
+Two axes, kept deliberately small for v1:
+
+**Global role** (column `cr.users.role`):
+
+- `Admin` — can configure platform settings (Branding, Users, Environment, Workspaces) and has implicit `Editor` access to every workspace. Bootstrap admin from environment variables (see below) is always `Admin`.
+- `User` — non-admin. Can only access workspaces they have been explicitly granted membership to via `cr.workspace_members`.
+
+**Per-workspace role** (column `cr.workspace_members.role`):
+
+- `Editor` — can create and edit jobs, dashboards, widgets, workflows, and run them within the workspace.
+- `Viewer` — read-only. Can browse the workspace, view dashboards, inspect runs and traces, but cannot mutate state or trigger runs.
+
+Admins do not need explicit `cr.workspace_members` rows — admin-ness implies `Editor` on every workspace. This keeps the membership table free of the "ghost rows for every admin × workspace" pattern.
+
+Workspace membership is the **only** access-control axis for v1. There is no workspace-internal RBAC (no "can edit dashboards but not jobs"); that's deferred to post-v1 if a real use case appears. Endpoint authorization checks reduce to: *(global role == Admin) OR (workspace member with sufficient role)*.
+
+`cr.workspace_members` shape:
+
+```sql
+CREATE TABLE cr.workspace_members (
+  workspace_id  uuid NOT NULL REFERENCES cr.workspaces(id) ON DELETE CASCADE,
+  user_id       uuid NOT NULL REFERENCES cr.users(id) ON DELETE CASCADE,
+  role          text NOT NULL,            -- 'Editor' or 'Viewer'
+  granted_at    timestamptz NOT NULL DEFAULT now(),
+  granted_by    uuid REFERENCES cr.users(id),
+  PRIMARY KEY (workspace_id, user_id)
+);
+```
+
+After login, the SPA fetches the user's accessible workspaces (admins see all; users see their `cr.workspace_members` rows) and lands them on the last-used or first-accessible workspace. A user with zero accessible workspaces sees a "no access — contact your admin" landing instead of an empty shell.
 
 The `Creuser.Auth.*` projects encapsulate the seam:
 
@@ -530,35 +857,69 @@ A "Powered by Creuser, an MJCZone open-source project" attribution appears on th
 
 ## Plugin model
 
-Plugins are .NET assemblies dropped into `/data/plugins/`. Discovered at startup. Manifest declares:
+Plugins are .NET assemblies dropped into `/data/plugins/`. **Loaded once per Creuser instance** at startup — they are not per-workspace runtime isolation. Discovered at startup. Manifest declares:
 
 - Plugin name, version, author
 - Required Creuser version range
-- Provided extensions (job types, workspace types, widgets, agent providers, parsers)
+- Provided extensions: job runners (new `type:` values for job scripts), workspace types (new backends beyond git/local/s3), widgets, agent providers, parsers, capability providers (`ICapabilityProvider`)
 - Required tools (host-OS binaries the plugin's runners need)
 
-No hot-reload in v1. Plugin changes require restart. Operators copy DLLs in via their normal infrastructure (Railway file mounts, Docker volume updates, etc.).
+No hot-reload in v1. Plugin changes require restart. Operators copy DLLs in via their normal infrastructure (Railway file mounts, Docker volume updates, etc.). The plugin status page surfaces clearly when a plugin failed to load (e.g. its `required_runtimes` aren't available on a `:slim` deployment) — see [docker-variants.md](./docker-variants.md).
+
+### Per-workspace enablement
+
+Plugins are loaded globally; a workspace **opts into** the plugin's contributions. The mental model: plugins are the verb library; workspaces choose which verbs are visible in their job-runner picker, widget palette, agent-provider list, and capability registry. This makes "enabled plugins" part of the workspace's settings surface (a tab inside `/settings` → `Workspaces` → workspace detail) without requiring the plugin loader to ever produce per-workspace AssemblyLoadContexts.
+
+Persisted as a join table:
+
+```sql
+CREATE TABLE cr.workspace_plugins (
+  workspace_id  uuid NOT NULL REFERENCES cr.workspaces(id) ON DELETE CASCADE,
+  plugin_id     text NOT NULL REFERENCES cr.plugins(id) ON DELETE CASCADE,
+  enabled       boolean NOT NULL DEFAULT false,
+  enabled_at    timestamptz NOT NULL DEFAULT now(),
+  enabled_by    uuid REFERENCES cr.users(id),
+  PRIMARY KEY (workspace_id, plugin_id)
+);
+```
+
+Lands when the plugin loader exists; designed now so the plugin loader can ship with the per-workspace gate already wired.
+
+### Vocabulary: plugins vs scripts vs jobs
+
+```
+Plugin = capabilities the platform now knows how to do (verbs)
+Script (in cr.job_scripts)  = a recipe that composes those verbs
+Job run                     = an execution of a script, against a workspace,
+                              on a schedule or trigger
+```
+
+Plugins teach the platform *new kinds of work*. Scripts compose them into the daily improvement loops that make a workspace's repo iteratively better.
 
 ## Persistent volume layout
 
 ```
 /data/
-├── secrets/                    # API keys, OAuth secrets (chmod 600)
+├── secrets/                    # API keys, workspace credentials (chmod 600)
 │   ├── anthropic.key
 │   ├── openai.key
-│   └── google-oauth.json
-├── keys/                       # ASP.NET data protection keys
-├── workspaces/                 # Checked-out git repos and S3 caches
-│   ├── example-monorepo/
-│   │   ├── .git/
-│   │   └── ...
-│   └── another-repo/
-├── plugins/                    # Drop-in DLLs
-├── scripts/                    # Materialized job scripts (synced from DB)
-├── prompts/                    # Materialized prompt templates (synced from DB)
+│   ├── workspace-<slug>.pat    # HTTPS PAT for a git workspace (https-pat mode)
+│   └── workspace-<slug>.key    # OpenSSH private key for a git workspace (ssh-key mode)
+├── keys/                       # ASP.NET data protection keys (cookies survive restart)
+├── branding/                   # Logo / favicon / login-bg uploads, content-addressed
+│   └── logo-<sha>.<ext>        # served via /api/branding/assets/...
+├── workspaces/                 # Checked-out git repos (managed by WorkspaceFilesystemService)
+│   └── <slug>/
+│       ├── .git/
+│       └── ...
+├── plugins/                    # Drop-in DLLs (forward-looking)
+├── scripts/                    # Materialized job scripts (forward-looking)
+├── prompts/                    # Materialized prompt templates (forward-looking)
 ├── logs/                       # Serilog rolling files
-└── tmp/                        # Agent scratch space, periodically cleaned
+└── tmp/                        # Agent scratch space, periodically cleaned (forward-looking)
 ```
+
+The directory is configurable via `CREUSER_DATA_DIR`; it defaults to `/data` in the container and `<repo>/.data/` in dev / on-host runs (the dev default lets git workspaces clone into the repo's gitignored `.data/` so the IDE can browse the cloned tree.).
 
 ## Container tooling
 
@@ -599,6 +960,28 @@ interface ApiResult<T> { result: T }
 Endpoints use minimal API typed results: `Results<Ok<ApiResult<T>>, ProblemHttpResult>`.
 
 OpenAPI 3.1 emitted via `Microsoft.AspNetCore.OpenApi`. Scalar mounted at `/scalar` for interactive docs. The `openapi.json` is the source-of-truth for `@hey-api/openapi-ts` generating the TypeScript client into `src/Creuser.Web.Spa/src/api/`.
+
+## SPA routing
+
+The SPA uses **Vue Router in history mode** (`vueRouterMode: 'history'` in `quasar.config.ts`), not hash mode, so URLs are clean (`/w/compas/d/runs`, not `/#/w/compas/d/runs`). ASP.NET Core's `MapFallbackToFile("index.html")` serves `index.html` for any path that doesn't match a static file or `/api` / `/hub` / `/scalar` route, which is what makes deep-linking and refresh work.
+
+Top-level structure:
+
+| Path | Scope | Notes |
+| --- | --- | --- |
+| `/login` | Public | Branding-aware; no shell chrome |
+| `/` | Authenticated | Home — workspace picker if zero/multi, redirects to last-used otherwise |
+| `/w/:workspaceSlug` | Workspace | Workspace home (the standalone Home dashboard) |
+| `/w/:workspaceSlug/d/:dashboardSlug` | Workspace | Any dashboard (standalone or grouped) |
+| `/w/:workspaceSlug/settings/...` | Workspace admin | Workspace settings (members, plugin enablement, sync schedule, etc.) |
+| `/settings/...` | Platform admin | Branding, Users, Environment, Workspaces (admin CRUD) |
+| `/profile` | Authenticated user | Password change, personal preferences |
+
+Workspace-scoped routes are the bulk of the app. The slug in the URL is the active-workspace identifier — there is no hidden global "current workspace" Pinia state to fight with. Two browser tabs open to `/w/compas/d/runs` and `/w/acme/d/runs` show two different workspaces in parallel without interference. The workspace store is keyed by slug; the active slug is read from the route.
+
+Dashboard groups don't appear in the URL — the icon bar resolves the group from the dashboard's `group_id` for sub-sidebar rendering, but the URL only carries the dashboard slug. This keeps URLs short and lets admins reorganize groups without breaking bookmarks.
+
+The auth guard (`router/index.ts`) enforces four rules: (1) any non-public route requires an authenticated session; (2) `/settings/*` requires the platform `Admin` role; (3) `/w/:slug/*` requires that slug to be in the user's accessible-workspaces list (or the user is a platform Admin); (4) `/w/:slug/settings/*` requires the workspace `Editor` role on that slug (or platform Admin). Failures redirect to `/login`, the no-access landing, or 403 — not silent.
 
 ## Local development
 
@@ -761,8 +1144,11 @@ These are deliberately deferred to keep v1 scope tight:
 - Multi-repo workflow orchestration (cross-repo dependencies)
 - S3 workspace backend implementation
 - Native Python and Node script runners (vs. shell-out)
+- libgit2sharp adoption to replace shell-out for read-side ops
+- Multi-instance deployments (Postgres advisory locks instead of in-memory `SemaphoreSlim` for workspace sync; SignalR Redis backplane)
 - Hot-reload plugin system
-- Full RBAC beyond single-admin
+- Per-workspace plugin runtime isolation (separate AssemblyLoadContexts) — enablement gate is in the v1 design; isolation is post-v1
+- Full per-workspace RBAC beyond Editor/Viewer
 - OIDC integration for SSO (currently planned for v0.2)
 - Workflow import/export
 - Embedded observability dashboard

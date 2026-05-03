@@ -12,7 +12,7 @@ export default defineConfig((ctx) => {
     // app boot file (/src/boot)
     // --> boot files are part of "main.js"
     // https://v2.quasar.dev/quasar-cli-vite/boot-files
-    boot: ['i18n', 'auth'],
+    boot: ['i18n', 'branding', 'auth'],
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#css
     css: ['app.scss'],
@@ -44,7 +44,7 @@ export default defineConfig((ctx) => {
         // extendTsConfig (tsConfig) {}
       },
 
-      vueRouterMode: 'hash', // available values: 'hash', 'history'
+      vueRouterMode: 'history', // available values: 'hash', 'history'
       // vueRouterBase,
       // vueDevtools,
       // vueOptionsAPI: false,
@@ -124,7 +124,12 @@ export default defineConfig((ctx) => {
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#framework
     framework: {
-      config: {},
+      // Default to dark mode — matches the baked-in `:root` CSS-variable
+      // tokens in css/theme.scss. The branding store flips this at runtime
+      // via `Dark.set()` when an admin chooses the light palette.
+      config: {
+        dark: true,
+      },
 
       // iconSet: 'material-icons', // Quasar icon set
       // lang: 'en-US', // Quasar language pack
@@ -136,8 +141,19 @@ export default defineConfig((ctx) => {
       // components: [],
       // directives: [],
 
-      // Quasar plugins
-      plugins: [],
+      // Quasar plugins. Plugins are tree-shaken if unused, so listing them
+      // here only registers the runtime side-effects (touching $q, exposing
+      // imperative APIs). Add a plugin when something starts calling it.
+      plugins: [
+        'AddressbarColor', // tints mobile browser address bar from the brand palette
+        'AppFullscreen', // toggle/track browser fullscreen (run viewers, log tails)
+        'AppVisibility', // pause polling/SSE/SignalR when the tab isn't visible
+        'BottomSheet', // mobile-friendly action picker
+        'Dialog', // modal confirms/prompts (delete-confirm, etc.)
+        'Loading', // full-screen loading overlay for blocking ops
+        'LoadingBar', // top-of-page progress bar (saves, navigation)
+        'Notify', // toasts (already used by the Branding save flow)
+      ],
     },
 
     // animations: 'all', // --- includes all animations

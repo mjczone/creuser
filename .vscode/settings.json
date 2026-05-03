@@ -20,8 +20,10 @@
         "pgvector",
         "sandboxing",
         "Serilog",
+        "signalr",
         "slnx",
         "splittable",
+        "timestamptz",
         "unhead",
         "vueuse",
         "wwwroot"

@@ -104,4 +104,48 @@ public static class Problems
                 Detail = detail,
             }
         );
+
+    public static ProblemHttpResult LastAdmin(string detail) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "last-admin",
+                Title = "Last remaining admin",
+                Status = StatusCodes.Status409Conflict,
+                Detail = detail,
+            }
+        );
+
+    public static ProblemHttpResult SelfActionNotAllowed(string detail) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "self-action-not-allowed",
+                Title = "You cannot perform this action on your own account",
+                Status = StatusCodes.Status409Conflict,
+                Detail = detail,
+            }
+        );
+
+    public static ProblemHttpResult WorkspaceNotFound(string identifier) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "workspace-not-found",
+                Title = "Workspace not found",
+                Status = StatusCodes.Status404NotFound,
+                Detail = $"No workspace exists matching '{identifier}'.",
+            }
+        );
+
+    public static ProblemHttpResult SlugAlreadyExists(string slug) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "slug-already-exists",
+                Title = "Slug is already in use",
+                Status = StatusCodes.Status409Conflict,
+                Detail = $"A workspace with slug '{slug}' already exists.",
+            }
+        );
 }

@@ -50,7 +50,7 @@ public sealed class BootstrapAdminService
         var admin = new User(
             Id: Guid.NewGuid(),
             Email: email,
-            DisplayName: "Bootstrap Admin",
+            DisplayName: "System Admin",
             Role: Roles.Admin,
             PasswordHash: hash,
             IsActive: true,
@@ -62,7 +62,7 @@ public sealed class BootstrapAdminService
         );
         await _users.SaveAsync(admin, ct);
         _log.LogInformation(
-            "Bootstrap admin {Email} created. Sign in and change the password immediately.",
+            "System admin {Email} created. Sign in and change the password immediately.",
             email
         );
     }

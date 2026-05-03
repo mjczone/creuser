@@ -5,5 +5,7 @@ public sealed record UserResult(
     string Email,
     string DisplayName,
     string Role,
-    bool MustChangePassword
+    bool IsActive,
+    bool MustChangePassword,
+    DateTime? LastLoginAt
 );

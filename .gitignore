@@ -15,3 +15,8 @@ src/Creuser.Web/wwwroot/
 # Per-developer ASP.NET Core settings overrides — populated by
 # `npm run services:up` with the random host ports of the dev containers.
 appsettings.*.local.json
+
+# Local dev data dir — branding assets, secret files, data-protection keys,
+# checked-out workspaces, plugin DLLs, etc. Mirrors the production /data
+# volume at <repo>/.data/ when running outside the container.
+/.data/

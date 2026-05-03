@@ -25,17 +25,25 @@ export default defineRouter((/* { store, ssrContext } */) => {
     history: createHistory(process.env.VUE_ROUTER_BASE),
   });
 
-  // Auth guard: any route except those with `meta.public` requires
-  // an authenticated session. Anonymous users get bounced to /login.
-  // Already-authenticated users hitting /login get redirected home.
+  // Auth guard:
+  //   - Routes with `meta.public` are open (login, etc.).
+  //   - All others require an authenticated session; anonymous users are
+  //     bounced to /login with a redirect query.
+  //   - Routes with `meta.requiresAdmin` additionally require the Admin role;
+  //     non-admins are sent home rather than to a 403 page.
+  //   - Already-authenticated users hitting /login go home.
   Router.beforeEach((to) => {
     const auth = useAuthStore();
     const isPublic = to.matched.some((r) => r.meta.public === true);
+    const requiresAdmin = to.matched.some((r) => r.meta.requiresAdmin === true);
 
     if (!auth.isAuthenticated && !isPublic) {
       return { name: 'login', query: { redirect: to.fullPath } };
     }
     if (auth.isAuthenticated && to.name === 'login') {
+      return { path: '/' };
+    }
+    if (requiresAdmin && !auth.isAdmin) {
       return { path: '/' };
     }
     return true;

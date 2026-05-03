@@ -3,9 +3,10 @@
     <div class="login-grid" />
     <div class="login-center">
       <div class="login-card">
-        <div class="login-logo">C</div>
-        <div class="login-title">CREUSER</div>
-        <div class="login-subtitle">Workflow & agent orchestration</div>
+        <img v-if="logoUrl" :src="logoUrl" :alt="productName" class="login-logo-image" />
+        <div v-else class="login-logo">{{ productInitial }}</div>
+        <div class="login-title">{{ productName.toUpperCase() }}</div>
+        <div class="login-subtitle">{{ tagline }}</div>
 
         <q-form v-if="!showPasswordChange" class="login-form" @submit.prevent="onSubmit">
           <q-input
@@ -128,15 +129,24 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMeta } from 'quasar';
 import { useAuthStore } from 'stores/auth';
-
-useMeta({ title: 'Sign in · Creuser' });
+import { useBrandingStore } from 'stores/branding';
 
 const router = useRouter();
 const auth = useAuthStore();
+const branding = useBrandingStore();
+
+const productName = computed(() => branding.productName);
+const logoUrl = computed(() => branding.logoUrl);
+const productInitial = computed(() => branding.productName.charAt(0).toUpperCase() || 'C');
+const tagline = computed(
+  () => branding.config.loginTagline?.trim() || 'Workflow & agent orchestration',
+);
+
+useMeta(() => ({ title: `Sign in · ${productName.value}` }));
 
 const form = reactive({ email: '', password: '' });
 const showPassword = ref(false);
@@ -192,15 +202,15 @@ async function onPasswordChange() {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: $dark-page;
+  background: var(--cr-bg-page);
   overflow: hidden;
 }
 
 .login-grid {
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(rgba(17, 140, 242, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(17, 140, 242, 0.03) 1px, transparent 1px);
+  background-image: linear-gradient(var(--cr-border-subtle) 1px, transparent 1px),
+    linear-gradient(90deg, var(--cr-border-subtle) 1px, transparent 1px);
   background-size: 40px 40px;
   mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);
   -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);
@@ -215,8 +225,8 @@ async function onPasswordChange() {
 }
 
 .login-card {
-  background: $dark;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--cr-bg-surface);
+  border: 1px solid var(--cr-border-subtle);
   padding: 32px 28px 28px;
 }
 
@@ -224,15 +234,24 @@ async function onPasswordChange() {
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 40px;
-  height: 40px;
+  width: 56px;
+  height: 56px;
   margin: 0 auto 16px;
   border-radius: 50%;
-  background: $primary;
-  color: white;
-  font-size: 20px;
+  background: var(--q-primary);
+  color: var(--cr-fg-on-brand);
+  font-size: 26px;
   font-weight: 700;
   letter-spacing: 0.05em;
+}
+
+.login-logo-image {
+  display: block;
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  margin: 0 auto 16px;
+  border-radius: 6px;
 }
 
 .login-title {
@@ -240,7 +259,7 @@ async function onPasswordChange() {
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.2em;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--cr-fg-primary);
   margin-bottom: 2px;
 }
 
@@ -248,7 +267,7 @@ async function onPasswordChange() {
   text-align: center;
   font-size: 11px;
   letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--cr-fg-tertiary);
   margin-bottom: 28px;
 }
 
@@ -266,12 +285,12 @@ async function onPasswordChange() {
 
 .password-change-notice {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--cr-fg-secondary);
   text-align: center;
   padding: 8px 12px;
   margin-bottom: 12px;
-  background: rgba(17, 140, 242, 0.08);
-  border-left: 2px solid $primary;
+  background: var(--cr-brand-tint-soft);
+  border-left: 2px solid var(--q-primary);
 }
 
 .login-error {

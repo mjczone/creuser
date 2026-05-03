@@ -33,6 +33,13 @@ services:
       # PORT defaults to 8080 in the image; override via .env if needed.
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=creuser;Username=creuser;Password=${POSTGRES_PASSWORD}"
       ConnectionStrings__Redis: "redis:6379"
+    # Map `host.docker.internal` to the host machine so the in-container app
+    # can reach services running on the operator's host — Ollama at
+    # localhost:11434, LM Studio at localhost:1234, an SMTP relay, etc. Docker
+    # Desktop on Mac/Windows wires this automatically; Linux needs the
+    # explicit `host-gateway` form below.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - creuser-data:/data
     depends_on:

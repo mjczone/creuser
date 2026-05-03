@@ -196,6 +196,22 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResetPasswordRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -244,6 +260,597 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultOfboolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}/role": {
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "SetUserRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfUserResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{id}": {
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "operationId": "DeleteUser",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfboolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branding": {
+      "get": {
+        "tags": [
+          "Branding"
+        ],
+        "operationId": "GetBranding",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfBrandingConfig"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Branding"
+        ],
+        "operationId": "UpdateBranding",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandingConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfBrandingConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branding/assets/logo": {
+      "post": {
+        "tags": [
+          "Branding"
+        ],
+        "operationId": "UploadLogo",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file"
+                ],
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "$ref": "#/components/schemas/IFormFile"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfBrandingAssetResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/environment": {
+      "get": {
+        "tags": [
+          "Environment"
+        ],
+        "operationId": "GetEnvironment",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEnvironmentConfigView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Environment"
+        ],
+        "operationId": "UpdateEnvironment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEnvironmentConfigView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/environment/secrets": {
+      "get": {
+        "tags": [
+          "Environment"
+        ],
+        "operationId": "ListEnvironmentSecrets",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfstring"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/environment/secrets/{name}": {
+      "put": {
+        "tags": [
+          "Environment"
+        ],
+        "operationId": "SetEnvironmentSecret",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfboolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Environment"
+        ],
+        "operationId": "DeleteEnvironmentSecret",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfboolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/health": {
+      "get": {
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "CheckAgentHealth",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentHealthResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/chat": {
+      "post": {
+        "tags": [
+          "Agents"
+        ],
+        "operationId": "AgentChat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfAgentChatResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "ListWorkspaces",
+        "parameters": [
+          {
+            "name": "skip",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfWorkspaceResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "CreateWorkspace",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspaceResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "GetWorkspace",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspaceResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "UpdateWorkspace",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspaceResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "DeleteWorkspace",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfboolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/test": {
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "TestWorkspaceConnection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestWorkspaceConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspaceConnectionTestResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/sync": {
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "SyncWorkspace",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspaceSyncResult"
                 }
               }
             }
@@ -308,6 +915,233 @@
   },
   "components": {
     "schemas": {
+      "AgentChatRequest": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "history": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ChatTurn"
+            }
+          },
+          "provider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "currentScreen": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AgentChatResult": {
+        "required": [
+          "ok",
+          "reply",
+          "provider",
+          "model",
+          "latencyMs",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "reply": {
+            "type": "string"
+          },
+          "provider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "latencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AgentHealthResult": {
+        "required": [
+          "ok",
+          "provider",
+          "model",
+          "latencyMs",
+          "reply",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "latencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "reply": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AiProvidersConfig": {
+        "type": "object",
+        "properties": {
+          "defaultProvider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "anthropic": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AnthropicConfig"
+              }
+            ]
+          },
+          "openAI": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OpenAIConfig"
+              }
+            ]
+          },
+          "local": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocalProviderConfig"
+              }
+            ]
+          }
+        }
+      },
+      "AnthropicConfig": {
+        "type": "object",
+        "properties": {
+          "apiKeySecret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "defaultModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "baseUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfAgentChatResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentChatResult"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfAgentHealthResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentHealthResult"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfboolean": {
         "required": [
           "result"
@@ -316,6 +1150,42 @@
         "properties": {
           "result": {
             "type": "boolean"
+          }
+        }
+      },
+      "ApiResultOfBrandingAssetResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BrandingAssetResult"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfBrandingConfig": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BrandingConfig"
+              }
+            ]
           }
         }
       },
@@ -355,6 +1225,41 @@
           }
         }
       },
+      "ApiResultOfEnvironmentConfigView": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EnvironmentConfigView"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfIReadOnlyListOfstring": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "ApiResultOfIReadOnlyListOfUserResult": {
         "required": [
           "result"
@@ -368,6 +1273,23 @@
             ],
             "items": {
               "$ref": "#/components/schemas/UserResult"
+            }
+          }
+        }
+      },
+      "ApiResultOfIReadOnlyListOfWorkspaceResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceResult"
             }
           }
         }
@@ -408,6 +1330,233 @@
           }
         }
       },
+      "ApiResultOfWorkspaceConnectionTestResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceConnectionTestResult"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfWorkspaceResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceResult"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfWorkspaceSyncResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceSyncResult"
+              }
+            ]
+          }
+        }
+      },
+      "BrandingAssetResult": {
+        "required": [
+          "url",
+          "contentType",
+          "size"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "size": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "BrandingConfig": {
+        "required": [
+          "productName",
+          "logoUrl",
+          "faviconUrl",
+          "loginBackgroundUrl",
+          "loginTagline",
+          "mode",
+          "palette",
+          "chrome",
+          "chromeLight",
+          "fontFamily",
+          "fontFamilyMono",
+          "customCss",
+          "footerText",
+          "supportEmail"
+        ],
+        "type": "object",
+        "properties": {
+          "productName": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "faviconUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "loginBackgroundUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "loginTagline": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mode": {
+            "type": "string"
+          },
+          "palette": {
+            "$ref": "#/components/schemas/BrandPalette"
+          },
+          "chrome": {
+            "$ref": "#/components/schemas/ChromeTokens"
+          },
+          "chromeLight": {
+            "$ref": "#/components/schemas/ChromeTokens"
+          },
+          "fontFamily": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fontFamilyMono": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "customCss": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "footerText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "supportEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "BrandPalette": {
+        "type": "object",
+        "properties": {
+          "primary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "secondary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "positive": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "negative": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "info": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "warning": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dark": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "darkPage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ChangePasswordRequest": {
         "required": [
           "currentPassword",
@@ -424,6 +1573,92 @@
           },
           "confirmPassword": {
             "type": "string"
+          }
+        }
+      },
+      "ChatTurn": {
+        "required": [
+          "role",
+          "content"
+        ],
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "ChromeTokens": {
+        "type": "object",
+        "properties": {
+          "bgPage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bgSurface": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bgHeader": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bgSidebar": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bgElevated": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fgPrimary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fgSecondary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fgTertiary": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "borderSubtle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "borderDefault": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "borderStrong": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -481,6 +1716,52 @@
           }
         }
       },
+      "CreateWorkspaceRequest": {
+        "required": [
+          "slug",
+          "name",
+          "description",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "gitSettings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GitWorkspaceSettingsDto"
+              }
+            ]
+          },
+          "localSettings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocalWorkspaceSettingsDto"
+              }
+            ]
+          }
+        }
+      },
       "EchoRequest": {
         "required": [
           "message",
@@ -513,6 +1794,151 @@
           }
         }
       },
+      "EnvironmentConfig": {
+        "required": [
+          "general",
+          "smtp",
+          "aiProviders"
+        ],
+        "type": "object",
+        "properties": {
+          "general": {
+            "$ref": "#/components/schemas/GeneralConfig"
+          },
+          "smtp": {
+            "$ref": "#/components/schemas/SmtpConfig"
+          },
+          "aiProviders": {
+            "$ref": "#/components/schemas/AiProvidersConfig"
+          }
+        }
+      },
+      "EnvironmentConfigView": {
+        "required": [
+          "config",
+          "secretsPresent"
+        ],
+        "type": "object",
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/EnvironmentConfig"
+          },
+          "secretsPresent": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "GeneralConfig": {
+        "type": "object",
+        "properties": {
+          "baseUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "timezone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "GitWorkspaceSettingsDto": {
+        "required": [
+          "repositoryUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "repositoryUrl": {
+            "type": "string"
+          },
+          "authMode": {
+            "type": "string",
+            "default": "none"
+          },
+          "authSecret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "authCredential": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workingBranch": {
+            "type": "string",
+            "default": "creuser/main"
+          },
+          "sourceBranch": {
+            "type": "string",
+            "default": "main"
+          },
+          "mode": {
+            "type": "string",
+            "default": "direct-push"
+          },
+          "pushFrequency": {
+            "type": "string",
+            "default": "every-commit"
+          }
+        }
+      },
+      "IFormFile": {
+        "type": "string",
+        "format": "binary"
+      },
+      "LocalProviderConfig": {
+        "type": "object",
+        "properties": {
+          "baseUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "defaultModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "apiKeySecret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "LocalWorkspaceSettingsDto": {
+        "required": [
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "writable": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
       "LoginRequest": {
         "required": [
           "email",
@@ -525,6 +1951,35 @@
           },
           "password": {
             "type": "string"
+          }
+        }
+      },
+      "OpenAIConfig": {
+        "type": "object",
+        "properties": {
+          "apiKeySecret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "defaultModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "baseUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "azureDeployment": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -544,6 +1999,17 @@
           }
         }
       },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "properties": {
+          "temporaryPassword": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "SetActiveRequest": {
         "required": [
           "isActive"
@@ -555,13 +2021,160 @@
           }
         }
       },
+      "SetSecretRequest": {
+        "required": [
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "SetUserRoleRequest": {
+        "required": [
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "SmtpConfig": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "port": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "username": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "passwordSecret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "encryption": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fromAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fromName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "TestWorkspaceConnectionRequest": {
+        "required": [
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "gitSettings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GitWorkspaceSettingsDto"
+              }
+            ]
+          },
+          "localSettings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocalWorkspaceSettingsDto"
+              }
+            ]
+          }
+        }
+      },
+      "UpdateWorkspaceRequest": {
+        "required": [
+          "name",
+          "description",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "gitSettings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GitWorkspaceSettingsDto"
+              }
+            ]
+          },
+          "localSettings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocalWorkspaceSettingsDto"
+              }
+            ]
+          }
+        }
+      },
       "UserResult": {
         "required": [
           "userId",
           "email",
           "displayName",
           "role",
-          "mustChangePassword"
+          "isActive",
+          "mustChangePassword",
+          "lastLoginAt"
         ],
         "type": "object",
         "properties": {
@@ -578,8 +2191,204 @@
           "role": {
             "type": "string"
           },
+          "isActive": {
+            "type": "boolean"
+          },
           "mustChangePassword": {
             "type": "boolean"
+          },
+          "lastLoginAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "WorkspaceConnectionTestResult": {
+        "required": [
+          "ok",
+          "latencyMs",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "latencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "WorkspaceResult": {
+        "required": [
+          "workspaceId",
+          "slug",
+          "name",
+          "description",
+          "type",
+          "gitSettings",
+          "localSettings",
+          "authSecretPresent",
+          "createdAt",
+          "updatedAt",
+          "lastSyncAt",
+          "lastSyncSha",
+          "lastSyncStatus",
+          "lastSyncMessage"
+        ],
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "gitSettings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GitWorkspaceSettingsDto"
+              }
+            ]
+          },
+          "localSettings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LocalWorkspaceSettingsDto"
+              }
+            ]
+          },
+          "authSecretPresent": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSyncAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastSyncSha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastSyncStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastSyncMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "WorkspaceSyncResult": {
+        "required": [
+          "ok",
+          "slug",
+          "sha",
+          "latencyMs",
+          "syncedAt",
+          "message",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "sha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "latencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "syncedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dirtyCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
+          },
+          "requiresForce": {
+            "type": "boolean",
+            "default": false
           }
         }
       }
@@ -591,6 +2400,18 @@
     },
     {
       "name": "Admin"
+    },
+    {
+      "name": "Branding"
+    },
+    {
+      "name": "Environment"
+    },
+    {
+      "name": "Agents"
+    },
+    {
+      "name": "Workspaces"
     },
     {
       "name": "Diagnostics"

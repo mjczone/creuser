@@ -29,8 +29,10 @@
     "format:spa": "npm --prefix src/Creuser.Web.Spa run format",
     "typecheck": "npm --prefix tests/Creuser.Web.Spa.Tests run typecheck",
     "dev:spa": "npm --prefix src/Creuser.Web.Spa run dev",
+    "predev:dotnet": "kill-port --port 5128",
     "dev:dotnet": "dotnet watch --project src/Creuser.Web/Creuser.Web.csproj",
     "dev": "run-p dev:spa dev:dotnet",
+    "kill:port": "kill-port --port 5128",
     "clean": "run-s clean:dotnet clean:spa",
     "clean:dotnet": "dotnet clean Creuser.slnx",
     "clean:spa": "npm --prefix src/Creuser.Web.Spa run clean --if-present",
@@ -46,6 +48,7 @@
   },
   "devDependencies": {
     "husky": "^9.1.7",
+    "kill-port": "^2.0.1",
     "lint-staged": "^16.4.0",
     "npm-run-all2": "^8.0.0"
   },

@@ -1,13 +1,20 @@
+using Creuser.Agents;
 using Creuser.Auth.Abstractions;
 using Creuser.Auth.Core;
 using Creuser.Auth.Providers.Local;
 using Creuser.Persistence;
+using Creuser.Web.Agents;
+using Creuser.Web.Agents.Capabilities;
+using Creuser.Web.Branding;
 using Creuser.Web.Endpoints;
+using Creuser.Web.Environment;
 using Creuser.Web.Hubs;
+using Creuser.Web.Workspaces;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.FileProviders;
 using Scalar.AspNetCore;
 
 DapperSetup.Initialize();
@@ -24,10 +31,30 @@ builder.Configuration.AddJsonFile(
     reloadOnChange: true
 );
 
-var dataDir =
-    builder.Configuration["CREUSER_DATA_DIR"]
-    ?? Path.Combine(AppContext.BaseDirectory, ".creuser-data");
+// In production the container sets CREUSER_DATA_DIR=/data. In dev we want a
+// repo-relative path that survives `dotnet clean`, is easy to inspect from
+// the IDE, and is gitignored — falling back to a bin/-relative directory
+// would scatter data across Debug/Release builds and lose it on rebuild.
+var dataDir = builder.Configuration["CREUSER_DATA_DIR"];
+if (string.IsNullOrEmpty(dataDir))
+{
+    dataDir = builder.Environment.IsDevelopment()
+        ? Path.Combine(FindRepoRoot(AppContext.BaseDirectory), ".data")
+        : Path.Combine(AppContext.BaseDirectory, ".creuser-data");
+}
 Directory.CreateDirectory(dataDir);
+
+static string FindRepoRoot(string start)
+{
+    var dir = new DirectoryInfo(start);
+    while (dir is not null)
+    {
+        if (Directory.Exists(Path.Combine(dir.FullName, ".git")))
+            return dir.FullName;
+        dir = dir.Parent;
+    }
+    return start;
+}
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -44,6 +71,18 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(new BrandingAssetsService(dataDir));
+builder.Services.AddSingleton(new SecretsService(dataDir));
+builder.Services.AddSingleton(new WorkspaceFilesystemService(dataDir));
+builder.Services.AddSingleton<AgentClientFactory>();
+builder.Services.AddScoped<AgentClientResolver>();
+
+// Capability registry. Add additional ICapabilityProvider registrations
+// here as new modules / plugins land; CapabilityRegistry composes whatever
+// providers it finds in DI.
+builder.Services.AddSingleton<ICapabilityProvider, CoreCapabilityProvider>();
+builder.Services.AddScoped<CapabilityRegistry>();
+builder.Services.AddScoped<AgentTools>();
 builder.Services.AddSignalR();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -118,6 +157,21 @@ app.UseExceptionHandler();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+// Branded assets (logo, favicon, login background) live under <dataDir>/branding/.
+// Public so the login screen can fetch the logo before sign-in. Cached by
+// the browser per filename — uploads are content-addressed so each new
+// upload has a unique URL and old caches don't get stale.
+var brandingAssets = app.Services.GetRequiredService<BrandingAssetsService>();
+app.UseStaticFiles(
+    new StaticFileOptions
+    {
+        FileProvider = new PhysicalFileProvider(brandingAssets.DirectoryPath),
+        RequestPath = BrandingAssetsService.UrlPrefix,
+        OnPrepareResponse = ctx =>
+            ctx.Context.Response.Headers.CacheControl = "public, max-age=86400, immutable",
+    }
+);
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -130,6 +184,10 @@ if (app.Environment.IsDevelopment())
 
 app.MapAuthEndpoints();
 app.MapAdminUsersEndpoints();
+app.MapBrandingEndpoints();
+app.MapEnvironmentEndpoints();
+app.MapAgentsEndpoints();
+app.MapWorkspacesEndpoints();
 app.MapPingEndpoints();
 app.MapEchoEndpoints();
 app.MapHub<NotificationsHub>("/hub/notifications");

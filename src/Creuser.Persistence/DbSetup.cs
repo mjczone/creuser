@@ -1,5 +1,7 @@
 using Creuser.Auth.Abstractions;
 using Creuser.Auth.Core;
+using Creuser.Core.Repositories;
+using Creuser.Persistence.AppSettings;
 using Creuser.Persistence.Repositories;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,6 +33,8 @@ public static class DbSetup
         });
 
         services.AddSingleton<IUserStore, usersRepository>();
+        services.AddSingleton<IAppSettingsStore, appSettingsRepository>();
+        services.AddSingleton<IWorkspaceStore, workspacesRepository>();
         services.AddSingleton<BootstrapAdminService>();
         services.AddHostedService<DbInitializer>();
 

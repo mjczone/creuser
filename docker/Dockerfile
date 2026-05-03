@@ -63,7 +63,7 @@ RUN dotnet publish src/Creuser.Web/Creuser.Web.csproj \
 # and curate their own tools in a derivative Dockerfile.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ca-certificates \
+      git openssh-client ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 # ─── Stage 3: fat runtime ────────────────────────────────────────────────
@@ -71,7 +71,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # scripts, plugin compilation) + the curated polyglot tool palette.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime-fat
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ripgrep fd-find jq tree bat ca-certificates \
+      git openssh-client ripgrep fd-find jq tree bat ca-certificates \
       python3 python3-pip \
  && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \

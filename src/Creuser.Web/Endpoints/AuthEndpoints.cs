@@ -118,7 +118,7 @@ public static class AuthEndpoints
     }
 
     internal static UserResult ToResult(User u) =>
-        new(u.Id, u.Email, u.DisplayName, u.Role, u.MustChangePassword);
+        new(u.Id, u.Email, u.DisplayName, u.Role, u.IsActive, u.MustChangePassword, u.LastLoginAt);
 
     internal static IDictionary<string, string[]> ToErrorMap(
         FluentValidation.Results.ValidationResult result

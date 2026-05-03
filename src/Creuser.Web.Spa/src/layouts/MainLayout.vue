@@ -11,12 +11,26 @@
           aria-label="Menu"
           @click="drawer = !drawer"
         />
-        <div class="cr-breadcrumb">
-          <span class="cr-breadcrumb-label">{{ currentPage?.label }}</span>
+        <div class="cr-brand" :title="productName">
+          <span class="cr-brand-name">{{ productName }}</span>
         </div>
         <q-space />
         <!-- TODO: global Cmd+K command palette. Lands once /api/search is implemented. -->
-        <span class="cr-app-title">CREUSER</span>
+        <q-btn
+          flat
+          dense
+          round
+          :icon="assistant.isOpen ? 'auto_awesome' : 'auto_awesome'"
+          :color="assistant.isOpen ? 'primary' : undefined"
+          aria-label="Toggle AI assistant"
+          class="cr-assistant-btn"
+          @click="assistant.toggle"
+        >
+          <q-tooltip anchor="bottom right" self="top right">
+            {{ assistant.isOpen ? 'Close assistant' : 'Open assistant' }}
+          </q-tooltip>
+        </q-btn>
+        <ThemeModeToggle />
       </q-toolbar>
     </q-header>
 
@@ -31,10 +45,23 @@
       class="cr-drawer"
     >
       <div class="cr-drawer-content">
-        <div class="cr-logo-container">
-          <!-- Placeholder logo. Branding doc supplies the real SVG/PNG at runtime. -->
-          <div class="cr-logo">C</div>
-        </div>
+        <router-link
+          to="/"
+          class="cr-logo-container"
+          :aria-label="`${productName} home`"
+          @click="onNavClick"
+        >
+          <img v-if="logoUrl" :src="logoUrl" :alt="productName" class="cr-logo-image" />
+          <div v-else class="cr-logo">{{ productInitial }}</div>
+          <q-tooltip
+            v-if="!$q.screen.lt.md"
+            anchor="center right"
+            self="center left"
+            :offset="[8, 0]"
+          >
+            Home — {{ productName }}
+          </q-tooltip>
+        </router-link>
 
         <q-list>
           <q-item
@@ -111,6 +138,8 @@
       </div>
     </q-drawer>
 
+    <AssistantPanel />
+
     <q-page-container>
       <router-view />
     </q-page-container>
@@ -121,13 +150,23 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar, useMeta } from 'quasar';
+import { useAssistantStore } from 'stores/assistant';
 import { useAuthStore } from 'stores/auth';
+import { useBrandingStore } from 'stores/branding';
+import AssistantPanel from 'components/AssistantPanel.vue';
+import ThemeModeToggle from 'components/ThemeModeToggle.vue';
 
 const $q = useQuasar();
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const branding = useBrandingStore();
+const assistant = useAssistantStore();
 const drawer = ref(false);
+
+const productName = computed(() => branding.productName);
+const logoUrl = computed(() => branding.logoUrl);
+const productInitial = computed(() => branding.productName.charAt(0).toUpperCase() || 'C');
 
 interface NavItem {
   icon: string;
@@ -135,22 +174,16 @@ interface NavItem {
   route: string;
 }
 
-const topNavItems: NavItem[] = [
-  { icon: 'dashboard', label: 'Dashboard', route: '/' },
-  { icon: 'source', label: 'Workspaces', route: '/workspaces' },
-  { icon: 'account_tree', label: 'Workflows', route: '/workflows' },
-  { icon: 'history', label: 'Runs', route: '/runs' },
-  { icon: 'description', label: 'Scripts', route: '/scripts' },
-  { icon: 'smart_toy', label: 'Agents', route: '/agents' },
-  { icon: 'extension', label: 'Plugins', route: '/plugins' },
-];
+// Top icons today: just Home. The workspace-scoped icon bar (dashboard
+// groups + standalone dashboards + workspace settings) lands once
+// /w/:slug/... routing exists. See architecture.md "Workspace navigation".
+const topNavItems: NavItem[] = [{ icon: 'home', label: 'Home', route: '/' }];
 
 const bottomNavItems = computed(() => {
   const items: NavItem[] = [];
   if (auth.isAdmin) {
-    items.push({ icon: 'admin_panel_settings', label: 'Users', route: '/admin/users' });
+    items.push({ icon: 'settings', label: 'Platform settings', route: '/settings' });
   }
-  items.push({ icon: 'settings', label: 'Settings', route: '/settings' });
   return items;
 });
 
@@ -166,7 +199,7 @@ const currentPage = computed(
 );
 
 useMeta(() => ({
-  title: `${currentPage.value?.label ?? 'Creuser'} · Creuser`,
+  title: `${currentPage.value?.label ?? productName.value} · ${productName.value}`,
 }));
 
 function onNavClick() {
@@ -174,46 +207,43 @@ function onNavClick() {
 }
 
 async function logout() {
-  // TODO: POST /api/auth/logout once the endpoint exists.
-  auth.clearUser();
-  await router.push('/');
+  await auth.logout();
+  await router.push({ name: 'login' });
 }
 </script>
 
 <style lang="scss" scoped>
 .cr-header {
-  background: $dark;
-  height: 40px;
+  background: var(--cr-bg-header);
+  height: var(--cr-header-height);
 }
 
 .cr-toolbar {
   min-height: 0;
   height: 100%;
   padding: 0 12px;
+  gap: 12px;
 }
 
-.cr-breadcrumb {
+.cr-brand {
   display: flex;
   align-items: center;
-  gap: 6px;
+  min-width: 0;
 }
 
-.cr-breadcrumb-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.cr-app-title {
-  font-size: 11px;
+.cr-brand-name {
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.15em;
-  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.06em;
+  color: var(--cr-fg-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cr-drawer {
-  background: $dark !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  background: var(--cr-bg-sidebar) !important;
+  border-color: var(--cr-border-subtle) !important;
 }
 
 .cr-drawer-content {
@@ -223,11 +253,28 @@ async function logout() {
 }
 
 .cr-logo-container {
-  height: 40px;
+  height: var(--cr-header-height);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  // Defaults to --cr-border-default to match the header's bordered bottom
+  // (both inherit from the same fallback). Independently overridable via
+  // `:root { --cr-border-logo: ...; }` in Custom CSS.
+  border-bottom: 1px solid var(--cr-border-logo);
+  // Clickable link to /; reset default anchor styling so the logo art is the
+  // only thing the user sees.
+  text-decoration: none;
+  color: inherit;
+  transition: background 120ms ease;
+
+  &:hover {
+    background: var(--cr-bg-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--q-primary);
+    outline-offset: -2px;
+  }
 }
 
 .cr-logo {
@@ -237,34 +284,41 @@ async function logout() {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: $primary;
-  color: white;
+  background: var(--q-primary);
+  color: var(--cr-fg-on-brand);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.05em;
 }
 
+.cr-logo-image {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
 .cr-nav-item {
   border-radius: 0;
   min-height: 44px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--cr-fg-secondary);
 
   .q-icon {
     font-size: 20px;
   }
 
   &:hover {
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.04);
+    color: var(--cr-fg-primary);
+    background: var(--cr-bg-hover);
   }
 }
 
 .cr-nav-active {
-  color: $primary !important;
-  background: rgba($primary, 0.08) !important;
+  color: var(--q-primary) !important;
+  background: var(--cr-brand-tint-soft) !important;
 
   .q-icon {
-    color: $primary;
+    color: var(--q-primary);
   }
 }
 </style>

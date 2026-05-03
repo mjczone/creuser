@@ -19,6 +19,7 @@
     <PackageReference Include="Scalar.AspNetCore" Version="2.14.9" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Creuser.Agents\Creuser.Agents.csproj" />
     <ProjectReference Include="..\Creuser.Auth.Abstractions\Creuser.Auth.Abstractions.csproj" />
     <ProjectReference Include="..\Creuser.Auth.Core\Creuser.Auth.Core.csproj" />
     <ProjectReference Include="..\Creuser.Auth.Providers.Local\Creuser.Auth.Providers.Local.csproj" />

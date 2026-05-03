@@ -1,6 +1,6 @@
 ---
 name: minimal-api-contracts
-description: Defines the standard request/response envelope, RFC 7807 ProblemDetails error contract, typed return shapes, and OpenAPI annotations for ASP.NET Core minimal API endpoints in the Creuser codebase. Use this skill whenever creating, modifying, or extending an HTTP endpoint, defining a request or response DTO, handling validation, returning errors, or wiring up OpenAPI for hey-api TypeScript generation. Apply it even when the user doesn't explicitly mention "contracts" or "ProblemDetails" — any endpoint work in this codebase must conform to this contract.
+description: Defines the standard request/response envelope, RFC 7807 ProblemDetails error contract, typed return shapes, OpenAPI annotations, and AI-assistant capability discovery for ASP.NET Core minimal API endpoints in the Creuser codebase. Use this skill whenever creating, modifying, or extending an HTTP endpoint, defining a request or response DTO, handling validation, returning errors, wiring up OpenAPI for hey-api TypeScript generation, or making a feature discoverable to the in-app AI assistant. Apply it even when the user doesn't explicitly mention "contracts" or "ProblemDetails" — any endpoint work in this codebase must conform to this contract.
 ---
 
 # Creuser Minimal API Contracts
@@ -497,6 +497,72 @@ app.MapRunEndpoints();
 
 This keeps `Program.cs` clean and lets each endpoint group own its routing, naming, and tagging conventions.
 
+## AI capability discovery
+
+The in-app AI assistant uses a `CapabilityRegistry` (`src/Creuser.Web/Agents/Capabilities/`) to know what the platform can do. When a user asks "where do I X" or "what can I do here", the assistant calls `navigate(intent)` or `describe_capabilities(topic)`, which read from this registry, and emits markdown links back to the relevant settings pages.
+
+**The rule: when you add or change a user-facing endpoint, decide whether it represents a discoverable capability. If yes, add a `Capability` entry alongside.**
+
+Today the catalog is a hand-curated list in `CoreCapabilityProvider.cs`. Edit it in the same PR as the endpoint — the file's comments call out that responsibility. Future iterations will move the catalog to `[AiCapability]` attributes on the endpoint methods themselves (compile-time scanner builds the list automatically) and then to per-workspace / plugin-contributed `ICapabilityProvider` implementations. The shape stays the same regardless of source; only the discovery mechanism evolves.
+
+### When does an endpoint warrant a capability entry?
+
+Yes when:
+- It corresponds to a settings surface or admin action a user might *describe in plain language* ("invite a user", "set the API key").
+- It mutates user-visible state (`POST /api/admin/users/{id}/role` → "promote to admin").
+- It's a top-level navigation target (`/settings/branding`, `/settings/environment`).
+
+No when:
+- It's a primitive read endpoint that's only consumed by the SPA (`GET /api/auth/me`, `GET /api/branding`). These power the UI; they're not the user's mental model.
+- It's a low-level RPC the user would never invoke directly (`POST /api/branding/assets/logo` is hit by the LogoUploadField, not by the user "calling an asset upload endpoint").
+- It's an internal health/diagnostic surface (`/api/ping`, `/api/agents/health`).
+
+The test: would a non-engineer user describe their intent in a way that maps to this? If yes, capability. If they'd describe their intent at a *higher level*, the capability lives on that higher-level container instead.
+
+### Capability shape
+
+```csharp
+new Capability(
+    Id: "users.manage",                     // stable, kebab-case, dot-namespaced by topic
+    Topic: "users",                         // groups capabilities — the assistant filters by this
+    Title: "Manage user accounts",          // short label for navigation buttons
+    Description: "Reset passwords, toggle roles between Admin and User, deactivate or delete accounts. The last remaining admin can't be demoted, deactivated, or deleted.",
+    Intents:                                // free-text phrases an operator might type
+    [
+        "reset password",
+        "change role",
+        "promote user",
+        "demote user",
+        "deactivate user",
+        "delete user",
+        "remove user",
+    ],
+    Route: "/settings/users",               // SPA route the user lands on
+    ExpandSection: null,                    // optional q-expansion-item key to auto-open via ?expand=
+    RequiresRole: Roles.Admin,              // assistant filters out entries the user can't act on
+    Mutates: true                           // (future) tools-that-write require UI confirmation
+)
+```
+
+### When to add a new topic
+
+Topics are coarse — `users`, `branding`, `environment`, `account`, `workspaces`. Don't fragment into per-feature topics; the assistant uses topics to filter `describe_capabilities("topic")` calls, and an over-fragmented set defeats that. Add a new topic only when adding a whole new section of the platform (e.g. when workspaces land).
+
+### Page-side: ?expand= query handling
+
+When a capability's `ExpandSection` is set, the link the assistant emits looks like `[Anthropic API key](/settings/environment?expand=aiAnthropic)`. The destination page must:
+
+1. Read `route.query.expand` on mount.
+2. Set the matching key in its persisted `useLocalStorage('creuser.<page>.expanded.vN', { ... })` to `true`.
+3. If the section is nested under a parent, expand the parent too.
+4. Scroll the section into view via `[data-section-key]` and `scrollIntoView`.
+
+See `EnvironmentPage.vue` and `BrandingPage.vue` for the canonical pattern. The `data-section-key` attribute on each `q-expansion-item` / `CollapsibleSection` is what makes targeted scroll work.
+
+### Security boundary
+
+Capabilities sent to the LLM are **filtered by user role first**. A `User`-role caller never sees `Admin`-only capabilities — protects against the assistant suggesting actions the user can't perform AND avoids leaking the existence of admin features to non-admins. The filter lives in `CapabilityRegistry.GetAvailableAsync` — don't add capabilities with sensitive descriptions and rely on UI-level gating; the registry is the trust boundary.
+
 ## Verification checklist
 
 Before considering an endpoint done:
@@ -511,3 +577,4 @@ Before considering an endpoint done:
 - [ ] Generated TypeScript (`npm run codegen` in `src/Creuser.Web.Spa/`) compiles without errors
 - [ ] Integration test covers happy path AND at least one error path
 - [ ] If a new problem type was introduced: added to `Problems` class, added to type registry table
+- [ ] If the endpoint is user-facing: corresponding `Capability` added to `CoreCapabilityProvider` (or attribute when the scanner lands), with `Intents` covering at least 3-4 phrasings an operator might use

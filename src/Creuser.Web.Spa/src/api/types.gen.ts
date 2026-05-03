@@ -4,8 +4,62 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AgentChatRequest = {
+  message: string;
+  history?: null | Array<ChatTurn>;
+  provider?: null | string;
+  currentScreen?: null | string;
+};
+
+export type AgentChatResult = {
+  ok: boolean;
+  reply: string;
+  provider: null | string;
+  model: null | string;
+  latencyMs: null | number | string;
+  error: null | string;
+};
+
+export type AgentHealthResult = {
+  ok: boolean;
+  provider: null | string;
+  model: null | string;
+  latencyMs: null | number | string;
+  reply: null | string;
+  error: null | string;
+};
+
+export type AiProvidersConfig = {
+  defaultProvider?: null | string;
+  anthropic?: null | AnthropicConfig;
+  openAI?: null | OpenAiConfig;
+  local?: null | LocalProviderConfig;
+};
+
+export type AnthropicConfig = {
+  apiKeySecret?: null | string;
+  defaultModel?: null | string;
+  baseUrl?: null | string;
+};
+
+export type ApiResultOfAgentChatResult = {
+  result: null | AgentChatResult;
+};
+
+export type ApiResultOfAgentHealthResult = {
+  result: null | AgentHealthResult;
+};
+
 export type ApiResultOfboolean = {
   result: boolean;
+};
+
+export type ApiResultOfBrandingAssetResult = {
+  result: null | BrandingAssetResult;
+};
+
+export type ApiResultOfBrandingConfig = {
+  result: null | BrandingConfig;
 };
 
 export type ApiResultOfCreateUserResult = {
@@ -16,8 +70,20 @@ export type ApiResultOfEchoResponse = {
   result: null | EchoResponse;
 };
 
+export type ApiResultOfEnvironmentConfigView = {
+  result: null | EnvironmentConfigView;
+};
+
+export type ApiResultOfIReadOnlyListOfstring = {
+  result: null | Array<string>;
+};
+
 export type ApiResultOfIReadOnlyListOfUserResult = {
   result: null | Array<UserResult>;
+};
+
+export type ApiResultOfIReadOnlyListOfWorkspaceResult = {
+  result: null | Array<WorkspaceResult>;
 };
 
 export type ApiResultOfPingResponse = {
@@ -28,10 +94,76 @@ export type ApiResultOfUserResult = {
   result: null | UserResult;
 };
 
+export type ApiResultOfWorkspaceConnectionTestResult = {
+  result: null | WorkspaceConnectionTestResult;
+};
+
+export type ApiResultOfWorkspaceResult = {
+  result: null | WorkspaceResult;
+};
+
+export type ApiResultOfWorkspaceSyncResult = {
+  result: null | WorkspaceSyncResult;
+};
+
+export type BrandingAssetResult = {
+  url: string;
+  contentType: string;
+  size: number | string;
+};
+
+export type BrandingConfig = {
+  productName: string;
+  logoUrl: null | string;
+  faviconUrl: null | string;
+  loginBackgroundUrl: null | string;
+  loginTagline: null | string;
+  mode: string;
+  palette: BrandPalette;
+  chrome: ChromeTokens;
+  chromeLight: ChromeTokens;
+  fontFamily: null | string;
+  fontFamilyMono: null | string;
+  customCss: null | string;
+  footerText: null | string;
+  supportEmail: null | string;
+};
+
+export type BrandPalette = {
+  primary?: null | string;
+  secondary?: null | string;
+  accent?: null | string;
+  positive?: null | string;
+  negative?: null | string;
+  info?: null | string;
+  warning?: null | string;
+  dark?: null | string;
+  darkPage?: null | string;
+};
+
 export type ChangePasswordRequest = {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
+};
+
+export type ChatTurn = {
+  role: string;
+  content: string;
+};
+
+export type ChromeTokens = {
+  bgPage?: null | string;
+  bgSurface?: null | string;
+  bgHeader?: null | string;
+  bgSidebar?: null | string;
+  bgElevated?: null | string;
+  fgPrimary?: null | string;
+  fgSecondary?: null | string;
+  fgTertiary?: null | string;
+  borderSubtle?: null | string;
+  borderDefault?: null | string;
+  borderStrong?: null | string;
 };
 
 export type CreateUserRequest = {
@@ -49,6 +181,15 @@ export type CreateUserResult = {
   temporaryPassword: string;
 };
 
+export type CreateWorkspaceRequest = {
+  slug: string;
+  name: string;
+  description: null | string;
+  type: string;
+  gitSettings?: null | GitWorkspaceSettingsDto;
+  localSettings?: null | LocalWorkspaceSettingsDto;
+};
+
 export type EchoRequest = {
   message: string;
   repeat: null | number | string;
@@ -58,9 +199,59 @@ export type EchoResponse = {
   message: string;
 };
 
+export type EnvironmentConfig = {
+  general: GeneralConfig;
+  smtp: SmtpConfig;
+  aiProviders: AiProvidersConfig;
+};
+
+export type EnvironmentConfigView = {
+  config: EnvironmentConfig;
+  secretsPresent: {
+    [key: string]: boolean;
+  };
+};
+
+export type GeneralConfig = {
+  baseUrl?: null | string;
+  timezone?: null | string;
+};
+
+export type GitWorkspaceSettingsDto = {
+  repositoryUrl: string;
+  authMode?: string;
+  authSecret?: null | string;
+  authCredential?: null | string;
+  workingBranch?: string;
+  sourceBranch?: string;
+  mode?: string;
+  pushFrequency?: string;
+};
+
+export type IFormFile = Blob | File;
+
+export type LocalProviderConfig = {
+  baseUrl?: null | string;
+  defaultModel?: null | string;
+  apiKeySecret?: null | string;
+  kind?: null | string;
+};
+
+export type LocalWorkspaceSettingsDto = {
+  path: string;
+  writable?: boolean;
+};
+
 export type LoginRequest = {
   email: string;
   password: string;
+};
+
+export type OpenAiConfig = {
+  apiKeySecret?: null | string;
+  defaultModel?: null | string;
+  baseUrl?: null | string;
+  azureDeployment?: null | string;
 };
 
 export type PingResponse = {
@@ -68,8 +259,44 @@ export type PingResponse = {
   serverTime: string;
 };
 
+export type ResetPasswordRequest = {
+  temporaryPassword?: null | string;
+};
+
 export type SetActiveRequest = {
   isActive: boolean;
+};
+
+export type SetSecretRequest = {
+  value: string;
+};
+
+export type SetUserRoleRequest = {
+  role: string;
+};
+
+export type SmtpConfig = {
+  host?: null | string;
+  port?: null | number | string;
+  username?: null | string;
+  passwordSecret?: null | string;
+  encryption?: null | string;
+  fromAddress?: null | string;
+  fromName?: null | string;
+};
+
+export type TestWorkspaceConnectionRequest = {
+  type: string;
+  gitSettings?: null | GitWorkspaceSettingsDto;
+  localSettings?: null | LocalWorkspaceSettingsDto;
+};
+
+export type UpdateWorkspaceRequest = {
+  name: string;
+  description: null | string;
+  type: string;
+  gitSettings?: null | GitWorkspaceSettingsDto;
+  localSettings?: null | LocalWorkspaceSettingsDto;
 };
 
 export type UserResult = {
@@ -77,7 +304,44 @@ export type UserResult = {
   email: string;
   displayName: string;
   role: string;
+  isActive: boolean;
   mustChangePassword: boolean;
+  lastLoginAt: null | string;
+};
+
+export type WorkspaceConnectionTestResult = {
+  ok: boolean;
+  latencyMs: number | string;
+  error: null | string;
+};
+
+export type WorkspaceResult = {
+  workspaceId: string;
+  slug: string;
+  name: string;
+  description: null | string;
+  type: string;
+  gitSettings: null | GitWorkspaceSettingsDto;
+  localSettings: null | LocalWorkspaceSettingsDto;
+  authSecretPresent: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastSyncAt: null | string;
+  lastSyncSha: null | string;
+  lastSyncStatus: null | string;
+  lastSyncMessage: null | string;
+};
+
+export type WorkspaceSyncResult = {
+  ok: boolean;
+  slug: string;
+  sha: null | string;
+  latencyMs: number | string;
+  syncedAt: string;
+  message: null | string;
+  error: null | string;
+  dirtyCount?: number | string;
+  requiresForce?: boolean;
 };
 
 export type LoginData = {
@@ -180,7 +444,7 @@ export type CreateUserResponses = {
 export type CreateUserResponse = CreateUserResponses[keyof CreateUserResponses];
 
 export type ResetUserPasswordData = {
-  body?: never;
+  body?: null | ResetPasswordRequest;
   path: {
     id: string;
   };
@@ -215,6 +479,340 @@ export type SetUserActiveResponses = {
 };
 
 export type SetUserActiveResponse = SetUserActiveResponses[keyof SetUserActiveResponses];
+
+export type SetUserRoleData = {
+  body: SetUserRoleRequest;
+  path: {
+    id: string;
+  };
+  query?: never;
+  url: '/api/admin/users/{id}/role';
+};
+
+export type SetUserRoleResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfUserResult;
+};
+
+export type SetUserRoleResponse = SetUserRoleResponses[keyof SetUserRoleResponses];
+
+export type DeleteUserData = {
+  body?: never;
+  path: {
+    id: string;
+  };
+  query?: never;
+  url: '/api/admin/users/{id}';
+};
+
+export type DeleteUserResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfboolean;
+};
+
+export type DeleteUserResponse = DeleteUserResponses[keyof DeleteUserResponses];
+
+export type GetBrandingData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/branding';
+};
+
+export type GetBrandingResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfBrandingConfig;
+};
+
+export type GetBrandingResponse = GetBrandingResponses[keyof GetBrandingResponses];
+
+export type UpdateBrandingData = {
+  body: BrandingConfig;
+  path?: never;
+  query?: never;
+  url: '/api/branding';
+};
+
+export type UpdateBrandingResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfBrandingConfig;
+};
+
+export type UpdateBrandingResponse = UpdateBrandingResponses[keyof UpdateBrandingResponses];
+
+export type UploadLogoData = {
+  body: {
+    file: IFormFile;
+  };
+  path?: never;
+  query?: never;
+  url: '/api/branding/assets/logo';
+};
+
+export type UploadLogoResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfBrandingAssetResult;
+};
+
+export type UploadLogoResponse = UploadLogoResponses[keyof UploadLogoResponses];
+
+export type GetEnvironmentData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/environment';
+};
+
+export type GetEnvironmentResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfEnvironmentConfigView;
+};
+
+export type GetEnvironmentResponse = GetEnvironmentResponses[keyof GetEnvironmentResponses];
+
+export type UpdateEnvironmentData = {
+  body: EnvironmentConfig;
+  path?: never;
+  query?: never;
+  url: '/api/environment';
+};
+
+export type UpdateEnvironmentResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfEnvironmentConfigView;
+};
+
+export type UpdateEnvironmentResponse =
+  UpdateEnvironmentResponses[keyof UpdateEnvironmentResponses];
+
+export type ListEnvironmentSecretsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/environment/secrets';
+};
+
+export type ListEnvironmentSecretsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfstring;
+};
+
+export type ListEnvironmentSecretsResponse =
+  ListEnvironmentSecretsResponses[keyof ListEnvironmentSecretsResponses];
+
+export type DeleteEnvironmentSecretData = {
+  body?: never;
+  path: {
+    name: string;
+  };
+  query?: never;
+  url: '/api/environment/secrets/{name}';
+};
+
+export type DeleteEnvironmentSecretResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfboolean;
+};
+
+export type DeleteEnvironmentSecretResponse =
+  DeleteEnvironmentSecretResponses[keyof DeleteEnvironmentSecretResponses];
+
+export type SetEnvironmentSecretData = {
+  body: SetSecretRequest;
+  path: {
+    name: string;
+  };
+  query?: never;
+  url: '/api/environment/secrets/{name}';
+};
+
+export type SetEnvironmentSecretResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfboolean;
+};
+
+export type SetEnvironmentSecretResponse =
+  SetEnvironmentSecretResponses[keyof SetEnvironmentSecretResponses];
+
+export type CheckAgentHealthData = {
+  body?: never;
+  path?: never;
+  query?: {
+    provider?: string;
+  };
+  url: '/api/agents/health';
+};
+
+export type CheckAgentHealthResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfAgentHealthResult;
+};
+
+export type CheckAgentHealthResponse = CheckAgentHealthResponses[keyof CheckAgentHealthResponses];
+
+export type AgentChatData = {
+  body: AgentChatRequest;
+  path?: never;
+  query?: never;
+  url: '/api/agents/chat';
+};
+
+export type AgentChatResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfAgentChatResult;
+};
+
+export type AgentChatResponse = AgentChatResponses[keyof AgentChatResponses];
+
+export type ListWorkspacesData = {
+  body?: never;
+  path?: never;
+  query?: {
+    skip?: number | string;
+    take?: number | string;
+  };
+  url: '/api/workspaces';
+};
+
+export type ListWorkspacesResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfWorkspaceResult;
+};
+
+export type ListWorkspacesResponse = ListWorkspacesResponses[keyof ListWorkspacesResponses];
+
+export type CreateWorkspaceData = {
+  body: CreateWorkspaceRequest;
+  path?: never;
+  query?: never;
+  url: '/api/workspaces';
+};
+
+export type CreateWorkspaceResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspaceResult;
+};
+
+export type CreateWorkspaceResponse = CreateWorkspaceResponses[keyof CreateWorkspaceResponses];
+
+export type DeleteWorkspaceData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}';
+};
+
+export type DeleteWorkspaceResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfboolean;
+};
+
+export type DeleteWorkspaceResponse = DeleteWorkspaceResponses[keyof DeleteWorkspaceResponses];
+
+export type GetWorkspaceData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}';
+};
+
+export type GetWorkspaceResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspaceResult;
+};
+
+export type GetWorkspaceResponse = GetWorkspaceResponses[keyof GetWorkspaceResponses];
+
+export type UpdateWorkspaceData = {
+  body: UpdateWorkspaceRequest;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}';
+};
+
+export type UpdateWorkspaceResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspaceResult;
+};
+
+export type UpdateWorkspaceResponse = UpdateWorkspaceResponses[keyof UpdateWorkspaceResponses];
+
+export type TestWorkspaceConnectionData = {
+  body: TestWorkspaceConnectionRequest;
+  path?: never;
+  query?: never;
+  url: '/api/workspaces/test';
+};
+
+export type TestWorkspaceConnectionResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspaceConnectionTestResult;
+};
+
+export type TestWorkspaceConnectionResponse =
+  TestWorkspaceConnectionResponses[keyof TestWorkspaceConnectionResponses];
+
+export type SyncWorkspaceData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: {
+    force?: boolean;
+  };
+  url: '/api/workspaces/{slug}/sync';
+};
+
+export type SyncWorkspaceResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspaceSyncResult;
+};
+
+export type SyncWorkspaceResponse = SyncWorkspaceResponses[keyof SyncWorkspaceResponses];
 
 export type PingData = {
   body?: never;

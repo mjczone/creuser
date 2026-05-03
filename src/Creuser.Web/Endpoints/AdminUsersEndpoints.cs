@@ -21,6 +21,8 @@ public static class AdminUsersEndpoints
             .MapPost("/{id:guid}/reset-password", (Delegate)ResetPassword)
             .WithName("ResetUserPassword");
         group.MapPost("/{id:guid}/active", (Delegate)SetActive).WithName("SetUserActive");
+        group.MapPut("/{id:guid}/role", (Delegate)SetRole).WithName("SetUserRole");
+        group.MapDelete("/{id:guid}", (Delegate)DeleteUser).WithName("DeleteUser");
         group.MapGet("/", (Delegate)ListUsers).WithName("ListUsers");
 
         return app;
@@ -72,13 +74,28 @@ public static class AdminUsersEndpoints
 
     private static async Task<
         Results<Ok<ApiResult<CreateUserResult>>, ProblemHttpResult>
-    > ResetPassword(Guid id, IUserStore users, IPasswordHasher hasher, TimeProvider time)
+    > ResetPassword(
+        Guid id,
+        ResetPasswordRequest? body,
+        IValidator<ResetPasswordRequest> validator,
+        IUserStore users,
+        IPasswordHasher hasher,
+        TimeProvider time
+    )
     {
+        body ??= new ResetPasswordRequest();
+        var validation = await validator.ValidateAsync(body);
+        if (!validation.IsValid)
+            return Problems.ValidationFailed(AuthEndpoints.ToErrorMap(validation));
+
         var user = await users.FindByIdAsync(id);
         if (user is null)
             return Problems.UserNotFound(id);
 
-        var temp = TempPasswordGenerator.Generate();
+        var temp = string.IsNullOrEmpty(body.TemporaryPassword)
+            ? TempPasswordGenerator.Generate()
+            : body.TemporaryPassword;
+
         var now = time.GetUtcNow().UtcDateTime;
         var updated = user with
         {
@@ -106,12 +123,29 @@ public static class AdminUsersEndpoints
         Guid id,
         SetActiveRequest body,
         IUserStore users,
-        TimeProvider time
+        TimeProvider time,
+        HttpContext http
     )
     {
+        if (CookieAuthHelpers.GetUserId(http) == id)
+            return Problems.SelfActionNotAllowed(
+                "You cannot change your own active state. Ask another admin."
+            );
+
         var user = await users.FindByIdAsync(id);
         if (user is null)
             return Problems.UserNotFound(id);
+
+        // Last-admin guard: if we're about to deactivate the only active admin,
+        // refuse — otherwise nobody could ever sign in to fix it.
+        if (
+            !body.IsActive
+            && user.Role == Roles.Admin
+            && await users.CountByRoleAsync(Roles.Admin) <= 1
+        )
+            return Problems.LastAdmin(
+                "You can't deactivate the last remaining active admin. Promote another user first."
+            );
 
         var updated = user with
         {
@@ -119,6 +153,73 @@ public static class AdminUsersEndpoints
             UpdatedAt = time.GetUtcNow().UtcDateTime,
         };
         await users.SaveAsync(updated);
+        return TypedResults.Ok(new ApiResult<bool>(true));
+    }
+
+    private static async Task<Results<Ok<ApiResult<UserResult>>, ProblemHttpResult>> SetRole(
+        Guid id,
+        SetUserRoleRequest body,
+        IValidator<SetUserRoleRequest> validator,
+        IUserStore users,
+        TimeProvider time,
+        HttpContext http
+    )
+    {
+        var validation = await validator.ValidateAsync(body);
+        if (!validation.IsValid)
+            return Problems.ValidationFailed(AuthEndpoints.ToErrorMap(validation));
+
+        if (CookieAuthHelpers.GetUserId(http) == id)
+            return Problems.SelfActionNotAllowed(
+                "You cannot change your own role. Ask another admin to demote you if needed."
+            );
+
+        var user = await users.FindByIdAsync(id);
+        if (user is null)
+            return Problems.UserNotFound(id);
+
+        if (user.Role == body.Role)
+            return TypedResults.Ok(new ApiResult<UserResult>(AuthEndpoints.ToResult(user)));
+
+        // Last-admin guard: refuse demotion if this is the only active admin.
+        if (
+            user.Role == Roles.Admin
+            && body.Role != Roles.Admin
+            && await users.CountByRoleAsync(Roles.Admin) <= 1
+        )
+            return Problems.LastAdmin(
+                "You can't demote the last remaining active admin. Promote another user first."
+            );
+
+        var updated = user with { Role = body.Role, UpdatedAt = time.GetUtcNow().UtcDateTime };
+        await users.SaveAsync(updated);
+        return TypedResults.Ok(new ApiResult<UserResult>(AuthEndpoints.ToResult(updated)));
+    }
+
+    private static async Task<Results<Ok<ApiResult<bool>>, ProblemHttpResult>> DeleteUser(
+        Guid id,
+        IUserStore users,
+        HttpContext http
+    )
+    {
+        if (CookieAuthHelpers.GetUserId(http) == id)
+            return Problems.SelfActionNotAllowed(
+                "You cannot delete your own account. Ask another admin."
+            );
+
+        var user = await users.FindByIdAsync(id);
+        if (user is null)
+            return Problems.UserNotFound(id);
+
+        if (user.Role == Roles.Admin && await users.CountByRoleAsync(Roles.Admin) <= 1)
+            return Problems.LastAdmin(
+                "You can't delete the last remaining active admin. Promote another user first."
+            );
+
+        var deleted = await users.DeleteAsync(id);
+        if (!deleted)
+            return Problems.UserNotFound(id);
+
         return TypedResults.Ok(new ApiResult<bool>(true));
     }
 

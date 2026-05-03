@@ -13,5 +13,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Creuser.Auth.Abstractions\Creuser.Auth.Abstractions.csproj" />
     <ProjectReference Include="..\Creuser.Auth.Core\Creuser.Auth.Core.csproj" />
+    <ProjectReference Include="..\Creuser.Core\Creuser.Core.csproj" />
   </ItemGroup>
 </Project>

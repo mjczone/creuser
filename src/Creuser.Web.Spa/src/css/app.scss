@@ -1,1 +1,38 @@
 // app global css
+@use 'theme.scss';
+
+// Theme the native scrollbar so it doesn't read as a browser-chrome
+// element parked inside our surfaces. Drives every scrollable area: tables,
+// long forms, code blocks. Driven by the same theme tokens so it tracks
+// light/dark without any per-component overrides. Firefox uses
+// `scrollbar-color` (track + thumb pair); Chromium/WebKit needs the
+// pseudo-element rules.
+:root {
+  scrollbar-color: var(--cr-bg-elevated) var(--cr-bg-surface);
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--cr-bg-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--cr-bg-elevated);
+  border-radius: 6px;
+  // Border the thumb with the track color to inset it visually — a
+  // hairline gap between thumb and track that survives mode flips.
+  border: 2px solid var(--cr-bg-surface);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cr-border-strong);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--cr-bg-surface);
+}

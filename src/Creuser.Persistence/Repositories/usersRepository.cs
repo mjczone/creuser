@@ -67,6 +67,21 @@ public sealed class usersRepository : IUserStore
         );
     }
 
+    public async Task<int> CountByRoleAsync(
+        string role,
+        bool activeOnly = true,
+        CancellationToken ct = default
+    )
+    {
+        await using var conn = await _ds.OpenConnectionAsync(ct);
+        var sql = activeOnly
+            ? $"SELECT COUNT(*) FROM {SchemaTable} WHERE role = @role AND is_active = TRUE"
+            : $"SELECT COUNT(*) FROM {SchemaTable} WHERE role = @role";
+        return await conn.ExecuteScalarAsync<int>(
+            new CommandDefinition(sql, new { role }, cancellationToken: ct)
+        );
+    }
+
     public async Task<IReadOnlyList<User>> ListAsync(
         int skip,
         int take,
@@ -125,6 +140,19 @@ public sealed class usersRepository : IUserStore
                 cancellationToken: ct
             )
         );
+    }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var conn = await _ds.OpenConnectionAsync(ct);
+        var rows = await conn.ExecuteAsync(
+            new CommandDefinition(
+                $"DELETE FROM {SchemaTable} WHERE id = @id",
+                new { id },
+                cancellationToken: ct
+            )
+        );
+        return rows > 0;
     }
 
     private static User ToDomain(users r) =>

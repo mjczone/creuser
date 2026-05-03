@@ -5,3 +5,8 @@ declare namespace NodeJS {
     VUE_ROUTER_BASE: string | undefined;
   }
 }
+
+// Fontsource packages are CSS-only — they don't ship type declarations.
+// Vite handles the imports as side-effecting CSS modules; we just need
+// to satisfy TypeScript's module resolver.
+declare module '@fontsource-variable/*';

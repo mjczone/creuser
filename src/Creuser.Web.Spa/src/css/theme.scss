@@ -1,0 +1,145 @@
+// Creuser theme tokens.
+//
+// Two layers, both exposed as CSS variables so they can be overridden at
+// runtime by the branding store without rebuilding:
+//
+//   1. Quasar's brand palette — `--q-primary`, `--q-secondary`, etc.
+//      Set at build time from `quasar.variables.scss`. Override at runtime
+//      via Quasar's `setBrand()` helper (stores/branding.ts).
+//
+//   2. Creuser chrome tokens — `--cr-*`. Header, sidebar, surface, border,
+//      and text colors used by our own component styles. Override at runtime
+//      by setting CSS custom properties on `:root` (stores/branding.ts
+//      `applyTheme`).
+//
+// Component styles should consume these variables exclusively: no raw
+// hex literals in scoped SCSS, no references to the SCSS `$primary` etc.
+// from `quasar.variables.scss` (those are build-time, not runtime). If a
+// component needs a color we haven't tokenized, add it here first.
+
+:root {
+  // Body / surfaces — anchored on the brand's #143734 dark teal-forest.
+  // Each step is a small lightness lift so the chrome feels coherent
+  // rather than punchy: page < sidebar/header < surface < elevated.
+  --cr-bg-page: #0c2422;
+  --cr-bg-surface: #143734;
+  --cr-bg-header: #1a4441;
+  --cr-bg-sidebar: #1a4441;
+  --cr-bg-elevated: #225855;
+  --cr-bg-hover: rgba(255, 255, 255, 0.04);
+  --cr-bg-active: rgba(255, 255, 255, 0.08);
+
+  // Foreground / text — a touch brighter in dark mode than the typical
+  // 0.87 alpha; the dark teal background absorbs more contrast than a
+  // neutral black, so body copy needs to lift a little to stay legible.
+  --cr-fg-primary: rgba(255, 255, 255, 0.95);
+  --cr-fg-secondary: rgba(255, 255, 255, 0.72);
+  --cr-fg-tertiary: rgba(255, 255, 255, 0.5);
+  --cr-fg-on-brand: #ffffff;
+
+  // Borders
+  --cr-border-subtle: rgba(255, 255, 255, 0.08);
+  --cr-border-default: rgba(255, 255, 255, 0.14);
+  --cr-border-strong: rgba(255, 255, 255, 0.28);
+
+  // Component-specific border tokens. Both default to --cr-border-default so
+  // the chrome reads as a unified surface, but they're separate identifiers
+  // so admins can override one without touching the other (via Custom CSS:
+  // `:root { --cr-border-header: hotpink; }`).
+  --cr-border-header: var(--cr-border-default);
+  --cr-border-logo: var(--cr-border-default);
+
+  // Brand tints — soft fills used for active-nav-item bg and similar
+  // accents. Derived from $primary (#5c7e62) at low alpha so they read
+  // as a hint of the brand color rather than a flat block.
+  --cr-brand-tint-soft: rgba(92, 126, 98, 0.12);
+  --cr-brand-tint-medium: rgba(92, 126, 98, 0.22);
+
+  // Link colors — derived from --q-primary so they track palette overrides,
+  // but lightened in dark mode so brand colors like sage green don't
+  // disappear into dark surfaces. Reference contrast: raw sage on dark
+  // teal is ~2.6:1; the mixed version below is ~5:1 (passes WCAG AA).
+  --cr-link: color-mix(in srgb, var(--q-primary), white 35%);
+  --cr-link-hover: color-mix(in srgb, var(--q-primary), white 55%);
+
+  // Typography
+  --cr-font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue',
+    Arial, sans-serif;
+  --cr-font-family-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+
+  // Layout constants — exposed as variables so branding/density toggles
+  // can adjust them later
+  --cr-header-height: 40px;
+  --cr-icon-bar-width: 60px;
+  --cr-drawer-width: 200px;
+}
+
+// Wire the brand font into the document body so every Quasar component
+// that doesn't override its own font-family inherits the chosen typography.
+// Components that need monospace (Monaco editor, code blocks, terminals)
+// reference --cr-font-family-mono explicitly.
+//
+// Also drive body bg/color from the Creuser chrome tokens (not Quasar's
+// $dark-page / $dark) so palette presets that override --cr-bg-page actually
+// repaint the page background. Quasar's own dark-mode body class still
+// flips Quasar component styling; we just intercept the body surface.
+body {
+  font-family: var(--cr-font-family);
+  background: var(--cr-bg-page);
+  color: var(--cr-fg-primary);
+}
+
+// Make sure Quasar layout surfaces (page-container, page) inherit the body
+// background instead of falling back to Quasar's $dark-page.
+.q-layout,
+.q-page-container,
+.q-page {
+  background: var(--cr-bg-page);
+  color: var(--cr-fg-primary);
+}
+
+// Quasar's q-drawer ships its own light/dark-mode background (--q-dark in
+// dark mode, white-ish in light mode). Globally redirect those to the
+// Creuser chrome tokens so palette presets that change --cr-bg-sidebar
+// actually repaint the icon bar.
+.q-drawer {
+  background: var(--cr-bg-sidebar) !important;
+  color: var(--cr-fg-primary);
+}
+
+// Same story for the top toolbar / header area. The bordered variant's
+// border-bottom is also redirected so it aligns with the cr-logo-container's
+// border below it (both default to --cr-border-default).
+.q-header {
+  background: var(--cr-bg-header) !important;
+  color: var(--cr-fg-primary);
+}
+
+.q-header--bordered {
+  border-bottom: 1px solid var(--cr-border-header) !important;
+}
+
+.body--light {
+  --cr-bg-page: #fafafa;
+  --cr-bg-surface: #ffffff;
+  --cr-bg-header: #ffffff;
+  --cr-bg-sidebar: #f6f6f7;
+  --cr-bg-elevated: #ececee;
+  --cr-bg-hover: rgba(0, 0, 0, 0.04);
+  --cr-bg-active: rgba(0, 0, 0, 0.08);
+
+  --cr-fg-primary: rgba(0, 0, 0, 0.88);
+  --cr-fg-secondary: rgba(0, 0, 0, 0.55);
+  --cr-fg-tertiary: rgba(0, 0, 0, 0.30);
+
+  --cr-border-subtle: rgba(0, 0, 0, 0.06);
+  --cr-border-default: rgba(0, 0, 0, 0.12);
+  --cr-border-strong: rgba(0, 0, 0, 0.24);
+
+  // Light mode goes the other way — darken primary toward black so links
+  // pop against white surfaces.
+  --cr-link: color-mix(in srgb, var(--q-primary), black 25%);
+  --cr-link-hover: color-mix(in srgb, var(--q-primary), black 40%);
+}

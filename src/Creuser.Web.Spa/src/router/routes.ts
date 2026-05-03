@@ -1,7 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router';
 
-const placeholder = () => import('pages/PlaceholderPage.vue');
-
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -16,66 +14,54 @@ const routes: RouteRecordRaw[] = [
     children: [
       {
         path: '',
-        name: 'dashboard',
-        component: placeholder,
-        meta: { title: 'Dashboard', description: 'Operator overview and live run status.' },
-      },
-      {
-        path: 'workspaces',
-        name: 'workspaces',
-        component: placeholder,
+        name: 'home',
+        component: () => import('pages/HomePage.vue'),
         meta: {
-          title: 'Workspaces',
-          description: 'Configured repository connections (git, S3, local).',
+          title: 'Home',
+          description: 'Workspace picker — pick a workspace to enter.',
         },
-      },
-      {
-        path: 'workflows',
-        name: 'workflows',
-        component: placeholder,
-        meta: {
-          title: 'Workflows',
-          description: 'Workflow definitions — sagas with static and agentic steps.',
-        },
-      },
-      {
-        path: 'runs',
-        name: 'runs',
-        component: placeholder,
-        meta: { title: 'Runs', description: 'Workflow execution history with full audit trail.' },
-      },
-      {
-        path: 'scripts',
-        name: 'scripts',
-        component: placeholder,
-        meta: { title: 'Scripts', description: 'Job scripts library — frontmatter + body.' },
-      },
-      {
-        path: 'agents',
-        name: 'agents',
-        component: placeholder,
-        meta: {
-          title: 'Agents',
-          description: 'Agent traces, providers, and tool registries.',
-        },
-      },
-      {
-        path: 'plugins',
-        name: 'plugins',
-        component: placeholder,
-        meta: { title: 'Plugins', description: 'Installed plugins and their declared extensions.' },
       },
       {
         path: 'settings',
-        name: 'settings',
-        component: placeholder,
-        meta: { title: 'Settings', description: 'Branding, secrets, and platform configuration.' },
-      },
-      {
-        path: 'admin/users',
-        name: 'admin-users',
-        component: () => import('pages/admin/UsersPage.vue'),
-        meta: { title: 'Users', description: 'User accounts, sessions, and roles.' },
+        component: () => import('pages/settings/SettingsPage.vue'),
+        meta: {
+          title: 'Settings',
+          description: 'Branding, users, environment, and workspace configuration.',
+          requiresAdmin: true,
+        },
+        children: [
+          { path: '', redirect: '/settings/branding' },
+          {
+            path: 'branding',
+            name: 'settings-branding',
+            component: () => import('pages/settings/BrandingPage.vue'),
+            meta: { title: 'Branding', description: 'Logo, product name, color palette.' },
+          },
+          {
+            path: 'users',
+            name: 'settings-users',
+            component: () => import('pages/settings/UsersPage.vue'),
+            meta: { title: 'Users', description: 'User accounts, sessions, and roles.' },
+          },
+          {
+            path: 'environment',
+            name: 'settings-environment',
+            component: () => import('pages/settings/EnvironmentPage.vue'),
+            meta: {
+              title: 'Environment',
+              description: 'SMTP, AI provider keys, base URL.',
+            },
+          },
+          {
+            path: 'workspaces',
+            name: 'settings-workspaces',
+            component: () => import('pages/settings/WorkspacesPage.vue'),
+            meta: {
+              title: 'Workspaces',
+              description: 'Connected git and S3 sources.',
+            },
+          },
+        ],
       },
     ],
   },
