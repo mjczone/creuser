@@ -43,14 +43,17 @@ The architecture below describes both the v1 destination and the current state. 
 - **Execution model — full deterministic catalog**: `IStepRunner` contract + `JobExecutor` (in-process, synchronous); 8 registered runners (`llm-chat`, `shell`, `csharp`, `python`, `node`, `file-mutate`, `file-frontmatter`, `http`); multi-step DAGs with `DagValidator` (Kahn topological sort) + `StepBindingResolver` (`$step_id.field` / `$params.name` resolution); `IWorkspaceWorkingTree.ApplyAndCommitAsync` with one-commit-per-step structured commit messages; `JobRun.StartCommitSha` / `EndCommitSha`; sha256 hashes on every `FileChange`; `IToolCatalog` + chip-picker for `shell` allow-lists; `LlmCacheStore` keyed by sha256(provider + model + prompt + system + temperature + format); cancellation propagation from failed upstreams.
 - **Schedules + triggers**: `cr.schedules` with cron (NCrontab, UTC, 5- or 6-field) and sync-hook kinds; `SchedulerService` background tick (configurable interval); `IJobScheduleDispatcher` shared by tick / sync hook / manual fire; `JobRun.TriggerKind` records cron/sync/manual; SPA Schedules page under workspace settings.
 - **Agentic step type — `llm-tool-loop`**: bounded ReAct runner driven hand-rolled (not via `UseFunctionInvocation()`); per-turn token accounting, explicit `max_steps` / `max_tokens` / `max_duration_seconds` budgets, per-call audit recorded in `tool_log.json`, transcripts in `transcript.json`. `IToolLoopToolRegistry` is the extension seam (DI multi-binding); v1 ships `WorkspaceToolLoopRegistry` with read-only `read_file` / `list_directory` / `grep` / `find_files_by_pattern` / `git_log`. `IChatClientResolver.ResolveRawAsync` returns the no-middleware client the runner drives. Returns `FileChanges: []` — mutations land in downstream `file-mutate` / `file-frontmatter` steps consuming the loop's `final_text` / `final_json`.
+- **Plan-then-execute pattern (`llm-planner`)**: the third execution pattern is now live. `LlmPlannerStepRunner` makes a single LLM call against the registered step-type catalog (described in the system prompt), parses the response with a tolerant JSON extractor, validates the plan (unique step ids, no self-cycles, `depends_on` references resolve within the plan + the implicit `planner` upstream), and persists into `cr.job_plans`. The `JobExecutor` recognizes `type: llm-planner` on a single-step job and walks the plan as a continuation of the same run — planner step at position 0, plan steps at positions 1..N, all sharing one `JobRun.PlanId`. Shared `ExecuteStepsAsync` helper (extracted from the multi-step DAG path) accepts initial `stepOutputs` / `stepStatuses` so the planner's results pre-populate and the synthesized DAG re-walks cleanly. `GET /api/workspaces/{slug}/plans/` / `GET /api/workspaces/{slug}/plans/{planId}` surface the persisted plans for audit. The architecture's "Three execution patterns" section is fully realized in code: deterministic ✓ / agentic ✓ / plan-then-execute ✓.
 - **Workspace projection layer**: `Creuser.Projections` project + `cr.entities` / `cr.entity_refs` tables form a typed knowledge graph over the working tree. **Conventions** declared per-workspace in `.creuser/conventions/*.yaml` describe how directory patterns + frontmatter map to entity kinds, with slug derivation, metadata extraction, relationship resolution, and validation rules. `extends:` merges from a bundled `creuser:standard/*` library (markdown-doc, adr, rfc, skill, migration-sql, business-rule). Full-rebuild semantics on every successful workspace sync (fire-and-forget continuation) and via the explicit `projection-sync` step runner. Conflict resolution: priority desc → glob specificity desc → id asc. Refs that don't resolve persist with `to_entity_id = null` + raw target preserved — that's the gap-finding signal. **`ProjectionToolLoopRegistry`** composes alongside `WorkspaceToolLoopRegistry` to give agents `query_entities` / `get_entity` / `find_orphans` / `find_unresolved_refs` / `find_references` / `list_kinds` — graph queries instead of grep. JSONB metadata + GIN index in v1 keeps the storage forward-compatible with matrix views (see `docs/wip/projections-design.md` for the v0.2 direction). Endpoints: `GET /api/workspaces/{slug}/conventions/`, `GET /api/workspaces/{slug}/entities/`, `GET /api/workspaces/{slug}/entities/{kind}/{slug}`, `POST /api/workspaces/{slug}/projections/sync`.
 - SignalR notifications hub (`/hub/notifications`) with `Subscribe` / `Unsubscribe` / `Broadcast`; branding store subscribes to live updates.
 - Reusable SPA components: `StatusBanner`, `CollapsibleSection`, `SecretInput`, with mode-aware `--cr-link` tokens and themed scrollbars.
 
 **In flight (next up for v0.1.x):**
 
-- `llm-planner` + plan-then-execute pattern (item 10) — explicit planner emits a structured `JobPlan` against the registered step types; plan persisted; execution is durable saga.
-- Matrix views + KPI dashboards on top of the entity projection (item 13's natural sibling, design captured in `docs/wip/projections-design.md` "Forward-looking").
+- Marten + Wolverine — durable saga executor replacing the in-process `JobExecutor`. `IStepRunner` doesn't change; only the executor does.
+- Plugin loader (stage 3 of capabilities) — `/data/plugins/*.dll` discovery, per-workspace enablement, plugins contribute step runners + capability providers + tool registries.
+- Matrix views + KPI APIs (post-v0.1) — declarative slicings of the entity projection, bring-your-own charting via workspace `<head>` script registration. Lands before the dashboard composer because the data layer composes with anything; the composer host gets meaningfully more compelling once analytical widgets exist. Design captured in this doc's "Matrix views and KPI dashboards" section + `docs/wip/projections-design.md` "Forward-looking".
+- Dashboard composer — `dockview-vue` widget host, Monaco-based job editor. Hosts matrix-view widgets and workspace-authored JS widgets registered against the head-script-loaded libs.
 
 **Deferred (post-v0.1):**
 
@@ -562,7 +565,7 @@ Initial set, with implementation order. Every entry is a registered `IStepRunner
 | `code-edit` | Deterministic | AST-aware edits via tree-sitter or `ast-grep`. Surgical refactors that preserve formatting. | Later |
 | `llm-tool-loop` | Agentic | Bounded ReAct loop driven hand-rolled (not via `UseFunctionInvocation()`) so per-turn token accounting, `max_steps` / `max_tokens` / `max_duration_seconds` budgets, and per-call audit recording are all explicit. Tools come from the composed `IToolLoopToolRegistry` registrations in DI; v1 ships `WorkspaceToolLoopRegistry` (read-only file tools) + `ProjectionToolLoopRegistry` (entity-graph queries). The frontmatter declares a per-step `tools:` allow-list validated against the union of registries. Returns `FileChanges: []` — file mutations land in downstream `file-mutate` / `file-frontmatter` steps that consume the loop's `final_text` / `final_json` outputs. Termination reason persisted on the step so operators can distinguish `model_done` from budget breaches. Transcript + tool log saved as sidecar artifacts. | **Shipped** |
 | `projection-sync` | Deterministic | Re-scans the working tree, applies the workspace's conventions from `.creuser/conventions/*.yaml`, and rebuilds the `cr.entities` + `cr.entity_refs` projection in a single transaction. Returns `FileChanges: []` (read-only against the tree). Outputs a `ProjectionReport` with entities-by-kind, refs resolved/unresolved, schema failures, convention conflicts, and per-convention content-hashes for downstream cache invalidation. Also fires automatically as a fire-and-forget continuation of `WorkspacesEndpoints.Sync` so every successful pull re-projects without an operator action. | **Shipped** |
-| `llm-planner` | LLM | Emits a structured `JobPlan` against the registered step types. Plan is persisted and immutable. | Later |
+| `llm-planner` | LLM | Single LLM call that emits a structured `JobPlan` against the registered step type catalog, persisted in `cr.job_plans`. When a single-step job declares `type: llm-planner`, the executor walks the plan as a continuation of the same run — the planner step lands at position 0, plan steps follow at positions 1..N, all sharing one `JobRun.PlanId`. Plan steps reference the implicit `planner` upstream via `$planner.reasoning` / `$planner.plan_step_ids` bindings. The runner emits but does NOT auto-execute; that's the executor's job, which keeps the runner contract uniform and lets multi-step DAG authors use the planner as a regular step whose outputs feed downstream steps without auto-execution. | **Shipped** |
 | `wait` | Deterministic | Pause until time-of-day, until a webhook, or until a human approves. Uses the `Paused` + `ResumeToken` mechanism. | Later |
 
 Each runner declares both an **input schema** (what its `parameters` look like) and an **output schema** (what downstream steps can reference). The job script's frontmatter binds upstream outputs to downstream inputs via `$step_id.output_name` references.
@@ -976,6 +979,47 @@ When the user has zero accessible workspaces:
 ```
 
 Platform admins land on the workspaces registry (`/settings/workspaces`) when they sign in with no recent workspace; non-admin users with zero accessible workspaces see the no-access landing.
+
+## Matrix views and KPI dashboards (post-v0.1)
+
+The next leverage point above the projection layer is **declarative matrix views** — 2D / 3D slicings of the entity graph that surface coverage, gaps, and flow. These are post-v0.1 work; the v1 storage (`cr.entities` + `cr.entity_refs` with JSONB metadata + GIN index) is already forward-compatible and explicitly designed to host them without schema changes. Detailed design lives in `docs/wip/projections-design.md` "Forward-looking" — this section captures the architectural framing for the doc-reading audience.
+
+### The motivating cases
+
+Real Creuser-managed monorepos accumulate hundreds of ADRs, hundreds of RFCs, and tens of thousands of business rules across domains. The operator's actual question is rarely "what's in this file?" — it's "which knowledge areas have a refund rule?" or "which domains lack an owner?" or "which ADRs are referenced by something live?" Those resolve to one SQL filter once the projection is in place. Bigger picture: PMBOK ITTL is the canonical 2D × 3-row matrix (10 Knowledge Areas × 5 Process Groups × 3 ITTL rows where Inputs of one cell are entity-refs to Outputs of another). Quality-management literature distinguishes L / T / Y / X / C-shaped matrices; each maps cleanly to a slicing of the same `cr.entities` + `cr.entity_refs` storage.
+
+### Declarative matrix views
+
+A **matrix view** is a YAML file (e.g. `.creuser/matrices/pmbok-ittl.yaml`) declaring:
+
+- **Dimensions** — rows / columns / optional layers, each a query over entities or an enum of values.
+- **Cells** — the SQL or JMESPath filter that resolves what's at each (row, column, [layer]) intersection.
+- **KPIs** — named scalars or trends derived from the matrix or directly from `cr.entities` (coverage %, density, drift, unowned %, orphan count, unresolved-ref count).
+
+The `GET /api/workspaces/{slug}/matrices/{id}` endpoint resolves these into JSON shaped for charting. KPIs declared in the matrix YAML auto-surface as widgets on dashboards. The unifying primitive: a dimension axis is a query producing a list of values, a cell is an aggregation at the intersection — everything else is presentation.
+
+### Bring-your-own visualization
+
+Creuser core ships **no charting library bundled**. Instead:
+
+- Workspace-level settings let owners register `<head>` scripts (CDN URLs) that get injected into the SPA's `index.html` for that workspace's dashboards. amcharts, highcharts, chart.js, plotly, d3, vega — whatever the owner is licensed for. License keys are stored as `cr.workspace_assets` rows alongside the script registration; never returned over the wire.
+- Owners author **dashboard widgets in JavaScript** that get called with `{ workspace, matrixData, dom }` and are responsible for rendering. The widget is registered like any other widget in the dashboard composer (see below) but its body is workspace-authored JS rather than a Vue SFC.
+- Free libs work the same way; paid libs that watermark the free tier (amcharts, highcharts) keep their logo — that's the licensing trade. MJCZone-built client dashboards can leverage paid libs without bundling them in the OSS distribution; the operator brings their own license.
+
+### Knowledge-graph framing
+
+Once `cr.entities` + `cr.entity_refs` exists, the workspace IS a typed knowledge graph: nodes = entities (typed by `kind`), edges = refs (typed by `relationship`), properties = `metadata` JSONB (schema-validated per convention), provenance = `(convention_id, content_hash, last_seen_at)` per row. Graph queries (path-finding, betweenness, subgraph extraction) are post-v0.2 work — already-indexed, no new storage. Export to RDF / Cypher / GraphQL is a thin adapter on these tables when a downstream consumer asks for it.
+
+### Scale considerations
+
+- **Pagination** on `query_entities` and the matrix-query endpoint — default cap 50, max 500 per page.
+- **GIN index on `metadata`** is critical: `WHERE metadata->>'key' = X` is the common case and needs to be O(log n). Already in v1.
+- **Materialized cell-cache** for matrices over 10k+ entities, keyed by `sha256(matrix_yaml + projection_versions)` (where `projection_versions` is the per-convention content-hash map already produced by `ProjectionReport`). Same cache mechanism the `LlmCacheStore` already uses.
+- **Per-kind partitioning** if a single workspace's `business_rule` count crosses 100k. Postgres handles this transparently.
+
+### Why this lands before the dashboard composer
+
+Matrix views are the **data layer**; the dashboard composer is the **host**. The data composes with anything (a simple HTML grid, a CDN-loaded chart lib, an external Grafana, a bespoke client UI), so it lands first and pays for itself on its own — the existing pages (Workspace Home, Operations dashboards) gain matrix-view tiles immediately. The composer becomes meaningfully more compelling once analytical widgets exist; "drag in a matrix-view widget" is a richer demo than "drag in a log-tail widget." Implementation order in the timeline reflects this: matrix views ship first, composer ships second.
 
 ## Dashboard composer
 

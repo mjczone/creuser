@@ -343,6 +343,19 @@ export const ApiResultOfIReadOnlyListOfJobScriptResultSchema = {
   },
 } as const;
 
+export const ApiResultOfIReadOnlyListOfPlanSummarySchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      type: ['null', 'array'],
+      items: {
+        $ref: '#/components/schemas/PlanSummary',
+      },
+    },
+  },
+} as const;
+
 export const ApiResultOfIReadOnlyListOfScheduleResultSchema = {
   required: ['result'],
   type: 'object',
@@ -470,6 +483,23 @@ export const ApiResultOfPingResponseSchema = {
         },
         {
           $ref: '#/components/schemas/PingResponse',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfPlanDetailSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/PlanDetail',
         },
       ],
     },
@@ -1269,6 +1299,10 @@ export const JobRunResultSchema = {
     endCommitSha: {
       type: ['null', 'string'],
     },
+    planId: {
+      type: ['null', 'string'],
+      format: 'uuid',
+    },
   },
 } as const;
 
@@ -1489,6 +1523,116 @@ export const PingResponseSchema = {
       type: 'string',
     },
     serverTime: {
+      type: 'string',
+      format: 'date-time',
+    },
+  },
+} as const;
+
+export const PlanDetailSchema = {
+  required: [
+    'id',
+    'workspaceId',
+    'jobScriptId',
+    'goal',
+    'stepsJson',
+    'reasoning',
+    'model',
+    'provider',
+    'tokensUsed',
+    'createdAt',
+  ],
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      format: 'uuid',
+    },
+    workspaceId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    jobScriptId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    goal: {
+      type: 'string',
+    },
+    stepsJson: {
+      type: 'string',
+    },
+    reasoning: {
+      type: ['null', 'string'],
+    },
+    model: {
+      type: 'string',
+    },
+    provider: {
+      type: 'string',
+    },
+    tokensUsed: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['null', 'integer', 'string'],
+      format: 'int64',
+    },
+    createdAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+  },
+} as const;
+
+export const PlanSummarySchema = {
+  required: [
+    'id',
+    'workspaceId',
+    'jobScriptId',
+    'goal',
+    'stepCount',
+    'reasoning',
+    'model',
+    'provider',
+    'tokensUsed',
+    'createdAt',
+  ],
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      format: 'uuid',
+    },
+    workspaceId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    jobScriptId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    goal: {
+      type: 'string',
+    },
+    stepCount: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    reasoning: {
+      type: ['null', 'string'],
+    },
+    model: {
+      type: 'string',
+    },
+    provider: {
+      type: 'string',
+    },
+    tokensUsed: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['null', 'integer', 'string'],
+      format: 'int64',
+    },
+    createdAt: {
       type: 'string',
       format: 'date-time',
     },

@@ -322,7 +322,8 @@ public static class JobsEndpoints
             TotalCostUsd: r.TotalCostUsd,
             FailureMessage: r.FailureMessage,
             StartCommitSha: r.StartCommitSha,
-            EndCommitSha: r.EndCommitSha
+            EndCommitSha: r.EndCommitSha,
+            PlanId: r.PlanId
         );
 
     private static JobRunStepResult ToStepResult(JobRunStep s) =>

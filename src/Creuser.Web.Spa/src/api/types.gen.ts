@@ -98,6 +98,10 @@ export type ApiResultOfIReadOnlyListOfJobScriptResult = {
   result: null | Array<JobScriptResult>;
 };
 
+export type ApiResultOfIReadOnlyListOfPlanSummary = {
+  result: null | Array<PlanSummary>;
+};
+
 export type ApiResultOfIReadOnlyListOfScheduleResult = {
   result: null | Array<ScheduleResult>;
 };
@@ -132,6 +136,10 @@ export type ApiResultOfJobScriptResult = {
 
 export type ApiResultOfPingResponse = {
   result: null | PingResponse;
+};
+
+export type ApiResultOfPlanDetail = {
+  result: null | PlanDetail;
 };
 
 export type ApiResultOfScheduleResult = {
@@ -372,6 +380,7 @@ export type JobRunResult = {
   failureMessage: null | string;
   startCommitSha: null | string;
   endCommitSha: null | string;
+  planId?: null | string;
 };
 
 export type JobRunStepResult = {
@@ -435,6 +444,32 @@ export type OpenAiConfig = {
 export type PingResponse = {
   message: string;
   serverTime: string;
+};
+
+export type PlanDetail = {
+  id: string;
+  workspaceId: string;
+  jobScriptId: string;
+  goal: string;
+  stepsJson: string;
+  reasoning: null | string;
+  model: string;
+  provider: string;
+  tokensUsed: null | number | string;
+  createdAt: string;
+};
+
+export type PlanSummary = {
+  id: string;
+  workspaceId: string;
+  jobScriptId: string;
+  goal: string;
+  stepCount: number | string;
+  reasoning: null | string;
+  model: string;
+  provider: string;
+  tokensUsed: null | number | string;
+  createdAt: string;
 };
 
 export type ProjectionReport = {
@@ -1449,6 +1484,46 @@ export type SyncProjectionResponses = {
 };
 
 export type SyncProjectionResponse = SyncProjectionResponses[keyof SyncProjectionResponses];
+
+export type ListPlansData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: {
+    skip?: number | string;
+    take?: number | string;
+  };
+  url: '/api/workspaces/{slug}/plans';
+};
+
+export type ListPlansResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfPlanSummary;
+};
+
+export type ListPlansResponse = ListPlansResponses[keyof ListPlansResponses];
+
+export type GetPlanData = {
+  body?: never;
+  path: {
+    slug: string;
+    planId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/plans/{planId}';
+};
+
+export type GetPlanResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfPlanDetail;
+};
+
+export type GetPlanResponse = GetPlanResponses[keyof GetPlanResponses];
 
 export type PingData = {
   body?: never;

@@ -96,6 +96,7 @@ builder.Services.AddScoped<IChatClientResolver>(sp => sp.GetRequiredService<Agen
 builder.Services.AddScoped<IJobScriptStore, jobScriptsRepository>();
 builder.Services.AddScoped<IJobRunStore, jobRunsRepository>();
 builder.Services.AddScoped<ILlmCacheStore, llmCacheRepository>();
+builder.Services.AddScoped<IJobPlanStore, jobPlansRepository>();
 builder.Services.AddKeyedScoped<IStepRunner, LlmChatStepRunner>("llm-chat");
 builder.Services.AddKeyedScoped<IStepRunner, ShellStepRunner>("shell");
 builder.Services.AddKeyedScoped<IStepRunner, CSharpStepRunner>("csharp");
@@ -106,6 +107,7 @@ builder.Services.AddKeyedScoped<IStepRunner, FileFrontmatterStepRunner>("file-fr
 builder.Services.AddKeyedScoped<IStepRunner, HttpStepRunner>("http");
 builder.Services.AddKeyedScoped<IStepRunner, LlmToolLoopStepRunner>("llm-tool-loop");
 builder.Services.AddKeyedScoped<IStepRunner, ProjectionSyncStepRunner>("projection-sync");
+builder.Services.AddKeyedScoped<IStepRunner, LlmPlannerStepRunner>("llm-planner");
 
 // Tool registries contributed to the agentic llm-tool-loop runner.
 // Multi-binding — every IToolLoopToolRegistry the runner finds in DI gets
@@ -290,6 +292,7 @@ app.MapJobsEndpoints();
 app.MapToolsEndpoints();
 app.MapSchedulesEndpoints();
 app.MapProjectionsEndpoints();
+app.MapPlansEndpoints();
 app.MapPingEndpoints();
 app.MapEchoEndpoints();
 app.MapHub<NotificationsHub>("/hub/notifications");

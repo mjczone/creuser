@@ -27,7 +27,9 @@ public sealed record JobRunResult(
     decimal? TotalCostUsd,
     string? FailureMessage,
     string? StartCommitSha,
-    string? EndCommitSha
+    string? EndCommitSha,
+    /// <summary>For plan-then-execute runs: the persisted JobPlan id. Null for ordinary runs.</summary>
+    Guid? PlanId = null
 );
 
 public sealed record JobRunDetailResult(JobRunResult Run, IReadOnlyList<JobRunStepResult> Steps);

@@ -81,6 +81,10 @@ public sealed class DbInitializer : IHostedService
                 tx: null,
                 cancellationToken: cancellationToken
             );
+            await conn.CreateTableIfNotExistsAsync<job_plans>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
             await conn.CreateTableIfNotExistsAsync<entities>(
                 tx: null,
                 cancellationToken: cancellationToken

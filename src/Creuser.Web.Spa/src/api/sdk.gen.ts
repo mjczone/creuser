@@ -46,6 +46,8 @@ import type {
   GetEnvironmentResponses,
   GetJobData,
   GetJobResponses,
+  GetPlanData,
+  GetPlanResponses,
   GetRunData,
   GetRunResponses,
   GetWorkspaceData,
@@ -58,6 +60,8 @@ import type {
   ListJobRunsResponses,
   ListJobsData,
   ListJobsResponses,
+  ListPlansData,
+  ListPlansResponses,
   ListSchedulesData,
   ListSchedulesResponses,
   ListToolsData,
@@ -644,6 +648,26 @@ export class Projections {
   ) {
     return (options.client ?? client).post<SyncProjectionResponses, unknown, ThrowOnError>({
       url: '/api/workspaces/{slug}/projections/sync',
+      ...options,
+    });
+  }
+}
+
+export class Plans {
+  public static listPlans<ThrowOnError extends boolean = false>(
+    options: Options<ListPlansData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListPlansResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/plans',
+      ...options,
+    });
+  }
+
+  public static getPlan<ThrowOnError extends boolean = false>(
+    options: Options<GetPlanData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<GetPlanResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/plans/{planId}',
       ...options,
     });
   }

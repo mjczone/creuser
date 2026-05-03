@@ -37,6 +37,7 @@ public sealed class JobExecutor
     private readonly IJobRunStore _runs;
     private readonly IWorkspaceStore _workspaces;
     private readonly IWorkspaceWorkingTree _workingTree;
+    private readonly IJobPlanStore _plans;
     private readonly IServiceProvider _services;
     private readonly TimeProvider _time;
     private readonly ILogger<JobExecutor> _logger;
@@ -46,6 +47,7 @@ public sealed class JobExecutor
         IJobRunStore runs,
         IWorkspaceStore workspaces,
         IWorkspaceWorkingTree workingTree,
+        IJobPlanStore plans,
         IServiceProvider services,
         TimeProvider time,
         ILogger<JobExecutor> logger
@@ -55,6 +57,7 @@ public sealed class JobExecutor
         _runs = runs;
         _workspaces = workspaces;
         _workingTree = workingTree;
+        _plans = plans;
         _services = services;
         _time = time;
         _logger = logger;
@@ -129,10 +132,31 @@ public sealed class JobExecutor
 
             var normalizedParams = InputsNormalizer.NormalizeRoot(parameters);
 
-            // Multi-step branch: frontmatter declares a `steps:` array.
-            // Single-step branch: legacy shape — top-level type + body.
+            // Three branches:
+            // 1. Plan-then-execute — top-level `type: llm-planner` with no
+            //    declared `steps:`. The planner step runs first, persists a
+            //    JobPlan, then the executor walks the plan.
+            // 2. Multi-step DAG — frontmatter declares a `steps:` array.
+            // 3. Single-step — legacy shape (top-level type + body).
             RunOutcome outcome;
-            if (frontmatter.Steps.Count > 0)
+            Guid? planId = null;
+            if (
+                frontmatter.Steps.Count == 0
+                && string.Equals(frontmatter.Type, "llm-planner", StringComparison.Ordinal)
+            )
+            {
+                (outcome, planId) = await ExecuteLlmPlannerAsync(
+                    script,
+                    runId,
+                    frontmatter,
+                    workspace,
+                    workingTreePath,
+                    normalizedParams,
+                    parameters,
+                    ct
+                );
+            }
+            else if (frontmatter.Steps.Count > 0)
             {
                 outcome = await ExecuteMultiStepAsync(
                     script,
@@ -179,6 +203,7 @@ public sealed class JobExecutor
                 CompletedAt = _time.GetUtcNow().UtcDateTime,
                 StartCommitSha = startSha,
                 EndCommitSha = endSha,
+                PlanId = planId,
                 FailureMessage = outcome.FailureMessage,
                 TotalTokensUsed = outcome.TotalTokensUsed,
                 TotalCostUsd = outcome.TotalCostUsd,
@@ -231,7 +256,7 @@ public sealed class JobExecutor
     /// produced commit SHA so the run-level <c>EndCommitSha</c> matches
     /// the final mutation.
     /// </summary>
-    private async Task<RunOutcome> ExecuteMultiStepAsync(
+    private Task<RunOutcome> ExecuteMultiStepAsync(
         JobScript script,
         Guid runId,
         JobScriptFrontmatter frontmatter,
@@ -239,40 +264,81 @@ public sealed class JobExecutor
         string workingTreePath,
         IReadOnlyDictionary<string, object?> parameters,
         CancellationToken ct
+    ) =>
+        ExecuteStepsAsync(
+            script,
+            runId,
+            frontmatter,
+            frontmatter.Steps,
+            startPosition: 0,
+            initialOutputs: new Dictionary<string, IReadOnlyDictionary<string, object?>>(
+                StringComparer.Ordinal
+            ),
+            initialStatuses: new Dictionary<string, StepStatus>(StringComparer.Ordinal),
+            initialTotalTokens: null,
+            initialTotalCost: null,
+            workspace,
+            workingTreePath,
+            parameters,
+            ct
+        );
+
+    /// <summary>
+    /// Walk a DAG of step declarations. Shared between the multi-step
+    /// frontmatter path and the plan-then-execute path. <paramref name="startPosition"/>
+    /// + <paramref name="initialOutputs"/> + <paramref name="initialStatuses"/>
+    /// let the planner path inject its already-completed planner step at
+    /// position 0 so subsequent plan steps can reference <c>$planner.field</c>
+    /// bindings without re-running the planner.
+    /// </summary>
+    private async Task<RunOutcome> ExecuteStepsAsync(
+        JobScript script,
+        Guid runId,
+        JobScriptFrontmatter frontmatter,
+        IReadOnlyList<JobScriptStepDecl> steps,
+        int startPosition,
+        Dictionary<string, IReadOnlyDictionary<string, object?>> initialOutputs,
+        Dictionary<string, StepStatus> initialStatuses,
+        long? initialTotalTokens,
+        decimal? initialTotalCost,
+        Workspace workspace,
+        string workingTreePath,
+        IReadOnlyDictionary<string, object?> parameters,
+        CancellationToken ct
     )
     {
-        var validation = DagValidator.Validate(frontmatter.Steps);
+        var validation = DagValidator.Validate(steps);
         if (validation.Error is not null)
         {
-            // Persist a synthetic failed step so the audit timeline carries
-            // the validation error rather than burying it on the JobRun.
             await PersistDagValidationFailureAsync(script, runId, validation.Error, ct);
             return new RunOutcome(
                 Status: JobRunStatus.Failed,
                 LastCommitSha: null,
                 FailureMessage: validation.Error,
-                TotalTokensUsed: null,
-                TotalCostUsd: null
+                TotalTokensUsed: initialTotalTokens,
+                TotalCostUsd: initialTotalCost
             );
         }
 
-        var stepOutputs = new Dictionary<string, IReadOnlyDictionary<string, object?>>(
-            StringComparer.Ordinal
-        );
-        var stepStatuses = new Dictionary<string, StepStatus>(StringComparer.Ordinal);
-        long? totalTokens = null;
-        decimal? totalCost = null;
+        var stepOutputs = initialOutputs;
+        var stepStatuses = initialStatuses;
+        var totalTokens = initialTotalTokens;
+        var totalCost = initialTotalCost;
         string? lastCommitSha = null;
         var anyFailed = false;
         string? firstFailureMessage = null;
 
-        for (var position = 0; position < validation.Sorted.Count; position++)
+        for (var i = 0; i < validation.Sorted.Count; i++)
         {
-            var stepDecl = validation.Sorted[position];
+            var stepDecl = validation.Sorted[i];
+            // Skip steps already marked complete by initial state — supports
+            // the planner path where the planner step itself is at the head
+            // of the validated DAG but already ran.
+            if (stepStatuses.ContainsKey(stepDecl.Id))
+                continue;
 
-            // Cancellation propagation: if any upstream this step depends
-            // on (transitively, via the topological walk) failed or was
-            // cancelled, this step never runs.
+            var position = startPosition + i;
+
             var blockedBy = stepDecl.DependsOn.FirstOrDefault(id =>
                 stepStatuses.GetValueOrDefault(id) is StepStatus.Failed or StepStatus.Cancelled
             );
@@ -283,8 +349,6 @@ public sealed class JobExecutor
                 continue;
             }
 
-            // Resolve bindings before normalizing — the binding resolver
-            // expects the canonical shape.
             IReadOnlyDictionary<string, object?> resolvedInputs;
             try
             {
@@ -344,6 +408,187 @@ public sealed class JobExecutor
             TotalTokensUsed: totalTokens,
             TotalCostUsd: totalCost
         );
+    }
+
+    /// <summary>
+    /// Plan-then-execute path. Runs the planner step, fetches the plan it
+    /// produced, then walks the plan's steps as a continuation of the
+    /// same run. The planner step appears at position 0 in the audit
+    /// timeline; plan steps follow at positions 1..N.
+    /// </summary>
+    private async Task<(RunOutcome Outcome, Guid? PlanId)> ExecuteLlmPlannerAsync(
+        JobScript script,
+        Guid runId,
+        JobScriptFrontmatter frontmatter,
+        Workspace workspace,
+        string workingTreePath,
+        IReadOnlyDictionary<string, object?> normalizedParams,
+        IReadOnlyDictionary<string, object?> rawParams,
+        CancellationToken ct
+    )
+    {
+        // Run the planner step using the standard single-step input
+        // resolution path so body→goal substitution + frontmatter `inputs:`
+        // merge work the same way they do for `llm-chat`.
+        var plannerInputs = BuildStepInputs(frontmatter, script.Body, rawParams);
+        const string PlannerStepId = "planner";
+        var (plannerResult, plannerCommit) = await ExecuteOneStepAsync(
+            script,
+            runId,
+            position: 0,
+            stepId: Guid.NewGuid(),
+            stepName: PlannerStepId,
+            stepType: "llm-planner",
+            declaredAllowedCommands: frontmatter.AllowedCommands,
+            declaredRequiredSecrets: frontmatter.RequiredSecrets,
+            budgets: BuildBudgets(frontmatter),
+            workspace: workspace,
+            workingTreePath: workingTreePath,
+            inputs: plannerInputs,
+            ct: ct
+        );
+
+        if (plannerResult.Status != StepStatus.Succeeded)
+        {
+            return (
+                new RunOutcome(
+                    Status: MapToRunStatus(plannerResult.Status),
+                    LastCommitSha: plannerCommit,
+                    FailureMessage: plannerResult.ErrorMessage,
+                    TotalTokensUsed: plannerResult.TokensUsed,
+                    TotalCostUsd: plannerResult.CostUsd
+                ),
+                null
+            );
+        }
+
+        if (
+            !plannerResult.Outputs.TryGetValue("plan_id", out var planIdRaw)
+            || planIdRaw is not Guid planId
+        )
+        {
+            return (
+                new RunOutcome(
+                    Status: JobRunStatus.Failed,
+                    LastCommitSha: plannerCommit,
+                    FailureMessage: "Planner step succeeded but did not return a `plan_id` output.",
+                    TotalTokensUsed: plannerResult.TokensUsed,
+                    TotalCostUsd: plannerResult.CostUsd
+                ),
+                null
+            );
+        }
+
+        var plan = await _plans.FindByIdAsync(planId, ct);
+        if (plan is null)
+        {
+            return (
+                new RunOutcome(
+                    Status: JobRunStatus.Failed,
+                    LastCommitSha: plannerCommit,
+                    FailureMessage: $"Planner step persisted plan {planId} but it could not be loaded for execution.",
+                    TotalTokensUsed: plannerResult.TokensUsed,
+                    TotalCostUsd: plannerResult.CostUsd
+                ),
+                null
+            );
+        }
+
+        // Stamp the actual job script id on the plan now that we know it.
+        // The planner runner persisted Guid.Empty because it doesn't have
+        // the script id available — backfill so future "list plans by
+        // script" queries work.
+        if (plan.JobScriptId == Guid.Empty)
+            await _plans.SaveAsync(plan with { JobScriptId = script.Id }, ct);
+
+        IReadOnlyList<JobPlanStep> planSteps;
+        try
+        {
+            planSteps =
+                JsonSerializer.Deserialize<List<JobPlanStep>>(plan.StepsJson)
+                ?? new List<JobPlanStep>();
+        }
+        catch (Exception ex)
+        {
+            return (
+                new RunOutcome(
+                    Status: JobRunStatus.Failed,
+                    LastCommitSha: plannerCommit,
+                    FailureMessage: $"Failed to deserialize plan {planId} steps: {ex.Message}",
+                    TotalTokensUsed: plannerResult.TokensUsed,
+                    TotalCostUsd: plannerResult.CostUsd
+                ),
+                planId
+            );
+        }
+
+        // Synthesize a list of step decls including the planner at the head
+        // (so cross-references via $planner.field bind correctly) plus the
+        // plan's own steps. Plan steps that don't declare a depends_on
+        // become dependent on the planner implicitly so they don't sort
+        // ahead of it.
+        var synthesizedSteps = new List<JobScriptStepDecl>(planSteps.Count + 1)
+        {
+            new()
+            {
+                Id = PlannerStepId,
+                Name = PlannerStepId,
+                Type = "llm-planner",
+                DependsOn = new List<string>(),
+                Inputs = new Dictionary<string, object?>(),
+            },
+        };
+        foreach (var ps in planSteps)
+        {
+            var deps = ps.DependsOn.ToList();
+            if (deps.Count == 0)
+                deps.Add(PlannerStepId);
+            synthesizedSteps.Add(
+                new JobScriptStepDecl
+                {
+                    Id = ps.Id,
+                    Name = ps.Name,
+                    Type = ps.Type,
+                    DependsOn = deps,
+                    Inputs = ps.Inputs.ToDictionary(kv => kv.Key, kv => kv.Value),
+                }
+            );
+        }
+
+        var initialOutputs = new Dictionary<string, IReadOnlyDictionary<string, object?>>(
+            StringComparer.Ordinal
+        )
+        {
+            [PlannerStepId] = plannerResult.Outputs,
+        };
+        var initialStatuses = new Dictionary<string, StepStatus>(StringComparer.Ordinal)
+        {
+            [PlannerStepId] = StepStatus.Succeeded,
+        };
+
+        var outcome = await ExecuteStepsAsync(
+            script,
+            runId,
+            frontmatter,
+            synthesizedSteps,
+            startPosition: 0,
+            initialOutputs: initialOutputs,
+            initialStatuses: initialStatuses,
+            initialTotalTokens: plannerResult.TokensUsed,
+            initialTotalCost: plannerResult.CostUsd,
+            workspace,
+            workingTreePath,
+            normalizedParams,
+            ct
+        );
+
+        // The planner step already produced a commit sha (probably null —
+        // planner is read-only) and we want the LAST plan-step's commit
+        // to be the run-level EndCommitSha.
+        if (outcome.LastCommitSha is null && plannerCommit is not null)
+            outcome = outcome with { LastCommitSha = plannerCommit };
+
+        return (outcome, planId);
     }
 
     /// <summary>
@@ -714,6 +959,8 @@ public sealed class JobExecutor
         if (frontmatter.Type == "llm-chat" && !merged.ContainsKey("prompt"))
             merged["prompt"] = body;
         if (frontmatter.Type == "llm-tool-loop" && !merged.ContainsKey("goal"))
+            merged["goal"] = body;
+        if (frontmatter.Type == "llm-planner" && !merged.ContainsKey("goal"))
             merged["goal"] = body;
         if (frontmatter.Type == "shell" && !merged.ContainsKey("script"))
             merged["script"] = body;
