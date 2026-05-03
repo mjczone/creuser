@@ -73,7 +73,7 @@ public sealed record GitWorkspaceSettings(
     string AuthMode = GitAuthMode.None,
     /// <summary>Filename under <c>/data/secrets/</c> holding the PAT (https-pat) or OpenSSH-format private key (ssh-key). Ignored when <see cref="AuthMode"/> is <see cref="GitAuthMode.None"/>.</summary>
     string? AuthSecret = null,
-    /// <summary>Branch the platform commits to. Architecture default is <c>creuser/main</c>; consumer apps can override (COMPAS uses <c>compas/development</c>).</summary>
+    /// <summary>Branch the platform commits to. Architecture default is <c>creuser/main</c>; consumer apps can override.</summary>
     string WorkingBranch = "creuser/main",
     /// <summary>Branch the working branch is rebased / pulled from when admins want fresh source content.</summary>
     string SourceBranch = "main",

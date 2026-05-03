@@ -9,7 +9,7 @@ import { Workspaces, type WorkspaceResult } from 'src/api';
  * and this store just caches the loaded workspace records keyed by slug so
  * route entries don't re-fetch.
  *
- * Two browser tabs at /w/compas/... and /w/acme/... each see their own
+ * Two browser tabs at /w/acme/... and /w/widgets/... each see their own
  * workspace because each tab reads the slug from its own route. The cache
  * is shared across tabs (it's just a normal Pinia store), but lookup is
  * always slug-keyed so there's nothing to fight over.

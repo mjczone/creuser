@@ -32,13 +32,13 @@ The size difference is mostly the polyglot language runtimes (~1 GB combined) pl
 
 **You're deploying to a managed platform (Railway, Render, Fly.io, AWS App Runner) where layer caching and image-pull bandwidth aren't bottlenecks.** Modern platforms cache base layers aggressively, so the 2 GB image effectively becomes a 1.4 GB delta on the first pull and ~50 MB on subsequent pushes (just the application layer changes). Image size matters less than people expect.
 
-**You have plugins that depend on host-OS tools.** Most COMPAS-style plugins will assume the polyglot runtime is available. If you don't know whether your plugins need Python or Node, default to fat.
+**You have plugins that depend on host-OS tools.** Most consumer-style plugins will assume the polyglot runtime is available. If you don't know whether your plugins need Python or Node, default to fat.
 
 **Single-tenant on-premise deployment with twelve users on a trusted network.** This is Creuser's primary deployment shape. The threat model doesn't make the larger image meaningfully riskier — there's no attack surface delta that matters at this scale.
 
 ## Choose `:slim` when…
 
-**You're confident your agents and job scripts will only ever invoke .NET runtimes.** If your COMPAS implementation is a pure C# scripting environment with no Python data tools, no Node-based linters, no `jq` invocations from agents, slim is appropriate. This is rarer than it sounds — most real workflows reach for at least one polyglot tool eventually.
+**You're confident your agents and job scripts will only ever invoke .NET runtimes.** If your implementation is a pure C# scripting environment with no Python data tools, no Node-based linters, no `jq` invocations from agents, slim is appropriate. This is rarer than it sounds — most real workflows reach for at least one polyglot tool eventually.
 
 **You're running in a tightly resource-constrained environment.** Think edge deployments, IoT contexts, small VMs with <2 GB of disk after the OS, scenarios where every megabyte counts. Creuser isn't really designed for these contexts, but if you find yourself there, slim works.
 

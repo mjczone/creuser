@@ -37,21 +37,27 @@ The architecture below describes both the v1 destination and the current state. 
 - White-labeling: branding doc with palette presets, runtime CSS variable injection, content-addressed asset uploads, theme mode (dark/light/auto), bundled variable fonts.
 - Environment configuration page with `SecretsService` (`/data/secrets/<filename>`, chmod 600, value-never-returned). Per-provider "Test connection" hits a sub-cent health probe.
 - `Microsoft.Extensions.AI` 10.3.0 wired with Anthropic, OpenAI, and Local providers; `AgentClientFactory` + `AgentClientResolver` with structured `ResolveOutcome`.
-- In-app AI assistant: right-side chat panel, `POST /api/agents/chat`, capability registry (`ICapabilityProvider` + `CoreCapabilityProvider`), `navigate` / `describe_capabilities` tools, role-filtered, deep-link rendering with `?expand=` deep-open semantics.
+- In-app AI assistant: right-side chat panel, `POST /api/agents/chat`, capability registry (`ICapabilityProvider` + `CoreCapabilityProvider` + `EndpointAttributeProvider` from `[AiCapability]`-decorated methods), `navigate` / `describe_capabilities` tools, role-filtered, deep-link rendering with `?expand=` deep-open semantics.
 - **Workspaces foundation**: `cr.workspaces` with type discriminator (git/local; s3 reserved), JSONB settings deserialized to typed records, settings CRUD, test-connection (HTTPS smart-HTTP probe + real SSH `git ls-remote`), sync (init / fetch source / try-fetch working / `checkout -B` / `reset --hard` / `clean -fd`), per-slug `SemaphoreSlim` concurrency, dirty-state detection with `?force=true` confirmation flow, sync state columns on the table, last-sync UI in the workspaces list.
+- **Per-workspace plugin enablement UI** (first pass): `/w/:slug/settings/plugins` renders the empty-state inventory; `cr.workspace_plugins` join table + persistence land when the plugin loader populates `cr.plugins`.
+- **Execution model — full deterministic catalog**: `IStepRunner` contract + `JobExecutor` (in-process, synchronous); 8 registered runners (`llm-chat`, `shell`, `csharp`, `python`, `node`, `file-mutate`, `file-frontmatter`, `http`); multi-step DAGs with `DagValidator` (Kahn topological sort) + `StepBindingResolver` (`$step_id.field` / `$params.name` resolution); `IWorkspaceWorkingTree.ApplyAndCommitAsync` with one-commit-per-step structured commit messages; `JobRun.StartCommitSha` / `EndCommitSha`; sha256 hashes on every `FileChange`; `IToolCatalog` + chip-picker for `shell` allow-lists; `LlmCacheStore` keyed by sha256(provider + model + prompt + system + temperature + format); cancellation propagation from failed upstreams.
+- **Schedules + triggers**: `cr.schedules` with cron (NCrontab, UTC, 5- or 6-field) and sync-hook kinds; `SchedulerService` background tick (configurable interval); `IJobScheduleDispatcher` shared by tick / sync hook / manual fire; `JobRun.TriggerKind` records cron/sync/manual; SPA Schedules page under workspace settings.
 - SignalR notifications hub (`/hub/notifications`) with `Subscribe` / `Unsubscribe` / `Broadcast`; branding store subscribes to live updates.
 - Reusable SPA components: `StatusBanner`, `CollapsibleSection`, `SecretInput`, with mode-aware `--cr-link` tokens and themed scrollbars.
 
-**Deferred (in priority order):**
+**In flight (next up for v0.1.x):**
 
-- ~~Stage 2 of the capability registry (`[AiCapability]` attribute + assembly scanner)~~ — shipped 2026-05-02. `EndpointAttributeProvider` reflects over the host assembly on startup and emits a `Capability` per `[AiCapability]`-decorated method. `CoreCapabilityProvider` shrinks as endpoints absorb its entries; the registry dedupes by `Id` so attribute-derived entries supersede stage-1 ones.
-- Per-workspace plugin enablement UI + `cr.workspace_plugins` join table — fits cleanly under the existing workspace settings shell.
-- Workflow engine (Marten + Wolverine + sagas) and the `cr.entities` projection.
-- Job scripts + first runners (`shell`, `csharp`, `llm-chat` reusing `AgentClientResolver`).
-- libgit2sharp for in-process git ops; the shell-out path stays for ops that need the porcelain.
-- Plugin loader (`/data/plugins/*.dll` discovery + manifest parsing).
+- `llm-tool-loop` runner — bounded ReAct loop, the agentic step type. Design in `docs/wip/llm-tool-loop-design.md`.
+- `cr.entities` projection table + workspace-sync projection step (gates the projection toolset that the agent loops will read from).
+- `llm-planner` + plan-then-execute pattern.
+
+**Deferred (post-v0.1):**
+
+- Marten + Wolverine durable saga executor — replaces the in-process `JobExecutor`. The `IStepRunner` contract was designed so this is wiring-only, not a runner rewrite. The `mt` Postgres schema is reserved.
+- Plugin loader (`/data/plugins/*.dll` discovery + manifest parsing) — lights up workspace plugin contributions and unlocks stage 3 of the capability registry.
 - Dashboard composer (`dockview-vue`, widget registry, Monaco-based job editor).
 - SMTP-driven flows (invite-by-email, full forgot-password); release CI workflows; Dockerfile finalization.
+- libgit2sharp for in-process git ops; the shell-out path stays for ops that need the porcelain.
 
 The detail sections below mark each piece accordingly.
 
@@ -288,7 +294,7 @@ A workspace is a configured connection to a content source. Three types are rese
 - **`local`** — pointer to a server-side filesystem path (mounted volume in Docker, any directory in dev/on-host). The simplest backend: read and (optionally) write the directory directly. No clone, no commits, no branches. **Shipped.**
 - **`s3`** — reserved for S3-backed workspaces. Disabled in the create UI until the implementation lands.
 
-Each workspace has a **URL-safe slug** (unique, kebab-case, e.g. `compas`, `acme-platform`) that appears in operator-facing URLs as `/w/:workspaceSlug/...`. Slugs are stable identifiers — the workspace's *display name* can change without breaking bookmarks or in-flight tabs.
+Each workspace has a **URL-safe slug** (unique, kebab-case, e.g. `acme`, `widgets-platform`) that appears in operator-facing URLs as `/w/:workspaceSlug/...`. Slugs are stable identifiers — the workspace's *display name* can change without breaking bookmarks or in-flight tabs.
 
 Workspaces are a **top-level operator context**, not a feature category. The SPA's primary navigation is workspace-scoped: an operator picks (or lands on) a workspace and the inner navigation (dashboards, runs, scripts, agents, plugins) is rooted under `/w/:slug/`. Multiple browser tabs can hold different workspaces simultaneously — each tab's URL carries its own slug, so there is no in-app "current workspace" global to fight with. Platform-level configuration (`/settings`, `/admin/users`) is unscoped.
 
@@ -339,7 +345,7 @@ public sealed record GitWorkspaceSettings(
 
 - **Repository URL** — HTTPS or SSH. The auth mode is selected per workspace, not inferred from URL scheme, so admins can use SSH-form URLs with no key (public mirrors) or HTTPS with PAT (private repos).
 - **Auth modes:** `none` (public), `https-pat` (HTTP Basic with username `git` + the PAT — works for GitHub, GitLab, Bitbucket, Azure DevOps, Gitea), `ssh-key` (OpenSSH-format private key). Credentials are written through `SecretsService` to `/data/secrets/workspace-<slug>.{pat,key}` (chmod 600), never stored in the DB. The DB stores only the filename in `AuthSecret`.
-- **Working branch** — branch the platform commits to (e.g. `creuser/main`, `compas/development`). Created locally on first sync if it doesn't yet exist on the remote (sync auto-falls-back to source branch).
+- **Working branch** — branch the platform commits to (e.g. `creuser/main`, `acme/development`). Created locally on first sync if it doesn't yet exist on the remote (sync auto-falls-back to source branch).
 - **Source branch** — branch the working branch is rebased / pulled from when admins want fresh source content.
 - **Mode** — direct push (default) or pull-request (deferred to when the PR producer lands).
 - **Push frequency** — every-commit (real-time) or batched. Forward-looking; honoured once the commit/push side ships.
@@ -743,19 +749,20 @@ Future triggers (post-v1): git push (webhook), file-pattern change (sync diff in
 
 The current minimal `JobExecutor` (in-process, synchronous) and the future Wolverine-based one share the same `IStepRunner` registry, the same `StepResult` contract, and the same `cr.job_runs` audit shape. Migration is wiring-only.
 
-### What ships first (v0.1.x)
+### What landed first (the minimum viable slice — shipped)
 
-The minimal pragmatic slice that exercises the model end-to-end:
+The pragmatic slice that took the model from paper to end-to-end is in the codebase:
 
 1. `IStepRunner` interface + `StepResult` / `FileChange` / `StepArtifact` records in `Creuser.Core`.
-2. `LlmChatStepRunner` in `Creuser.Scripting` — first registered runner. Uses existing `AgentClientResolver`. Supports JSON-Schema response format. Caches in `cr.llm_cache`.
+2. `LlmChatStepRunner` in `Creuser.Scripting` — first registered runner. Uses `AgentClientResolver`. Caches in `cr.llm_cache` keyed by `(provider, model, prompt, system, temperature, format)`.
 3. YAML frontmatter parser (YamlDotNet) — both single-step (top-level `type:` + body) and multi-step (`steps:` array with `depends_on` + `$step_id.field` bindings).
-4. `JobExecutor` — in-process synchronous runner that resolves inputs, invokes the runner, persists `JobRun` + `JobRunStep`, applies `FileChange` ops, commits. Multi-step path: `DagValidator` (Kahn-based topological sort) + `StepBindingResolver` ($step_id.field / $params.name navigation, raises `StepBindingException` with operator diagnostics on lookup failure). Cancellation propagates from failed upstreams to dependents.
-5. `cr.job_scripts`, `cr.job_runs`, `cr.job_run_steps`, `cr.llm_cache` tables (DapperMatic).
-6. CRUD endpoints for Jobs (admin); `POST /api/workspaces/{slug}/jobs/{jobId}/run` to trigger.
-7. SPA: workspace settings → Jobs page (list + edit + run), workspace home → recent runs.
+4. `JobExecutor` — in-process synchronous runner that resolves inputs, invokes the runner, persists `JobRun` + `JobRunStep`, applies `FileChange` ops, commits. Multi-step path: `DagValidator` (Kahn-based topological sort) + `StepBindingResolver` (`$step_id.field` / `$params.name` navigation, raises `StepBindingException` with operator diagnostics on lookup failure). Cancellation propagates from failed upstreams to dependents.
+5. `cr.job_scripts`, `cr.job_runs`, `cr.job_run_steps`, `cr.llm_cache`, `cr.schedules` tables (DapperMatic, additive `ALTER TABLE … ADD COLUMN IF NOT EXISTS` migrations).
+6. CRUD endpoints for Jobs (admin); `POST /api/workspaces/{slug}/jobs/{jobId}/run` to trigger. Schedules surface (`/api/workspaces/{slug}/schedules` CRUD + `/fire`).
+7. SPA: workspace settings → Jobs page (list + edit + run); Schedules page (cron / sync / manual fire); workspace home → recent runs.
+8. The seven-runner deterministic catalog (`shell`, `csharp`, `python`, `node`, `file-mutate`, `file-frontmatter`, `http`) plus the cron / sync-hook scheduler.
 
-Subsequent slices add `llm-tool-loop`, `llm-planner`, then Wolverine for durable execution. Schedules + cron / sync triggers landed in v0.1: `cr.schedules` + `SchedulerService` (cron tick) + `IJobScheduleDispatcher` (shared by tick + sync hook + manual fire), with a workspace-settings UI to manage them.
+Subsequent slices add `llm-tool-loop` (the agentic seam — design in `docs/wip/llm-tool-loop-design.md`), `cr.entities` projection, `llm-planner`, then Wolverine for durable execution.
 
 ### Sandbox model (forward-looking)
 
@@ -860,9 +867,11 @@ A well-designed agent uses projection tools for discovery and only drops to work
 
 These tools are distinct from the **assistant** tool registry below — the assistant is for human-facing UI navigation (read-only navigation + capability description), agents will be for autonomous workflow execution (read + write + shell). The two surfaces share `AgentClientResolver` but compose different tool sets.
 
-### ToolLoopRunner (forward-looking)
+### ToolLoopRunner (in flight — `llm-tool-loop` step type)
 
-Bounded ReAct implementation. Takes a tool registry, a max-step budget, a max-token budget, and runs the loop. Tools are .NET methods decorated with attributes; the runner serializes them into the function-calling schema. Step transcripts are recorded as `AgentTrace` documents in Marten for inspection. The current chat endpoint short-circuits the loop via M.E.AI's `UseFunctionInvocation()`; the dedicated runner lands when the agent layer needs explicit budget control and trace recording.
+Bounded ReAct implementation, registered as the `llm-tool-loop` step runner in `Creuser.Scripting`. Frontmatter declares the goal, the tool allow-list (subset of the workspace toolset above), the loop budgets (`max_steps`, `max_tokens`, `max_duration_seconds`), and the optional model / system prompt. The runner builds an `AIFunction` for each declared tool from the workspace tool registry, calls the configured `IChatClient` with `UseFunctionInvocation()` as the per-turn driver, accumulates per-turn transcripts as a sidecar artifact, and rolls token counts up to the step's `TokensUsed`. First slice ships read-only workspace tools — file mutations stay through downstream `file-mutate` / `file-frontmatter` steps so the executor remains the sole writer (see **File mutation discipline**).
+
+Detailed contract, frontmatter shape, tool registry surface, and v0.1.x test plan: `docs/wip/llm-tool-loop-design.md`. The dedicated runner is what unblocks the agentic execution pattern catalogued in **Three execution patterns**.
 
 See **Execution model → Sandbox model** above for the unified treatment that covers both `run_shell` and the script runners (`shell` / `csharp` / `node` / `python`).
 
@@ -896,7 +905,7 @@ The capability source-of-truth is meant to grow without disrupting consumers (ch
 
 1. **Code-resident list (current).** `CoreCapabilityProvider` returns a hand-curated `Capability[]` literal in C#. Edited alongside endpoint changes — a PR that adds a feature touches the same file. Type-checked, refactor-safe, easy to keep honest in code review.
 2. **`[AiCapability]` attributes (shipped).** Endpoint methods opt into discovery by carrying one or more `[AiCapability]` attributes — `[AiCapability("workspaces.list", "workspaces", "Configured workspaces", "...", "list workspaces", "show workspaces", Route = "/settings/workspaces", RequiresRole = Roles.Admin)]`. `EndpointAttributeProvider` reflects over the host assembly on construction and emits one `Capability` per attribute. Adding a feature with the attribute is automatically discoverable; one method may carry multiple attributes when several capabilities anchor on the same endpoint.
-3. **Plugin-contributed providers (when plugins land).** The architecture's plugin model already discovers DLLs from `/data/plugins/`; plugins implement `ICapabilityProvider` to declare their own capabilities. A consumer-application plugin contributing a `compas.process_map` entity kind ships a provider that emits `Capability` entries for editing process maps. **Plugins describe themselves to the AI** through the same registration mechanism they use for widgets and job runners — single contract, multiple sources.
+3. **Plugin-contributed providers (when plugins land).** The architecture's plugin model already discovers DLLs from `/data/plugins/`; plugins implement `ICapabilityProvider` to declare their own capabilities. A consumer-application plugin contributing an `acme.process_map` entity kind ships a provider that emits `Capability` entries for editing process maps. **Plugins describe themselves to the AI** through the same registration mechanism they use for widgets and job runners — single contract, multiple sources.
 
 The AI tool registry, the chat endpoint, and the SPA's link-rendering all see capabilities through the same `CapabilityRegistry` interface regardless of which stage produced them.
 
@@ -1299,7 +1308,7 @@ OpenAPI 3.1 emitted via `Microsoft.AspNetCore.OpenApi`. Scalar mounted at `/scal
 
 ## SPA routing
 
-The SPA uses **Vue Router in history mode** (`vueRouterMode: 'history'` in `quasar.config.ts`), not hash mode, so URLs are clean (`/w/compas/d/runs`, not `/#/w/compas/d/runs`). ASP.NET Core's `MapFallbackToFile("index.html")` serves `index.html` for any path that doesn't match a static file or `/api` / `/hub` / `/scalar` route, which is what makes deep-linking and refresh work.
+The SPA uses **Vue Router in history mode** (`vueRouterMode: 'history'` in `quasar.config.ts`), not hash mode, so URLs are clean (`/w/acme/d/runs`, not `/#/w/acme/d/runs`). ASP.NET Core's `MapFallbackToFile("index.html")` serves `index.html` for any path that doesn't match a static file or `/api` / `/hub` / `/scalar` route, which is what makes deep-linking and refresh work.
 
 Top-level structure:
 
@@ -1313,7 +1322,7 @@ Top-level structure:
 | `/settings/...` | Platform admin | Branding, Users, Environment, Workspaces (admin CRUD) |
 | `/profile` | Authenticated user | Password change, personal preferences |
 
-Workspace-scoped routes are the bulk of the app. The slug in the URL is the active-workspace identifier — there is no hidden global "current workspace" Pinia state to fight with. Two browser tabs open to `/w/compas/d/runs` and `/w/acme/d/runs` show two different workspaces in parallel without interference. The workspace store is keyed by slug; the active slug is read from the route.
+Workspace-scoped routes are the bulk of the app. The slug in the URL is the active-workspace identifier — there is no hidden global "current workspace" Pinia state to fight with. Two browser tabs open to `/w/acme/d/runs` and `/w/widgets/d/runs` show two different workspaces in parallel without interference. The workspace store is keyed by slug; the active slug is read from the route.
 
 Dashboard groups don't appear in the URL — the icon bar resolves the group from the dashboard's `group_id` for sub-sidebar rendering, but the URL only carries the dashboard slug. This keeps URLs short and lets admins reorganize groups without breaking bookmarks.
 
@@ -1479,17 +1488,18 @@ These are deliberately deferred to keep v1 scope tight:
 
 - Multi-repo workflow orchestration (cross-repo dependencies)
 - S3 workspace backend implementation
-- Native Python and Node script runners (vs. shell-out)
-- libgit2sharp adoption to replace shell-out for read-side ops
-- Multi-instance deployments (Postgres advisory locks instead of in-memory `SemaphoreSlim` for workspace sync; SignalR Redis backplane)
+- libgit2sharp adoption to replace shell-out for read-side git ops
+- Multi-instance deployments (Postgres advisory locks instead of in-memory `SemaphoreSlim` for workspace sync; advisory lock around the scheduler tick to prevent double-fire from two hosts; SignalR Redis backplane)
 - Hot-reload plugin system
 - Per-workspace plugin runtime isolation (separate AssemblyLoadContexts) — enablement gate is in the v1 design; isolation is post-v1
 - Full per-workspace RBAC beyond Editor/Viewer
 - OIDC integration for SSO (currently planned for v0.2)
-- Workflow import/export
+- Workflow / job-script import/export
 - Embedded observability dashboard
 - Real sandboxing for arbitrary code execution (Firecracker / gVisor)
 - Multi-tenant deployment mode (currently architecturally excluded)
+- HTTP step caching (parallel to `cr.llm_cache`); the wire shape is forward-compatible
+- Per-job time zones for cron schedules (UTC-only in v1)
 
 ## IP boundary (Creuser core vs. consumer applications)
 

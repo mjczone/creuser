@@ -23,7 +23,7 @@ public sealed record WorkspacePluginsResult(
 
 /// <summary>One plugin's metadata + this workspace's enablement state.</summary>
 public sealed record WorkspacePluginInfo(
-    /// <summary>Stable identifier from the plugin's manifest — e.g. <c>compas.process_map</c>.</summary>
+    /// <summary>Stable identifier from the plugin's manifest — e.g. <c>acme.process_map</c>.</summary>
     string PluginId,
     string Name,
     string Version,

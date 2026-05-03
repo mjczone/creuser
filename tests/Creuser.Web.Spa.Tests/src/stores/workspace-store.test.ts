@@ -42,19 +42,19 @@ describe('useWorkspaceStore', () => {
   });
 
   it('ensureLoaded fetches once and caches the result', async () => {
-    const ws = fixtureWorkspace('compas');
+    const ws = fixtureWorkspace('acme');
     getWorkspaceMock.mockResolvedValueOnce({
       data: { result: ws },
       error: null,
     });
     const store = useWorkspaceStore();
 
-    const first = await store.ensureLoaded('compas');
+    const first = await store.ensureLoaded('acme');
     expect(first).toEqual(ws);
     expect(getWorkspaceMock).toHaveBeenCalledTimes(1);
 
     // Second call returns the same cached record without re-fetching.
-    const second = await store.ensureLoaded('compas');
+    const second = await store.ensureLoaded('acme');
     expect(second).toEqual(ws);
     expect(getWorkspaceMock).toHaveBeenCalledTimes(1);
   });
