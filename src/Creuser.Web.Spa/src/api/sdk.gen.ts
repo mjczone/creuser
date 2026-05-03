@@ -14,12 +14,16 @@ import type {
   ChangePasswordResponses,
   CheckAgentHealthData,
   CheckAgentHealthResponses,
+  CreateJobData,
+  CreateJobResponses,
   CreateUserData,
   CreateUserResponses,
   CreateWorkspaceData,
   CreateWorkspaceResponses,
   DeleteEnvironmentSecretData,
   DeleteEnvironmentSecretResponses,
+  DeleteJobData,
+  DeleteJobResponses,
   DeleteUserData,
   DeleteUserResponses,
   DeleteWorkspaceData,
@@ -32,12 +36,26 @@ import type {
   GetCurrentUserResponses,
   GetEnvironmentData,
   GetEnvironmentResponses,
+  GetJobData,
+  GetJobResponses,
+  GetRunData,
+  GetRunResponses,
   GetWorkspaceData,
   GetWorkspaceResponses,
   ListEnvironmentSecretsData,
   ListEnvironmentSecretsResponses,
+  ListJobRunsData,
+  ListJobRunsResponses,
+  ListJobsData,
+  ListJobsResponses,
+  ListToolsData,
+  ListToolsResponses,
   ListUsersData,
   ListUsersResponses,
+  ListWorkspacePluginsData,
+  ListWorkspacePluginsResponses,
+  ListWorkspaceRunsData,
+  ListWorkspaceRunsResponses,
   ListWorkspacesData,
   ListWorkspacesResponses,
   LoginData,
@@ -48,6 +66,8 @@ import type {
   PingResponses,
   ResetUserPasswordData,
   ResetUserPasswordResponses,
+  RunJobData,
+  RunJobResponses,
   SetEnvironmentSecretData,
   SetEnvironmentSecretResponses,
   SetUserActiveData,
@@ -62,6 +82,8 @@ import type {
   UpdateBrandingResponses,
   UpdateEnvironmentData,
   UpdateEnvironmentResponses,
+  UpdateJobData,
+  UpdateJobResponses,
   UpdateWorkspaceData,
   UpdateWorkspaceResponses,
   UploadLogoData,
@@ -396,6 +418,121 @@ export class Workspaces {
   ) {
     return (options.client ?? client).post<SyncWorkspaceResponses, unknown, ThrowOnError>({
       url: '/api/workspaces/{slug}/sync',
+      ...options,
+    });
+  }
+
+  public static listWorkspacePlugins<ThrowOnError extends boolean = false>(
+    options: Options<ListWorkspacePluginsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListWorkspacePluginsResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/plugins',
+      ...options,
+    });
+  }
+}
+
+export class Jobs {
+  public static listJobs<ThrowOnError extends boolean = false>(
+    options: Options<ListJobsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListJobsResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/jobs',
+      ...options,
+    });
+  }
+
+  public static createJob<ThrowOnError extends boolean = false>(
+    options: Options<CreateJobData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<CreateJobResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/jobs',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static deleteJob<ThrowOnError extends boolean = false>(
+    options: Options<DeleteJobData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).delete<DeleteJobResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/jobs/{jobId}',
+      ...options,
+    });
+  }
+
+  public static getJob<ThrowOnError extends boolean = false>(
+    options: Options<GetJobData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<GetJobResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/jobs/{jobId}',
+      ...options,
+    });
+  }
+
+  public static updateJob<ThrowOnError extends boolean = false>(
+    options: Options<UpdateJobData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<UpdateJobResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/jobs/{jobId}',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static runJob<ThrowOnError extends boolean = false>(
+    options: Options<RunJobData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<RunJobResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/jobs/{jobId}/run',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static listJobRuns<ThrowOnError extends boolean = false>(
+    options: Options<ListJobRunsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListJobRunsResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/jobs/{jobId}/runs',
+      ...options,
+    });
+  }
+
+  public static listWorkspaceRuns<ThrowOnError extends boolean = false>(
+    options: Options<ListWorkspaceRunsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListWorkspaceRunsResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/runs',
+      ...options,
+    });
+  }
+
+  public static getRun<ThrowOnError extends boolean = false>(
+    options: Options<GetRunData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<GetRunResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/runs/{runId}',
+      ...options,
+    });
+  }
+}
+
+export class Tools {
+  public static listTools<ThrowOnError extends boolean = false>(
+    options?: Options<ListToolsData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<ListToolsResponses, unknown, ThrowOnError>({
+      url: '/api/tools',
       ...options,
     });
   }

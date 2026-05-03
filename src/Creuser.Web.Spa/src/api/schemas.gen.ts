@@ -259,6 +259,32 @@ export const ApiResultOfEnvironmentConfigViewSchema = {
   },
 } as const;
 
+export const ApiResultOfIReadOnlyListOfJobRunResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      type: ['null', 'array'],
+      items: {
+        $ref: '#/components/schemas/JobRunResult',
+      },
+    },
+  },
+} as const;
+
+export const ApiResultOfIReadOnlyListOfJobScriptResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      type: ['null', 'array'],
+      items: {
+        $ref: '#/components/schemas/JobScriptResult',
+      },
+    },
+  },
+} as const;
+
 export const ApiResultOfIReadOnlyListOfstringSchema = {
   required: ['result'],
   type: 'object',
@@ -267,6 +293,19 @@ export const ApiResultOfIReadOnlyListOfstringSchema = {
       type: ['null', 'array'],
       items: {
         type: 'string',
+      },
+    },
+  },
+} as const;
+
+export const ApiResultOfIReadOnlyListOfToolEntrySchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      type: ['null', 'array'],
+      items: {
+        $ref: '#/components/schemas/ToolEntry',
       },
     },
   },
@@ -294,6 +333,57 @@ export const ApiResultOfIReadOnlyListOfWorkspaceResultSchema = {
       items: {
         $ref: '#/components/schemas/WorkspaceResult',
       },
+    },
+  },
+} as const;
+
+export const ApiResultOfJobRunDetailResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/JobRunDetailResult',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfJobRunResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/JobRunResult',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfJobScriptResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/JobScriptResult',
+        },
+      ],
     },
   },
 } as const;
@@ -343,6 +433,23 @@ export const ApiResultOfWorkspaceConnectionTestResultSchema = {
         },
         {
           $ref: '#/components/schemas/WorkspaceConnectionTestResult',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfWorkspacePluginsResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/WorkspacePluginsResult',
         },
       ],
     },
@@ -566,6 +673,34 @@ export const ChromeTokensSchema = {
   },
 } as const;
 
+export const CreateJobScriptRequestSchema = {
+  required: ['slug', 'name', 'description', 'pattern', 'frontmatter', 'body', 'status'],
+  type: 'object',
+  properties: {
+    slug: {
+      type: 'string',
+    },
+    name: {
+      type: 'string',
+    },
+    description: {
+      type: ['null', 'string'],
+    },
+    pattern: {
+      type: 'string',
+    },
+    frontmatter: {
+      type: 'string',
+    },
+    body: {
+      type: 'string',
+    },
+    status: {
+      type: 'string',
+    },
+  },
+} as const;
+
 export const CreateUserRequestSchema = {
   required: ['email', 'displayName', 'role', 'temporaryPassword'],
   type: 'object',
@@ -757,6 +892,239 @@ export const IFormFileSchema = {
   format: 'binary',
 } as const;
 
+export const JobRunDetailResultSchema = {
+  required: ['run', 'steps'],
+  type: 'object',
+  properties: {
+    run: {
+      $ref: '#/components/schemas/JobRunResult',
+    },
+    steps: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/JobRunStepResult',
+      },
+    },
+  },
+} as const;
+
+export const JobRunResultSchema = {
+  required: [
+    'runId',
+    'jobScriptId',
+    'workspaceId',
+    'status',
+    'triggerKind',
+    'startedAt',
+    'completedAt',
+    'durationMs',
+    'totalTokensUsed',
+    'totalCostUsd',
+    'failureMessage',
+    'startCommitSha',
+    'endCommitSha',
+  ],
+  type: 'object',
+  properties: {
+    runId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    jobScriptId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    workspaceId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    status: {
+      type: 'string',
+    },
+    triggerKind: {
+      type: 'string',
+    },
+    startedAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+    completedAt: {
+      type: ['null', 'string'],
+      format: 'date-time',
+    },
+    durationMs: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int64',
+    },
+    totalTokensUsed: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['null', 'integer', 'string'],
+      format: 'int64',
+    },
+    totalCostUsd: {
+      pattern: '^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$',
+      type: ['null', 'number', 'string'],
+      format: 'double',
+    },
+    failureMessage: {
+      type: ['null', 'string'],
+    },
+    startCommitSha: {
+      type: ['null', 'string'],
+    },
+    endCommitSha: {
+      type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const JobRunStepResultSchema = {
+  required: [
+    'stepId',
+    'position',
+    'stepType',
+    'name',
+    'status',
+    'idempotencyKey',
+    'cachedFromStepId',
+    'inputsJson',
+    'outputsJson',
+    'fileChangeCount',
+    'commitSha',
+    'startedAt',
+    'completedAt',
+    'durationMs',
+    'tokensUsed',
+    'costUsd',
+    'errorMessage',
+  ],
+  type: 'object',
+  properties: {
+    stepId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    position: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    stepType: {
+      type: 'string',
+    },
+    name: {
+      type: 'string',
+    },
+    status: {
+      type: 'string',
+    },
+    idempotencyKey: {
+      type: 'string',
+    },
+    cachedFromStepId: {
+      type: ['null', 'string'],
+      format: 'uuid',
+    },
+    inputsJson: {
+      type: 'string',
+    },
+    outputsJson: {
+      type: ['null', 'string'],
+    },
+    fileChangeCount: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    commitSha: {
+      type: ['null', 'string'],
+    },
+    startedAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+    completedAt: {
+      type: ['null', 'string'],
+      format: 'date-time',
+    },
+    durationMs: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int64',
+    },
+    tokensUsed: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['null', 'integer', 'string'],
+      format: 'int64',
+    },
+    costUsd: {
+      pattern: '^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$',
+      type: ['null', 'number', 'string'],
+      format: 'double',
+    },
+    errorMessage: {
+      type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const JobScriptResultSchema = {
+  required: [
+    'jobScriptId',
+    'workspaceId',
+    'slug',
+    'name',
+    'description',
+    'pattern',
+    'frontmatter',
+    'body',
+    'status',
+    'createdAt',
+    'updatedAt',
+  ],
+  type: 'object',
+  properties: {
+    jobScriptId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    workspaceId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    slug: {
+      type: 'string',
+    },
+    name: {
+      type: 'string',
+    },
+    description: {
+      type: ['null', 'string'],
+    },
+    pattern: {
+      type: 'string',
+    },
+    frontmatter: {
+      type: 'string',
+    },
+    body: {
+      type: 'string',
+    },
+    status: {
+      type: 'string',
+    },
+    createdAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+    updatedAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+  },
+} as const;
+
 export const LocalProviderConfigSchema = {
   type: 'object',
   properties: {
@@ -839,6 +1207,16 @@ export const ResetPasswordRequestSchema = {
   properties: {
     temporaryPassword: {
       type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const RunJobScriptRequestSchema = {
+  required: ['parameters'],
+  type: 'object',
+  properties: {
+    parameters: {
+      type: ['null', 'object'],
     },
   },
 } as const;
@@ -932,6 +1310,50 @@ export const TestWorkspaceConnectionRequestSchema = {
   },
 } as const;
 
+export const ToolEntrySchema = {
+  required: ['name', 'category', 'description', 'source'],
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+    },
+    category: {
+      type: 'string',
+    },
+    description: {
+      type: ['null', 'string'],
+    },
+    source: {
+      type: 'string',
+    },
+  },
+} as const;
+
+export const UpdateJobScriptRequestSchema = {
+  required: ['name', 'description', 'pattern', 'frontmatter', 'body', 'status'],
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+    },
+    description: {
+      type: ['null', 'string'],
+    },
+    pattern: {
+      type: 'string',
+    },
+    frontmatter: {
+      type: 'string',
+    },
+    body: {
+      type: 'string',
+    },
+    status: {
+      type: 'string',
+    },
+  },
+} as const;
+
 export const UpdateWorkspaceRequestSchema = {
   required: ['name', 'description', 'type'],
   type: 'object',
@@ -1019,6 +1441,81 @@ export const WorkspaceConnectionTestResultSchema = {
       format: 'int64',
     },
     error: {
+      type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const WorkspacePluginInfoSchema = {
+  required: [
+    'pluginId',
+    'name',
+    'version',
+    'author',
+    'description',
+    'enabled',
+    'status',
+    'statusMessage',
+    'provides',
+    'requiredTools',
+    'loadedAt',
+  ],
+  type: 'object',
+  properties: {
+    pluginId: {
+      type: 'string',
+    },
+    name: {
+      type: 'string',
+    },
+    version: {
+      type: 'string',
+    },
+    author: {
+      type: ['null', 'string'],
+    },
+    description: {
+      type: ['null', 'string'],
+    },
+    enabled: {
+      type: 'boolean',
+    },
+    status: {
+      type: 'string',
+    },
+    statusMessage: {
+      type: ['null', 'string'],
+    },
+    provides: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+    },
+    requiredTools: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+    },
+    loadedAt: {
+      type: ['null', 'string'],
+      format: 'date-time',
+    },
+  },
+} as const;
+
+export const WorkspacePluginsResultSchema = {
+  required: ['plugins', 'note'],
+  type: 'object',
+  properties: {
+    plugins: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/WorkspacePluginInfo',
+      },
+    },
+    note: {
       type: ['null', 'string'],
     },
   },

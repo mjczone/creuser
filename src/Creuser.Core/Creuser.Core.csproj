@@ -4,4 +4,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Logging abstractions only — no concrete logger here, just the
+         ILogger contract so step runners can log without taking a host
+         dependency. The host (Creuser.Web) wires the actual provider
+         (Serilog). -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+  </ItemGroup>
 </Project>

@@ -61,6 +61,22 @@ public sealed class DbInitializer : IHostedService
                 tx: null,
                 cancellationToken: cancellationToken
             );
+            await conn.CreateTableIfNotExistsAsync<job_scripts>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
+            await conn.CreateTableIfNotExistsAsync<job_runs>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
+            await conn.CreateTableIfNotExistsAsync<job_run_steps>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
+            await conn.CreateTableIfNotExistsAsync<llm_cache>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
 
             // Additive migrations on cr.workspaces. Postgres' `IF NOT EXISTS`
             // makes this idempotent — the columns get added once on the first

@@ -74,8 +74,20 @@ export type ApiResultOfEnvironmentConfigView = {
   result: null | EnvironmentConfigView;
 };
 
+export type ApiResultOfIReadOnlyListOfJobRunResult = {
+  result: null | Array<JobRunResult>;
+};
+
+export type ApiResultOfIReadOnlyListOfJobScriptResult = {
+  result: null | Array<JobScriptResult>;
+};
+
 export type ApiResultOfIReadOnlyListOfstring = {
   result: null | Array<string>;
+};
+
+export type ApiResultOfIReadOnlyListOfToolEntry = {
+  result: null | Array<ToolEntry>;
 };
 
 export type ApiResultOfIReadOnlyListOfUserResult = {
@@ -84,6 +96,18 @@ export type ApiResultOfIReadOnlyListOfUserResult = {
 
 export type ApiResultOfIReadOnlyListOfWorkspaceResult = {
   result: null | Array<WorkspaceResult>;
+};
+
+export type ApiResultOfJobRunDetailResult = {
+  result: null | JobRunDetailResult;
+};
+
+export type ApiResultOfJobRunResult = {
+  result: null | JobRunResult;
+};
+
+export type ApiResultOfJobScriptResult = {
+  result: null | JobScriptResult;
 };
 
 export type ApiResultOfPingResponse = {
@@ -96,6 +120,10 @@ export type ApiResultOfUserResult = {
 
 export type ApiResultOfWorkspaceConnectionTestResult = {
   result: null | WorkspaceConnectionTestResult;
+};
+
+export type ApiResultOfWorkspacePluginsResult = {
+  result: null | WorkspacePluginsResult;
 };
 
 export type ApiResultOfWorkspaceResult = {
@@ -166,6 +194,16 @@ export type ChromeTokens = {
   borderStrong?: null | string;
 };
 
+export type CreateJobScriptRequest = {
+  slug: string;
+  name: string;
+  description: null | string;
+  pattern: string;
+  frontmatter: string;
+  body: string;
+  status: string;
+};
+
 export type CreateUserRequest = {
   email: string;
   displayName: string;
@@ -230,6 +268,61 @@ export type GitWorkspaceSettingsDto = {
 
 export type IFormFile = Blob | File;
 
+export type JobRunDetailResult = {
+  run: JobRunResult;
+  steps: Array<JobRunStepResult>;
+};
+
+export type JobRunResult = {
+  runId: string;
+  jobScriptId: string;
+  workspaceId: string;
+  status: string;
+  triggerKind: string;
+  startedAt: string;
+  completedAt: null | string;
+  durationMs: number | string;
+  totalTokensUsed: null | number | string;
+  totalCostUsd: null | number | string;
+  failureMessage: null | string;
+  startCommitSha: null | string;
+  endCommitSha: null | string;
+};
+
+export type JobRunStepResult = {
+  stepId: string;
+  position: number | string;
+  stepType: string;
+  name: string;
+  status: string;
+  idempotencyKey: string;
+  cachedFromStepId: null | string;
+  inputsJson: string;
+  outputsJson: null | string;
+  fileChangeCount: number | string;
+  commitSha: null | string;
+  startedAt: string;
+  completedAt: null | string;
+  durationMs: number | string;
+  tokensUsed: null | number | string;
+  costUsd: null | number | string;
+  errorMessage: null | string;
+};
+
+export type JobScriptResult = {
+  jobScriptId: string;
+  workspaceId: string;
+  slug: string;
+  name: string;
+  description: null | string;
+  pattern: string;
+  frontmatter: string;
+  body: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type LocalProviderConfig = {
   baseUrl?: null | string;
   defaultModel?: null | string;
@@ -263,6 +356,12 @@ export type ResetPasswordRequest = {
   temporaryPassword?: null | string;
 };
 
+export type RunJobScriptRequest = {
+  parameters: null | {
+    [key: string]: unknown;
+  };
+};
+
 export type SetActiveRequest = {
   isActive: boolean;
 };
@@ -291,6 +390,22 @@ export type TestWorkspaceConnectionRequest = {
   localSettings?: null | LocalWorkspaceSettingsDto;
 };
 
+export type ToolEntry = {
+  name: string;
+  category: string;
+  description: null | string;
+  source: string;
+};
+
+export type UpdateJobScriptRequest = {
+  name: string;
+  description: null | string;
+  pattern: string;
+  frontmatter: string;
+  body: string;
+  status: string;
+};
+
 export type UpdateWorkspaceRequest = {
   name: string;
   description: null | string;
@@ -313,6 +428,25 @@ export type WorkspaceConnectionTestResult = {
   ok: boolean;
   latencyMs: number | string;
   error: null | string;
+};
+
+export type WorkspacePluginInfo = {
+  pluginId: string;
+  name: string;
+  version: string;
+  author: null | string;
+  description: null | string;
+  enabled: boolean;
+  status: string;
+  statusMessage: null | string;
+  provides: Array<string>;
+  requiredTools: Array<string>;
+  loadedAt: null | string;
+};
+
+export type WorkspacePluginsResult = {
+  plugins: Array<WorkspacePluginInfo>;
+  note: null | string;
 };
 
 export type WorkspaceResult = {
@@ -813,6 +947,210 @@ export type SyncWorkspaceResponses = {
 };
 
 export type SyncWorkspaceResponse = SyncWorkspaceResponses[keyof SyncWorkspaceResponses];
+
+export type ListWorkspacePluginsData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/plugins';
+};
+
+export type ListWorkspacePluginsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspacePluginsResult;
+};
+
+export type ListWorkspacePluginsResponse =
+  ListWorkspacePluginsResponses[keyof ListWorkspacePluginsResponses];
+
+export type ListJobsData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/jobs';
+};
+
+export type ListJobsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfJobScriptResult;
+};
+
+export type ListJobsResponse = ListJobsResponses[keyof ListJobsResponses];
+
+export type CreateJobData = {
+  body: CreateJobScriptRequest;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/jobs';
+};
+
+export type CreateJobResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfJobScriptResult;
+};
+
+export type CreateJobResponse = CreateJobResponses[keyof CreateJobResponses];
+
+export type DeleteJobData = {
+  body?: never;
+  path: {
+    slug: string;
+    jobId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/jobs/{jobId}';
+};
+
+export type DeleteJobResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfboolean;
+};
+
+export type DeleteJobResponse = DeleteJobResponses[keyof DeleteJobResponses];
+
+export type GetJobData = {
+  body?: never;
+  path: {
+    slug: string;
+    jobId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/jobs/{jobId}';
+};
+
+export type GetJobResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfJobScriptResult;
+};
+
+export type GetJobResponse = GetJobResponses[keyof GetJobResponses];
+
+export type UpdateJobData = {
+  body: UpdateJobScriptRequest;
+  path: {
+    slug: string;
+    jobId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/jobs/{jobId}';
+};
+
+export type UpdateJobResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfJobScriptResult;
+};
+
+export type UpdateJobResponse = UpdateJobResponses[keyof UpdateJobResponses];
+
+export type RunJobData = {
+  body?: null | RunJobScriptRequest;
+  path: {
+    slug: string;
+    jobId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/jobs/{jobId}/run';
+};
+
+export type RunJobResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfJobRunResult;
+};
+
+export type RunJobResponse = RunJobResponses[keyof RunJobResponses];
+
+export type ListJobRunsData = {
+  body?: never;
+  path: {
+    slug: string;
+    jobId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/jobs/{jobId}/runs';
+};
+
+export type ListJobRunsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfJobRunResult;
+};
+
+export type ListJobRunsResponse = ListJobRunsResponses[keyof ListJobRunsResponses];
+
+export type ListWorkspaceRunsData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/runs';
+};
+
+export type ListWorkspaceRunsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfJobRunResult;
+};
+
+export type ListWorkspaceRunsResponse =
+  ListWorkspaceRunsResponses[keyof ListWorkspaceRunsResponses];
+
+export type GetRunData = {
+  body?: never;
+  path: {
+    slug: string;
+    runId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/runs/{runId}';
+};
+
+export type GetRunResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfJobRunDetailResult;
+};
+
+export type GetRunResponse = GetRunResponses[keyof GetRunResponses];
+
+export type ListToolsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/tools';
+};
+
+export type ListToolsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfToolEntry;
+};
+
+export type ListToolsResponse = ListToolsResponses[keyof ListToolsResponses];
 
 export type PingData = {
   body?: never;

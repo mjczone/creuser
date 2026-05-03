@@ -19,5 +19,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Creuser.Core.Tests/Creuser.Core.Tests.csproj" />
     <Project Path="tests/Creuser.Integration.Tests/Creuser.Integration.Tests.csproj" />
+    <Project Path="tests/Creuser.Scripting.Tests/Creuser.Scripting.Tests.csproj" />
   </Folder>
 </Solution>

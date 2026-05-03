@@ -67,21 +67,22 @@
     </div>
 
     <p v-if="!loading && workspaces.length > 0" class="cr-home-foot">
-      Workspace-scoped navigation
-      <code>(/w/:slug/...)</code> lands in the next pass — picking a workspace today
-      drops you into a placeholder.
+      Workspace dashboards (groups + standalone) land in the next pass — for now
+      a workspace lands you on its overview page.
     </p>
   </q-page>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { useQuasar } from 'quasar';
+import { useRouter } from 'vue-router';
 import { Workspaces, type WorkspaceResult } from 'src/api';
 import { useAuthStore } from 'stores/auth';
+import { useWorkspaceStore } from 'stores/workspace';
 
-const $q = useQuasar();
+const router = useRouter();
 const auth = useAuthStore();
+const workspaceStore = useWorkspaceStore();
 
 const workspaces = ref<WorkspaceResult[]>([]);
 const loading = ref(false);
@@ -130,16 +131,12 @@ async function load() {
   }
 }
 
-function onPick(ws: WorkspaceResult) {
-  // Workspace-scoped routing (`/w/:slug/...`) lands next pass. For now,
-  // surface a deliberate notification so the affordance reads as "real
-  // button, deferred destination" rather than dead.
-  $q.notify({
-    type: 'info',
-    position: 'top',
-    message: `Workspace "${ws.slug}" — workspace dashboards coming soon.`,
-    timeout: 4000,
-  });
+async function onPick(ws: WorkspaceResult) {
+  // Seed the cache so the workspace home doesn't have to re-fetch on first
+  // render. The route guard will hit ensureLoaded too, but that becomes a
+  // cache hit thanks to this prime.
+  workspaceStore.upsert(ws);
+  await router.push({ name: 'workspace-home', params: { workspaceSlug: ws.slug } });
 }
 
 function problemMessage(err: unknown): string | undefined {
@@ -319,6 +316,7 @@ onMounted(() => void load());
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }

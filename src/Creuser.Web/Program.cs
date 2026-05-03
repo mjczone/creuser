@@ -2,7 +2,10 @@ using Creuser.Agents;
 using Creuser.Auth.Abstractions;
 using Creuser.Auth.Core;
 using Creuser.Auth.Providers.Local;
+using Creuser.Core.Execution;
 using Creuser.Persistence;
+using Creuser.Persistence.Repositories;
+using Creuser.Scripting;
 using Creuser.Web.Agents;
 using Creuser.Web.Agents.Capabilities;
 using Creuser.Web.Branding;
@@ -77,10 +80,66 @@ builder.Services.AddSingleton(new WorkspaceFilesystemService(dataDir));
 builder.Services.AddSingleton<AgentClientFactory>();
 builder.Services.AddScoped<AgentClientResolver>();
 
+// Cross-layer abstraction so Creuser.Scripting (and plugins) can resolve
+// chat clients without taking a host dependency.
+builder.Services.AddScoped<IChatClientResolver>(sp => sp.GetRequiredService<AgentClientResolver>());
+
+// Execution model — scripts, runs, the runner registry, the executor.
+// Step runners are registered as keyed services on their step type so the
+// executor can resolve "what runs `llm-chat`?" without iterating.
+builder.Services.AddScoped<IJobScriptStore, jobScriptsRepository>();
+builder.Services.AddScoped<IJobRunStore, jobRunsRepository>();
+builder.Services.AddScoped<ILlmCacheStore, llmCacheRepository>();
+builder.Services.AddKeyedScoped<IStepRunner, LlmChatStepRunner>("llm-chat");
+builder.Services.AddKeyedScoped<IStepRunner, ShellStepRunner>("shell");
+builder.Services.AddKeyedScoped<IStepRunner, CSharpStepRunner>("csharp");
+builder.Services.AddKeyedScoped<IStepRunner, FileMutateStepRunner>("file-mutate");
+builder.Services.AddKeyedScoped<IStepRunner, PythonStepRunner>("python");
+builder.Services.AddKeyedScoped<IStepRunner, NodeStepRunner>("node");
+builder.Services.AddKeyedScoped<IStepRunner, FileFrontmatterStepRunner>("file-frontmatter");
+builder.Services.AddKeyedScoped<IStepRunner, HttpStepRunner>("http");
+
+// HTTP step runner uses IHttpClientFactory for socket + DNS lifecycle.
+// Two named clients differ on redirect behavior; the runner picks at
+// request time based on the `follow_redirects` input.
+builder.Services.AddHttpClient(
+    "creuser-http",
+    c =>
+    {
+        // 60s is the outer wall — the runner's per-request `timeout_seconds`
+        // (default 30) and per-step `budgets.max_duration_seconds` cap
+        // requests below this.
+        c.Timeout = TimeSpan.FromSeconds(60);
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("Creuser/0.1 (+http step runner)");
+    }
+);
+builder
+    .Services.AddHttpClient(
+        "creuser-http-noredirect",
+        c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(60);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("Creuser/0.1 (+http step runner)");
+        }
+    )
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+
+builder.Services.AddScoped<IWorkspaceWorkingTree, WorkspaceWorkingTree>();
+builder.Services.AddSingleton<IToolCatalog, BaselineToolCatalog>();
+builder.Services.AddScoped<JobExecutor>();
+
 // Capability registry. Add additional ICapabilityProvider registrations
 // here as new modules / plugins land; CapabilityRegistry composes whatever
 // providers it finds in DI.
+//
+//  - CoreCapabilityProvider: hand-curated catalog (stage 1). Shrinks as
+//    [AiCapability]-decorated endpoints absorb its entries.
+//  - EndpointAttributeProvider: scans the host assembly for [AiCapability]
+//    attributes (stage 2). Singleton — the reflection scan happens once.
+//  - Plugin-contributed providers (stage 3) plug in here once the loader
+//    lands.
 builder.Services.AddSingleton<ICapabilityProvider, CoreCapabilityProvider>();
+builder.Services.AddSingleton<ICapabilityProvider>(_ => new EndpointAttributeProvider());
 builder.Services.AddScoped<CapabilityRegistry>();
 builder.Services.AddScoped<AgentTools>();
 builder.Services.AddSignalR();
@@ -188,6 +247,8 @@ app.MapBrandingEndpoints();
 app.MapEnvironmentEndpoints();
 app.MapAgentsEndpoints();
 app.MapWorkspacesEndpoints();
+app.MapJobsEndpoints();
+app.MapToolsEndpoints();
 app.MapPingEndpoints();
 app.MapEchoEndpoints();
 app.MapHub<NotificationsHub>("/hub/notifications");

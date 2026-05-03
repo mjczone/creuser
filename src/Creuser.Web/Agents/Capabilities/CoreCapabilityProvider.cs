@@ -172,42 +172,8 @@ public sealed class CoreCapabilityProvider : ICapabilityProvider
             Mutates: true
         ),
         // ─── Settings → Workspaces ────────────────────────────────────────
-        new(
-            Id: "workspaces.list",
-            Topic: "workspaces",
-            Title: "Configured workspaces",
-            Description: "Browse the list of git repositories / S3 buckets the platform is connected to. Each workspace is the operational target for jobs, agents, and dashboards.",
-            Intents:
-            [
-                "list workspaces",
-                "show workspaces",
-                "what repos",
-                "what is connected",
-                "connected repositories",
-            ],
-            Route: "/settings/workspaces",
-            RequiresRole: Roles.Admin,
-            Mutates: false
-        ),
-        new(
-            Id: "workspaces.connect",
-            Topic: "workspaces",
-            Title: "Connect a new workspace",
-            Description: "Add a new git repository connection. Configure the repo URL, working branch (default `creuser/main`), source branch to sync from, and push mode (direct push vs pull request).",
-            Intents:
-            [
-                "add workspace",
-                "connect repo",
-                "connect repository",
-                "new workspace",
-                "add repo",
-                "configure repo",
-                "configure git",
-            ],
-            Route: "/settings/workspaces",
-            RequiresRole: Roles.Admin,
-            Mutates: true
-        ),
+        // Migrated to [AiCapability] attributes on WorkspacesEndpoints.List
+        // and WorkspacesEndpoints.Create — see EndpointAttributeProvider.
         // ─── Auth ─────────────────────────────────────────────────────────
         new(
             Id: "auth.changePassword",

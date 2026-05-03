@@ -32,7 +32,16 @@ public sealed class CapabilityRegistry
         foreach (var p in _providers)
             all.AddRange(await p.GetAsync(ctx, ct));
 
-        return all.Where(c => RoleAllows(ctx.Role, c.RequiresRole)).Distinct().ToList();
+        // Dedupe by Id (last write wins). Lets endpoint-anchored
+        // [AiCapability] attributes supersede stage-1 hand-written entries
+        // during the migration without duplicating in the AI's tool view.
+        // Also defends against accidental double-publication when two
+        // providers contribute overlapping Ids.
+        var byId = new Dictionary<string, Capability>(StringComparer.Ordinal);
+        foreach (var c in all)
+            byId[c.Id] = c;
+
+        return byId.Values.Where(c => RoleAllows(ctx.Role, c.RequiresRole)).ToList();
     }
 
     private static bool RoleAllows(string userRole, string requiredRole)

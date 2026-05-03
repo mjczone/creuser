@@ -44,7 +44,7 @@ The architecture below describes both the v1 destination and the current state. 
 
 **Deferred (in priority order):**
 
-- Stage 2 of the capability registry (`[AiCapability]` attribute + assembly scanner) — small follow-up.
+- ~~Stage 2 of the capability registry (`[AiCapability]` attribute + assembly scanner)~~ — shipped 2026-05-02. `EndpointAttributeProvider` reflects over the host assembly on startup and emits a `Capability` per `[AiCapability]`-decorated method. `CoreCapabilityProvider` shrinks as endpoints absorb its entries; the registry dedupes by `Id` so attribute-derived entries supersede stage-1 ones.
 - Per-workspace plugin enablement UI + `cr.workspace_plugins` join table — fits cleanly under the existing workspace settings shell.
 - Workflow engine (Marten + Wolverine + sagas) and the `cr.entities` projection.
 - Job scripts + first runners (`shell`, `csharp`, `llm-chat` reusing `AgentClientResolver`).
@@ -407,77 +407,413 @@ Updated:
 
 Multiple steps in a workflow each produce their own commit. The sequential commit history on the working branch IS the audit log of what the platform did. `git log creuser/main` is itself a useful debugging tool.
 
-## Workflow engine (deferred — design forward-looking)
+## Execution model
 
-Lands once Marten + Wolverine are pulled in. Workflows are Wolverine sagas backed by Marten's event store. A workflow definition is a class that yields steps. Steps are Wolverine messages.
+The execution model is the platform's core. It needs to flexibly chain *deterministic computation* (shell scripts, SQL, HTTP, file mutations) with *probabilistic computation* (LLM completions, tool loops, planners) while staying **inspectable, idempotent, replayable, and auditable**. Every claim the platform makes about a workspace must be traceable to a concrete sequence of step executions whose inputs, outputs, and side effects are recorded.
 
-Two flavors of step:
+This section is the architectural contract for everything below "what does the platform actually do." Job script CRUD, the runner registry, scheduling, durable orchestration, and the SPA-side run viewer are all surfaces over this model.
 
-**Static** — declared in the workflow definition at design time. Standard DAG semantics, dependencies between steps, retries, timeouts.
+### Vocabulary
 
-**Dynamic** — agentic steps can emit "spawn child workflow" or "insert step before resuming" messages back into the saga. The saga is the inspectable record — every step transition is an event in Marten — so the dashboard renders the full execution graph including dynamically-discovered branches.
+```
+Step       — atomic unit of work. Single shell command, single LLM call,
+             single batch of file mutations. Inputs typed, outputs typed,
+             side effects bounded.
+StepRunner — the .NET implementation of a step type. Registered in DI.
+             Plugins contribute additional StepRunners.
+Job        — a recipe that composes steps into a DAG (or a single step).
+             Stored as a JobScript with YAML frontmatter + a body.
+Run        — one execution of a Job with concrete inputs, producing a
+             commit (when the Job touches the working tree), step
+             artifacts, and an audit trail.
+Schedule   — an entry in cr.schedules that triggers a Job on cron, on
+             workspace sync, on git push, or on demand.
+Plan       — for plan-then-execute Jobs: the structured DAG emitted by an
+             llm-planner step that the rest of the Run executes.
+```
 
-Example: a SQL-DDL-parsing step encounters an undocumented table. It spawns a discovery sub-workflow that inspects how the table is used elsewhere in the codebase. That sub-workflow generates a documentation step that updates the DDL file. Original step resumes. Three explicit saga states, three step events, fully auditable.
+The hierarchy is intentional: **Jobs compose Steps, Runs execute Jobs, Schedules trigger Runs**. There is no other axis. Workflows in the original architecture sketch were a separate concept; in the actual implementation they collapse into Jobs that happen to have multi-step DAGs.
 
-Planning is *explicit*, not hidden in an LLM loop. A `PlannerAgent` produces a `WorkflowPlan` (a structured list of step descriptors with dependencies). The plan becomes a Wolverine saga. The planner can only emit plans against registered step types. This is the discipline that keeps the system inspectable.
+### Three execution patterns
 
-## Job scripts (deferred — design forward-looking)
+Every Job follows one of three patterns. The Run record carries which pattern was used so the audit UI can render appropriately.
 
-The frontmatter contract and runner registry are designed but not yet implemented in v0.1. The smallest pragmatic first step is the `llm-chat` runner using the existing `AgentClientResolver` — saved-prompt-as-job — followed by `shell` and `csharp`. The full set below describes the v1 endpoint:
+**1. Deterministic DAG** — every step is fixed at design time. Inputs flow between steps via declared bindings. The DAG is computed before execution starts; the runner walks it topologically. No LLM in the planning path.
 
-A job script is YAML frontmatter plus a body. Frontmatter declares:
+```
+[fetch_articles] → [parse_metadata] → [generate_index] → [commit]
+```
+
+This is the bread-and-butter shape: scheduled maintenance jobs, ingestion pipelines, batch transforms.
+
+**2. Plan-then-execute** — the first step is an `llm-planner` that emits a structured `JobPlan` (a list of step descriptors against the *registered* step types). The plan is persisted, then the rest of the Run executes the plan as if it were a deterministic DAG. The planner can only emit plans against types it knows about — the registry is the constraint.
+
+```
+[plan(goal: "audit business rules")] →
+  emits {steps: [
+    {type: "grep", args: {pattern: "@BusinessRule"}},
+    {type: "llm-chat", args: {prompt: "summarize findings", input: $1.matches}},
+    {type: "file-mutate", args: {path: "audit.md", op: "create", content: $2.summary}}
+  ]} →
+[grep] → [llm-chat] → [file-mutate]
+```
+
+The plan is immutable once persisted — replay takes the same plan, replays it deterministically (or with cached LLM responses).
+
+**3. Agentic** — an `llm-tool-loop` step is given a goal + a tool registry + budgets (max steps, max tokens). The loop iterates until the agent declares done or hits a budget. Each tool call is a recorded event. The "DAG" is post-hoc: it's whatever the agent did, not what we expected.
+
+Even the agentic pattern is bounded: tools have allow-lists, budgets are enforced, every tool call is logged, and file mutations are batched (see *File mutation discipline*) so the agent can't sneak past the audit boundary.
+
+The user — and the planner — choose which pattern to use *up front*. A Job declares its pattern in frontmatter. We don't try to detect it at runtime; that ambiguity costs inspectability.
+
+### The IStepRunner contract
+
+Lives in `Creuser.Core` so step type plugins don't need to depend on the web host:
+
+```csharp
+public interface IStepRunner
+{
+    /// <summary>Type discriminator — "shell", "llm-chat", "csharp", etc.</summary>
+    string StepType { get; }
+
+    /// <summary>JSON Schema for this step's inputs (frontmatter `parameters`).</summary>
+    StepInputSchema InputSchema { get; }
+
+    /// <summary>JSON Schema for this step's outputs (referenced by downstream step bindings).</summary>
+    StepOutputSchema OutputSchema { get; }
+
+    /// <summary>Execute. Cancellation respected; budgets enforced by the host.</summary>
+    Task<StepResult> ExecuteAsync(
+        StepContext ctx,
+        StepInputs inputs,
+        CancellationToken ct);
+}
+
+public sealed record StepContext(
+    Guid RunId,
+    Guid WorkspaceId,
+    string WorkspaceSlug,
+    string WorkingTreePath,         // <dataDir>/workspaces/<slug>/
+    Guid StepId,                    // unique within this run
+    string StepName,
+    IServiceProvider Services,      // host services: SecretsService, AgentClientResolver, ...
+    StepBudgets Budgets,
+    ILogger Logger
+);
+
+public sealed record StepResult(
+    StepStatus Status,              // Succeeded | Failed | Skipped | Paused
+    IReadOnlyDictionary<string, object?> Outputs,
+    IReadOnlyList<FileChange> FileChanges,    // batched into the Run's commit
+    IReadOnlyList<StepArtifact> Artifacts,    // logs, transcripts, generated files
+    long DurationMs,
+    long? TokensUsed,                          // LLM steps only
+    decimal? CostUsd,                          // LLM steps only
+    string? ErrorMessage,
+    string? ResumeToken                        // for steps that pause + resume
+);
+
+public sealed record FileChange(
+    string Path,                    // relative to workspace working tree
+    FileChangeOp Op,                // Create | Modify | Delete | Rename
+    string? RenameTo,
+    string? BeforeHash,             // sha256 of prior content; null for Create
+    string? AfterHash,               // sha256 of new content; null for Delete
+    string? Diff                     // unified diff text for Modify
+);
+
+public sealed record StepArtifact(
+    string Kind,                    // "stdout" | "stderr" | "transcript" | "generated-file" | ...
+    string Path,                    // <dataDir>/runs/<runId>/<stepId>/<kind>/<filename>
+    long Bytes,
+    string? ContentType
+);
+```
+
+Three properties of this contract worth calling out:
+
+- **No direct file writes.** A step doesn't touch the working tree directly — it returns `FileChange[]` and the Run's executor applies them transactionally at step end (see *File mutation discipline*). This guarantees that a step that fails halfway leaves no partial mutation.
+- **Budgets are enforced by the host, not the step.** Step runners don't need to count tokens or check timeouts — the executor wraps execution with budget enforcement. Steps that respect cancellation tokens get clean shutdowns; ones that don't get killed.
+- **`ResumeToken` enables pause + resume.** A step that needs to wait (rate-limit cooldown, human approval, long-running external job) sets `Status = Paused` + a `ResumeToken`. The executor persists the token and schedules a wake-up; resumption calls `ExecuteAsync` again with the prior `ResumeToken` available via `StepContext`.
+
+### Step type catalog
+
+Initial set, with implementation order. Every entry is a registered `IStepRunner`; plugins add more.
+
+| Type | Pattern | Description | Status |
+|---|---|---|---|
+| `llm-chat` | LLM | Single prompt → structured output (JSON Schema-validated) or free text. Cached by `(prompt-hash, model, temperature, response-format-hash)`. | **Shipped** |
+| `shell` | Deterministic | Run a shell command with a per-job allow-list. Stdout/stderr captured as artifacts. Working dir = workspace tree. Allow-list checked before any process spawns; jobs without `allowed_commands` declared reject every shell step. The Jobs editor's allow-list picker is sourced from `GET /api/tools` (`IToolCatalog`), which returns the curated baseline palette + plugin-contributed tools. | **Shipped** |
+| `csharp` | Deterministic | Single-file C# script via `dotnet run script.cs`. Honors `#:package` / `#:property` frontmatter directives. Source materialized to `${TMPDIR}/creuser-csharp-<runId>-<stepId>/script.cs`; cleanup is best-effort in finally. The `CREUSER_WORKING_TREE` env var is the reliable path-anchor — file-based apps may compile into intermediate build dirs, so scripts shouldn't rely on `Directory.GetCurrentDirectory()`. Allow-list semantics differ from `shell` because a .NET script can invoke arbitrary APIs; the security boundary is process-level (restricted env, bounded timeout), with real sandboxing reserved for post-v1 multi-tenant deployments. | **Shipped** |
+| `node` | Deterministic | Node.js script via `node script.js`. Restricted env (no inherited host secrets), 5-min default timeout, source captured as artifact for replay. v0.1 uses bare `node`; npm packages live in the workspace's `package.json` + `node_modules`; future `--deps` for inline `npx` resolution. The `:latest` fat image includes Node 24 LTS; the `:slim` image does not. | **Shipped** |
+| `python` | Deterministic | Python script via `uv run` (PEP 723 inline deps via `# /// script` headers; behaves as plain `python3` without the header). Source captured as artifact. The `:latest` fat image includes uv + Python 3.13; for `:slim`, install uv or shell-out to `python3`. | **Shipped** |
+| `http` | Deterministic | HTTP request → response body parsed. Inputs: `url`, `method` (default GET), `headers`, `query`, `body` (string or object), `body_type` (json / form / text), `timeout_seconds` (default 30), `follow_redirects` (default true), `parse` (auto / json / text / none), `expected_status` (override the 2xx default). Outputs: `status`, `headers`, `body` (capped at 256 KB inline; full bytes always in the `response.body` artifact), `body_truncated`, `parsed`, `latency_ms`, `content_type`, `url`. Built on `IHttpClientFactory` for socket / DNS lifecycle; SPA-shaped User-Agent. Caching is the next pass — wire shape is forward-compatible. SSRF posture: trust the operator (single-tenant on-prem); multi-tenant deployments need pre-flight IP allow/deny. | **Shipped** |
+| `sql` | Deterministic | Parameterized SQL against a configured connection. Reads only by default; writes opt-in. | Later |
+| `git` | Deterministic | Direct git ops on the workspace working tree (`log`, `diff`, `blame`, `show`, …). Read-only — mutations go through `file-mutate`. | Later |
+| `file-mutate` | Deterministic | Declarative file ops: `create`, `modify`, `delete`, `rename`. Returns `FileChange[]` without touching disk; the executor's `IWorkspaceWorkingTree.ApplyAndCommitAsync` is the only path that writes — for git workspaces it stages + commits per step (one commit per step, structured commit message); for local workspaces it writes directly. Path-escape protection. Sha256 before/after hashes recorded for audit. The `modify-patch` (unified diff) variant is intentionally deferred — full content replacement is the natural fit for LLM-generated mutations, and surgical refactors land via the post-v1 `code-edit` runner. | **Shipped** |
+| `file-frontmatter` | Deterministic | Add / update / remove YAML frontmatter on files of many types via the per-language dialect system (Markdown bare, C-style block-comment, Hash line-comment, HTML comment, SQL dash-comment). Auto-detects from extension; preserves shebangs on `.py` / `.sh`. Ops: `set` (merge), `unset` (remove keys), `replace` (overwrite block). Returns `FileChange[]` like `file-mutate`; the executor commits transactionally. The keystone of the metadata-driven index → code-gen workflow (see "Frontmatter as cross-file metadata"). | **Shipped** |
+| `code-edit` | Deterministic | AST-aware edits via tree-sitter or `ast-grep`. Surgical refactors that preserve formatting. | Later |
+| `llm-tool-loop` | Agentic | Bounded ReAct loop. Tool registry passed via `StepInputs`. Per-step budgets enforced by `ToolLoopRunner`. | Later |
+| `llm-planner` | LLM | Emits a structured `JobPlan` against the registered step types. Plan is persisted and immutable. | Later |
+| `wait` | Deterministic | Pause until time-of-day, until a webhook, or until a human approves. Uses the `Paused` + `ResumeToken` mechanism. | Later |
+
+Each runner declares both an **input schema** (what its `parameters` look like) and an **output schema** (what downstream steps can reference). The job script's frontmatter binds upstream outputs to downstream inputs via `$step_id.output_name` references.
+
+### Idempotency and caching
+
+Re-running the same Job with the same inputs should — for the *deterministic* parts of the run — produce the same outputs without re-doing the work. Re-running the LLM parts should hit a cache when the prompt is bit-identical.
+
+Two idempotency keys:
+
+- **Step idempotency key** = `sha256(stepType || normalized(inputs) || stepConfigHash)`. Computed before the runner is invoked. Two consecutive runs of the same Job with identical inputs hash to the same key per step.
+- **LLM cache key** (subset of step idempotency for `llm-*` types) = `sha256(model || prompt || systemPrompt || responseFormat || temperature)`. Tighter and used independently — a deterministic step that *contains* an LLM sub-call still benefits from the LLM cache even when the outer step's inputs differ slightly.
+
+Cache implementation:
+
+- **Step results** cached in `cr.step_results` keyed by step idempotency key + workspace id. TTL: indefinite. Manual invalidation via "force re-run" in the UI.
+- **LLM responses** cached in `cr.llm_cache` keyed by LLM cache key. TTL: 30 days (configurable). Includes token usage so cost reporting stays honest on cache hits.
+
+When a Run starts, the executor walks the DAG and skips any step whose idempotency key matches a `cr.step_results` row from a *previous successful Run on the same workspace*. The Run record marks those steps `Skipped` and references the prior result. Audit UI renders this clearly: "Step `parse_metadata` skipped — output identical to Run #42 step #2."
+
+### File mutation discipline
+
+The architectural rule: **the working tree is committed once per Step, not once per file change.** This is what gives sync and replay clean semantics.
+
+```
+[step starts]
+  step accumulates FileChange[] in memory
+  step ends successfully
+[executor stages all FileChange ops in the working tree]
+[executor commits with structured message linking to step]
+[step result records the commit SHA]
+```
+
+If a step fails partway through accumulating changes, the changes are discarded — the working tree never sees a partial mutation. This is non-negotiable for the audit invariant.
+
+Multiple steps in one Run produce multiple commits. The Run-level summary record points at the first and last commits; `git log <first>..<last>` is the audit trail of what the platform did during this Run.
+
+```
+[creuser] <step.name>  (run=<run_id> step=<step_id>)
+
+<human_summary_from_step_outputs>
+
+Step type: <type>
+Files changed:
+- src/foo.md  (modified)
+- docs/index.md  (created)
+- old/legacy.txt  (deleted)
+```
+
+### Auditability and replay
+
+Every Run produces a structured audit record. The wire shape:
+
+```csharp
+public sealed record JobRun(
+    Guid Id, Guid JobId, Guid WorkspaceId,
+    DateTime StartedAt, DateTime? CompletedAt,
+    JobRunStatus Status,                                     // Pending|Running|Paused|Succeeded|Failed|Cancelled
+    IReadOnlyDictionary<string, object?> InputParameters,
+    IReadOnlyList<JobRunStep> Steps,
+    string? StartCommitSha,                                  // working tree SHA at start
+    string? EndCommitSha,                                    // SHA after final commit (or StartCommitSha if no mutations)
+    Guid? ResumedFromRunId,                                  // if this run resumed a paused predecessor
+    Guid? PlanId,                                            // for plan-then-execute runs
+    string? FailureMessage,
+    long? TotalTokensUsed,
+    decimal? TotalCostUsd
+);
+
+public sealed record JobRunStep(
+    Guid Id, string StepType, string Name, int Position,
+    StepStatus Status,
+    DateTime StartedAt, DateTime? CompletedAt,
+    string IdempotencyKey,
+    Guid? CachedFromStepId,                                  // when status = Skipped
+    IReadOnlyDictionary<string, object?> Inputs,             // resolved bindings, before execution
+    IReadOnlyDictionary<string, object?>? Outputs,           // null until completion
+    IReadOnlyList<FileChange> FileChanges,                   // applied changes
+    string? CommitSha,                                       // commit produced by THIS step
+    long DurationMs,
+    long? TokensUsed,
+    decimal? CostUsd,
+    string? ErrorMessage,
+    string? ResumeToken
+);
+```
+
+**Replay** comes in three flavours:
+
+- **Cache replay (free)** — re-execute the Run with the same inputs; deterministic steps and LLM cache hits return prior outputs immediately. The Run completes in seconds, no external calls. Used for the "view this run reproducibly" UI affordance.
+- **Soft replay (cheap)** — same as above but force-misses the LLM cache. Re-runs LLM steps against the live provider; deterministic steps stay cached. Used to verify "would this run still pass with the latest model?"
+- **Hard replay (full)** — invalidate all caches; re-execute everything. Used to verify reproducibility end-to-end or to re-do a run after fixing an upstream input.
+
+LLM transcripts (full conversation including tool calls) are persisted as `StepArtifact`s under `<dataDir>/runs/<runId>/<stepId>/transcript/` and viewable in the SPA's `RunInspector` widget.
+
+### Job script storage and frontmatter
+
+Same dual-storage pattern as before — DB canonical, filesystem materialized — with the new step model expressed in frontmatter:
 
 ```yaml
 ---
-id: update-toc
-name: Update Table of Contents
-type: llm-tool-loop          # See "Job types" below
+id: ingest-arxiv-daily
+name: Ingest arXiv articles daily
+pattern: deterministic            # deterministic | plan-then-execute | agentic
 parameters:
   schema:
     type: object
     properties:
-      directory: { type: string }
-    required: [directory]
-cron: "0 2 * * *"            # Optional
-default_dependencies: []      # Other job IDs that must succeed first
-allowed_commands: [git, rg, fd]   # Allow-list for run_shell tool
+      topic: { type: string, default: "machine learning" }
+    required: [topic]
+schedule:
+  cron: "0 6 * * *"
+  trigger_on: ["sync"]            # also run after every workspace sync
+allowed_commands: [git, rg, fd]
 required_secrets: [anthropic.key]
-retry_policy:
-  max_attempts: 3
-  backoff: exponential
-timeout_seconds: 600
+budgets:
+  max_duration_seconds: 600
+  max_tokens: 50000
+  max_cost_usd: 0.50
+steps:
+  - id: fetch
+    type: http
+    inputs:
+      url: "https://export.arxiv.org/api/query?search_query=cat:cs.LG&max_results=50"
+  - id: parse
+    type: llm-chat
+    depends_on: [fetch]
+    inputs:
+      prompt: "Extract title, authors, abstract from each entry."
+      input: $fetch.body
+      response_format:
+        $schema_ref: "schemas/article-list.json"
+  - id: write
+    type: file-mutate
+    depends_on: [parse]
+    inputs:
+      ops:
+        - op: create
+          path: "research/$today/{{slug}}.md"
+          content: "{{frontmatter}}\n\n{{body}}"
+          for_each: $parse.articles
 ---
+# Body (optional, type-dependent — for single-step jobs the body is the prompt
+# or script; for multi-step jobs the steps are defined in frontmatter and the
+# body is documentation.)
 
-# Body — depends on `type`. For llm-tool-loop, this is the system prompt.
-You are a documentation maintenance agent...
+This job pulls fresh arXiv papers in cs.LG every morning and lands them under
+research/YYYY-MM-DD/. Idempotent on title-hash; re-running the same day is a
+no-op except for genuinely-new entries.
 ```
 
-### Job types (v1)
+For a *single-step* Job (the pragmatic 80% case), the frontmatter shrinks dramatically — `pattern: deterministic` with one inline step, or no `steps:` block at all and the body is the step's content (for `llm-chat` it's the prompt; for `csharp` it's the source file).
 
-Initial set of registered runners:
+Storage layout:
 
-- `shell` — bash command(s)
-- `node` — Node.js script
-- `python` — Python script (via `uv run`)
-- `csharp` — C# script as a single `.cs` file, executed via .NET 10 file-based apps (`dotnet run script.cs`). Frontmatter `#:package`/`#:property` directives are honored. See <https://learn.microsoft.com/en-us/dotnet/core/sdk/file-based-apps#cli-commands>.
-- `llm-chat` — single prompt, structured output, no tools
-- `llm-tool-loop` — bounded ReAct loop with tool registry
-- `llm-planner` — produces a structured WorkflowPlan
-- `http` — HTTP request with response parsing
-- `git` — direct git operations on a workspace
-- `sql` — parameterized SQL against a configured connection
+- `cr.job_scripts` — canonical record (frontmatter + body + version + status).
+- `<dataDir>/scripts/{type}/{id}.{ext}` — materialized for filesystem-based tooling, the IDE editor, git tracking by the workspace if admins want to commit them.
+- `cr.schedules` — cron / trigger entries. Separated because schedules can be edited without versioning the script.
+- `cr.job_runs` — Run audit records.
+- `cr.job_run_steps` — per-step audit records.
+- `cr.step_results` — idempotency cache.
+- `cr.llm_cache` — LLM response cache.
+- `cr.job_plans` — emitted plans (plan-then-execute pattern).
 
-### Storage
+Conflict policy when a script is edited in both DB and filesystem: last-write-wins with a timestamped version row in `cr.job_script_versions`. Operators see "this script changed in the repo since you last edited it" and can pick a side.
 
-Job scripts live in BOTH the database AND the filesystem, with the database canonical:
+### Scheduling
 
-- `cr.job_scripts` table is the source-of-truth
-- `/data/scripts/{type}/{id}.{ext}` is materialized from the DB by a sync job
-- Edit in the dashboard → DB updates first, filesystem follows
-- Edit in the repo → reverse sync detects the change, prompts to merge
-- Conflict policy: last-write-wins with audit trail
+Three trigger types in v1:
 
-This dual-storage matters for LLM-generated jobs: agent writes to DB with `status='draft'`, human reviews rendered diff in dashboard, approval flips status to `active` and triggers the filesystem/git sync. **No agent-generated code reaches the filesystem without human review.**
+- **Cron** — `cr.schedules.cron_expression` parsed by NCrontab. The platform's scheduler tick fires due jobs.
+- **Workspace sync** — `cr.schedules.trigger_on: ["sync"]` runs the job after every successful sync of its workspace.
+- **Manual / API** — `POST /api/jobs/{id}/run` with parameters.
+
+Future triggers (post-v1): git push (webhook), file-pattern change (sync diff intersected with a glob), HTTP webhook with body-as-input.
+
+### Durable execution: today vs. with Wolverine
+
+**Today (v0.1):** runs execute in-process via a `JobExecutor` service. Step results persist to Postgres after each step. If the host process dies mid-run, the Run is marked `Failed` on next startup with a "host crashed during execution" reason. Re-run from scratch (or from the last completed step, since prior steps are cached). Acceptable for single-instance on-prem, the v1 deployment shape.
+
+**With Wolverine (v1.x):** each step becomes a Wolverine message; the saga state is a Marten document. The executor becomes a Wolverine handler that durably progresses through the DAG. Host crashes resume cleanly because the saga is stored and step transitions are events. The `IStepRunner` contract doesn't change — only the dispatch mechanism does, so step implementations are agnostic.
+
+The current minimal `JobExecutor` (in-process, synchronous) and the future Wolverine-based one share the same `IStepRunner` registry, the same `StepResult` contract, and the same `cr.job_runs` audit shape. Migration is wiring-only.
+
+### What ships first (v0.1.x)
+
+The minimal pragmatic slice that exercises the model end-to-end:
+
+1. `IStepRunner` interface + `StepResult` / `FileChange` / `StepArtifact` records in `Creuser.Core`.
+2. `LlmChatStepRunner` in `Creuser.Scripting` — first registered runner. Uses existing `AgentClientResolver`. Supports JSON-Schema response format. Caches in `cr.llm_cache`.
+3. YAML frontmatter parser (YamlDotNet) — single-step jobs only at this stage; no multi-step DAG yet.
+4. `JobExecutor` — in-process synchronous runner that resolves inputs, invokes the runner, persists `JobRun` + `JobRunStep`, applies `FileChange` ops, commits.
+5. `cr.job_scripts`, `cr.job_runs`, `cr.job_run_steps`, `cr.llm_cache` tables (DapperMatic).
+6. CRUD endpoints for Jobs (admin); `POST /api/workspaces/{slug}/jobs/{jobId}/run` to trigger.
+7. SPA: workspace settings → Jobs page (list + edit + run), workspace home → recent runs.
+
+Subsequent slices add `shell` / `csharp` / `file-mutate` / `file-frontmatter` runners, then multi-step DAGs, then `llm-tool-loop`, then `llm-planner`, then schedules, then Wolverine.
+
+### Sandbox model (forward-looking)
+
+`run_shell` and the script runners (`shell`, `csharp`, `node`, `python`) enforce a per-job command allow-list declared in frontmatter. Anything outside the list returns "command not permitted." For arbitrary code execution, the runner spawns the script in a separate process under a non-root UID with bounded CPU / memory / timeout, in a working directory scoped to that run's tmp space. UID separation + ulimits are sufficient for single-tenant on-premise; real sandboxing (Firecracker, gVisor) is post-v1.
+
+LLM step inputs are also gated: the prompt that goes to the provider is composed *only* from declared inputs + the system prompt body. Secrets, environment values, audit logs, and other workspace state never enter prompts unless the job's frontmatter explicitly references them via `secrets: [name]` or `inputs: { entity_data: $query.results }`.
+
+### Frontmatter as cross-file metadata
+
+The `file-frontmatter` runner is more than a syntactic helper — it's the seam that lets the platform express *intent* about source files in a uniform way across languages. The same YAML grammar (delimited per-language: `---` for Markdown, `/* --- … --- */` for C-style, `# ---` for Hash, `<!-- --- … --- -->` for HTML, `-- ---` for SQL) becomes a metadata layer that downstream steps query, index, and act on.
+
+The pattern that emerges from chaining the registered runners:
+
+1. **Annotate** — `file-frontmatter` decorates source files with `category`, `domain`, `owner`, `description`, `signature`, `references`, etc. Works against any file whose extension matches a known dialect.
+2. **Index** — a `node` / `python` step (or, post-v1, a dedicated `index` runner) walks the workspace, parses the frontmatter from every annotated file, and emits a structured catalog (typically a JSON or Markdown index committed via `file-mutate`).
+3. **Reason** — `llm-chat` (or `llm-tool-loop`) reads the index and identifies gaps: missing methods, undocumented endpoints, unowned files, untested categories. Structured outputs (JSON Schema) keep the LLM's diagnosis machine-readable.
+4. **Generate** — `file-mutate` applies the LLM's proposed code changes as `create` or `modify` ops. The executor's transactional commit captures each step as an audit-trail-bearing commit.
+5. **Re-annotate** — the next iteration's `file-frontmatter` step adds metadata to the newly-generated files, which feeds back into step 2.
+
+This is the loop that makes Creuser a "self-improving repository" rather than a workflow runner. Recommended frontmatter keys to standardize on across files in a workspace:
+
+- `id` — stable identifier (often slug-ish).
+- `title` — short human label.
+- `description` — one-or-two-sentence what-this-is.
+- `category` / `domain` — taxonomy axes.
+- `owner` — team or person responsible.
+- `tags` — list of free-text labels.
+- `signature` — for code files: the public surface (function/class signature, exported names).
+- `references` — list of other entity ids this file links to (for graph queries).
+
+A workspace's index step can be as simple as:
+
+```yaml
+type: node
+allowed_commands: []
+inputs:
+  args: []
+---
+const fs = require('node:fs');
+const path = require('node:path');
+const root = process.env.CREUSER_WORKING_TREE;
+const out = [];
+function walk(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(p);
+    else {
+      const text = fs.readFileSync(p, 'utf8');
+      const fm = parseFrontmatter(text);  // small per-dialect helper
+      if (fm) out.push({ path: path.relative(root, p), ...fm });
+    }
+  }
+}
+walk(root);
+console.log(JSON.stringify(out, null, 2));
+```
+
+Pipe that into a `file-mutate` step that writes the index to `.creuser/index.json`, then an `llm-chat` step that takes the index as `input` and emits gap-fill instructions, then another `file-mutate` step that applies them. Five steps; the workspace gets richer on every run.
+
+### Image transformations (deferred)
+
+Image manipulation (resize / format conversion / optimization) is a natural future runner family — `image-transform` with declarative ops (`resize: {width, height}`, `convert: webp`, `optimize: {quality}`). It fits the same `FileChange[]`-returning pattern as `file-mutate`. The Docker fat image already includes the binaries that would back it (`magick` from ImageMagick, `oxipng`, `cwebp`); the runner itself is post-v1 work.
 
 ## Agent layer
 
@@ -524,11 +860,7 @@ These tools are distinct from the **assistant** tool registry below — the assi
 
 Bounded ReAct implementation. Takes a tool registry, a max-step budget, a max-token budget, and runs the loop. Tools are .NET methods decorated with attributes; the runner serializes them into the function-calling schema. Step transcripts are recorded as `AgentTrace` documents in Marten for inspection. The current chat endpoint short-circuits the loop via M.E.AI's `UseFunctionInvocation()`; the dedicated runner lands when the agent layer needs explicit budget control and trace recording.
 
-### Sandbox model (forward-looking)
-
-`run_shell` enforces a command allow-list per job, declared in frontmatter. Anything outside the list returns "command not permitted" to the agent. The agent can then try alternatives or report back.
-
-For arbitrary code execution (agent writes a Python script and wants to run it), the runner spawns the script in a separate process under a non-root UID with bounded CPU/memory/timeout, in a working directory scoped to that run's tmp space. No Linux-namespace gymnastics in v1; just UID separation and ulimits. Sufficient for single-tenant on-premise; would need real sandboxing (Firecracker, gVisor) if multi-tenancy ever became a requirement.
+See **Execution model → Sandbox model** above for the unified treatment that covers both `run_shell` and the script runners (`shell` / `csharp` / `node` / `python`).
 
 ## In-app AI assistant
 
@@ -559,7 +891,7 @@ Capabilities are produced by `ICapabilityProvider` implementations registered in
 The capability source-of-truth is meant to grow without disrupting consumers (chat endpoint, AI tools, frontend deep-links):
 
 1. **Code-resident list (current).** `CoreCapabilityProvider` returns a hand-curated `Capability[]` literal in C#. Edited alongside endpoint changes — a PR that adds a feature touches the same file. Type-checked, refactor-safe, easy to keep honest in code review.
-2. **`[AiCapability]` attributes (next).** Endpoint methods opt into discovery by carrying an attribute. A startup-time scanner reflects over the assembly and builds the static catalog automatically. Adding a feature with the attribute = automatically discoverable. The XML doc comment serves both OpenAPI summaries and the capability description.
+2. **`[AiCapability]` attributes (shipped).** Endpoint methods opt into discovery by carrying one or more `[AiCapability]` attributes — `[AiCapability("workspaces.list", "workspaces", "Configured workspaces", "...", "list workspaces", "show workspaces", Route = "/settings/workspaces", RequiresRole = Roles.Admin)]`. `EndpointAttributeProvider` reflects over the host assembly on construction and emits one `Capability` per attribute. Adding a feature with the attribute is automatically discoverable; one method may carry multiple attributes when several capabilities anchor on the same endpoint.
 3. **Plugin-contributed providers (when plugins land).** The architecture's plugin model already discovers DLLs from `/data/plugins/`; plugins implement `ICapabilityProvider` to declare their own capabilities. A consumer-application plugin contributing a `compas.process_map` entity kind ships a provider that emits `Capability` entries for editing process maps. **Plugins describe themselves to the AI** through the same registration mechanism they use for widgets and job runners — single contract, multiple sources.
 
 The AI tool registry, the chat endpoint, and the SPA's link-rendering all see capabilities through the same `CapabilityRegistry` interface regardless of which stage produced them.

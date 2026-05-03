@@ -16,4 +16,8 @@
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Creuser.Core\Creuser.Core.csproj" />
+  </ItemGroup>
 </Project>

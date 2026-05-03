@@ -14,6 +14,8 @@
         <div class="cr-brand" :title="productName">
           <span class="cr-brand-name">{{ productName }}</span>
         </div>
+        <span class="cr-brand-divider" aria-hidden="true">/</span>
+        <WorkspacePicker v-if="auth.isAuthenticated" />
         <q-space />
         <!-- TODO: global Cmd+K command palette. Lands once /api/search is implemented. -->
         <q-btn
@@ -155,6 +157,7 @@ import { useAuthStore } from 'stores/auth';
 import { useBrandingStore } from 'stores/branding';
 import AssistantPanel from 'components/AssistantPanel.vue';
 import ThemeModeToggle from 'components/ThemeModeToggle.vue';
+import WorkspacePicker from 'components/WorkspacePicker.vue';
 
 const $q = useQuasar();
 const route = useRoute();
@@ -174,23 +177,50 @@ interface NavItem {
   route: string;
 }
 
-// Top icons today: just Home. The workspace-scoped icon bar (dashboard
-// groups + standalone dashboards + workspace settings) lands once
-// /w/:slug/... routing exists. See architecture.md "Workspace navigation".
-const topNavItems: NavItem[] = [{ icon: 'home', label: 'Home', route: '/' }];
+// Whether the current route is rooted at /w/:slug/... — drives the icon-bar
+// variant. The workspace-scoped variant has Home pointing to the workspace
+// home and adds a Workspace Settings icon above Platform Settings.
+const isWorkspaceScoped = computed(() =>
+  route.matched.some((r) => r.meta.workspaceScoped === true),
+);
+const activeSlug = computed<string | null>(() =>
+  typeof route.params.workspaceSlug === 'string' ? route.params.workspaceSlug : null,
+);
+
+const topNavItems = computed<NavItem[]>(() => {
+  if (isWorkspaceScoped.value && activeSlug.value) {
+    return [
+      { icon: 'home', label: 'Home', route: `/w/${activeSlug.value}` },
+      // Dashboard groups + standalone dashboards land in the next pass.
+    ];
+  }
+  return [{ icon: 'home', label: 'Home', route: '/' }];
+});
 
 const bottomNavItems = computed(() => {
   const items: NavItem[] = [];
+  if (isWorkspaceScoped.value && activeSlug.value && auth.isAdmin) {
+    // Workspace Settings sits above Platform Settings — closer to the
+    // workspace dashboards, since it's where workspace admins live.
+    items.push({
+      icon: 'settings_applications',
+      label: 'Workspace settings',
+      route: `/w/${activeSlug.value}/settings`,
+    });
+  }
   if (auth.isAdmin) {
     items.push({ icon: 'settings', label: 'Platform settings', route: '/settings' });
   }
   return items;
 });
 
-const allNavItems = computed(() => [...topNavItems, ...bottomNavItems.value]);
+const allNavItems = computed(() => [...topNavItems.value, ...bottomNavItems.value]);
 
 function isNavActive(navRoute: string): boolean {
+  // Exact match for top-level Home routes (`/` and `/w/:slug`); prefix match
+  // for everything else so settings sub-pages stay highlighted.
   if (navRoute === '/') return route.path === '/';
+  if (navRoute.match(/^\/w\/[^/]+$/)) return route.path === navRoute;
   return route.path === navRoute || route.path.startsWith(navRoute + '/');
 }
 
@@ -239,6 +269,13 @@ async function logout() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.cr-brand-divider {
+  color: var(--cr-fg-tertiary);
+  font-size: 16px;
+  font-weight: 300;
+  user-select: none;
 }
 
 .cr-drawer {

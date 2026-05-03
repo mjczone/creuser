@@ -148,4 +148,37 @@ public static class Problems
                 Detail = $"A workspace with slug '{slug}' already exists.",
             }
         );
+
+    public static ProblemHttpResult JobScriptNotFound(string identifier) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "job-script-not-found",
+                Title = "Job script not found",
+                Status = StatusCodes.Status404NotFound,
+                Detail = $"No job script exists matching '{identifier}'.",
+            }
+        );
+
+    public static ProblemHttpResult JobScriptSlugAlreadyExists(string slug) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "job-script-slug-already-exists",
+                Title = "Job script slug is already in use",
+                Status = StatusCodes.Status409Conflict,
+                Detail = $"A job script with slug '{slug}' already exists in this workspace.",
+            }
+        );
+
+    public static ProblemHttpResult JobRunNotFound(Guid id) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "job-run-not-found",
+                Title = "Job run not found",
+                Status = StatusCodes.Status404NotFound,
+                Detail = $"No job run exists with id '{id}'.",
+            }
+        );
 }

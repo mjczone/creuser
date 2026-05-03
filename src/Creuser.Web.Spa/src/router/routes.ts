@@ -21,6 +21,63 @@ const routes: RouteRecordRaw[] = [
           description: 'Workspace picker — pick a workspace to enter.',
         },
       },
+      // Workspace-scoped routes share the same MainLayout as platform routes;
+      // the layout reads `meta.workspaceScoped` to decide whether to render
+      // the workspace icon-bar variant. Nested route metadata bubbles up via
+      // `route.matched`, so children inherit `workspaceScoped: true` for
+      // free.
+      {
+        path: 'w/:workspaceSlug',
+        name: 'workspace-home',
+        component: () => import('pages/workspace/WorkspaceHomePage.vue'),
+        meta: {
+          title: 'Home',
+          description: 'Workspace overview.',
+          workspaceScoped: true,
+        },
+      },
+      {
+        path: 'w/:workspaceSlug/d/:dashboardSlug',
+        name: 'workspace-dashboard',
+        component: () => import('pages/workspace/DashboardPlaceholderPage.vue'),
+        meta: { title: 'Dashboard', workspaceScoped: true },
+      },
+      {
+        path: 'w/:workspaceSlug/settings',
+        component: () => import('pages/workspace/WorkspaceSettingsPage.vue'),
+        meta: {
+          title: 'Workspace settings',
+          workspaceScoped: true,
+          requiresWorkspaceEditor: true,
+        },
+        children: [
+          {
+            path: '',
+            redirect: (to) => `/w/${String(to.params.workspaceSlug)}/settings/general`,
+          },
+          {
+            path: 'general',
+            name: 'workspace-settings-general',
+            component: () =>
+              import('pages/workspace/WorkspaceSettingsGeneralPage.vue'),
+            meta: { title: 'General', workspaceScoped: true, requiresWorkspaceEditor: true },
+          },
+          {
+            path: 'plugins',
+            name: 'workspace-settings-plugins',
+            component: () =>
+              import('pages/workspace/WorkspaceSettingsPluginsPage.vue'),
+            meta: { title: 'Plugins', workspaceScoped: true, requiresWorkspaceEditor: true },
+          },
+          {
+            path: 'jobs',
+            name: 'workspace-settings-jobs',
+            component: () =>
+              import('pages/workspace/WorkspaceSettingsJobsPage.vue'),
+            meta: { title: 'Jobs', workspaceScoped: true, requiresWorkspaceEditor: true },
+          },
+        ],
+      },
       {
         path: 'settings',
         component: () => import('pages/settings/SettingsPage.vue'),

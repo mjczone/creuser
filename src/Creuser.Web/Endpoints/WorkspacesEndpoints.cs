@@ -6,6 +6,7 @@ using System.Text.Json;
 using Creuser.Auth.Abstractions;
 using Creuser.Auth.Core;
 using Creuser.Core.Repositories;
+using Creuser.Web.Agents.Capabilities;
 using Creuser.Web.Contracts;
 using Creuser.Web.Contracts.Requests;
 using Creuser.Web.Contracts.Responses;
@@ -55,10 +56,24 @@ public static class WorkspacesEndpoints
         group.MapDelete("/{slug}", (Delegate)Delete).WithName("DeleteWorkspace");
         group.MapPost("/test", (Delegate)TestConnection).WithName("TestWorkspaceConnection");
         group.MapPost("/{slug}/sync", (Delegate)Sync).WithName("SyncWorkspace");
+        group.MapGet("/{slug}/plugins", (Delegate)ListPlugins).WithName("ListWorkspacePlugins");
 
         return app;
     }
 
+    [AiCapability(
+        "workspaces.list",
+        "workspaces",
+        "Configured workspaces",
+        "Browse the list of git repositories / S3 buckets / local paths the platform is connected to. Each workspace is the operational target for jobs, agents, and dashboards.",
+        "list workspaces",
+        "show workspaces",
+        "what repos",
+        "what is connected",
+        "connected repositories",
+        Route = "/settings/workspaces",
+        RequiresRole = Roles.Admin
+    )]
     private static async Task<Ok<ApiResult<IReadOnlyList<WorkspaceResult>>>> List(
         IWorkspaceStore store,
         SecretsService secrets,
@@ -83,6 +98,23 @@ public static class WorkspacesEndpoints
             : TypedResults.Ok(new ApiResult<WorkspaceResult>(ToResult(ws, secrets)));
     }
 
+    [AiCapability(
+        "workspaces.connect",
+        "workspaces",
+        "Connect a new workspace",
+        "Add a new git repository or local-path connection. Configure the URL/path, working branch (default `creuser/main`), source branch to sync from, and push mode (direct push vs pull request).",
+        "add workspace",
+        "connect repo",
+        "connect repository",
+        "new workspace",
+        "add repo",
+        "configure repo",
+        "configure git",
+        "add local path",
+        Route = "/settings/workspaces",
+        RequiresRole = Roles.Admin,
+        Mutates = true
+    )]
     private static async Task<Results<Ok<ApiResult<WorkspaceResult>>, ProblemHttpResult>> Create(
         CreateWorkspaceRequest request,
         IValidator<CreateWorkspaceRequest> validator,
@@ -320,6 +352,47 @@ public static class WorkspacesEndpoints
     private sealed class TestConnectionMarker { }
 
     private sealed class SyncMarker { }
+
+    [AiCapability(
+        "workspaces.plugins",
+        "workspaces",
+        "Workspace plugins",
+        "Browse plugins loaded by the platform and toggle which ones are active for this workspace. The plugin loader reads `/data/plugins/*.dll` once at startup; per-workspace toggles gate which contributions show up in this workspace's job runner picker, widget palette, agent provider list, and capability registry.",
+        "manage plugins",
+        "enable plugins",
+        "disable plugin",
+        "workspace plugins",
+        "what plugins",
+        Route = "/w/:slug/settings/plugins",
+        RequiresRole = Roles.Admin
+    )]
+    private static async Task<
+        Results<Ok<ApiResult<WorkspacePluginsResult>>, ProblemHttpResult>
+    > ListPlugins(string slug, IWorkspaceStore store)
+    {
+        // Validate the slug resolves so the page can't be hit for a deleted
+        // or unknown workspace. Even though the loader-driven plugin list is
+        // empty today, the URL contract is "this workspace's plugins" — so
+        // the slug guard belongs here.
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+
+        // Plugin loader is deferred (see architecture.md "Plugin model").
+        // Return an empty list with an explainer note the SPA renders
+        // inline. The shape matches the eventual production wire shape so
+        // landing the loader doesn't move the contract.
+        return TypedResults.Ok(
+            new ApiResult<WorkspacePluginsResult>(
+                new WorkspacePluginsResult(
+                    Plugins: Array.Empty<WorkspacePluginInfo>(),
+                    Note: "Plugin loader not yet wired. Drop a Creuser plugin assembly under "
+                        + "`/data/plugins/` and restart the platform. Loaded plugins will appear "
+                        + "here for the workspace admin to enable per workspace."
+                )
+            )
+        );
+    }
 
     /// <summary>
     /// Sync the workspace's content. For git: clone (first time) or fetch +

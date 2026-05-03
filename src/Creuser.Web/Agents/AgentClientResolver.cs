@@ -14,7 +14,7 @@ namespace Creuser.Web.Agents;
 /// the API key from <see cref="SecretsService"/>, and delegates the actual
 /// client construction.
 /// </summary>
-public sealed class AgentClientResolver
+public sealed class AgentClientResolver : IChatClientResolver
 {
     private readonly IAppSettingsStore _settings;
     private readonly SecretsService _secrets;
@@ -29,6 +29,27 @@ public sealed class AgentClientResolver
         _settings = settings;
         _secrets = secrets;
         _factory = factory;
+    }
+
+    /// <summary>
+    /// <see cref="IChatClientResolver"/> contract — adapts the more
+    /// specific <see cref="ResolveAsync(string?, string?, CancellationToken)"/>
+    /// outcome to the cross-layer shape that <c>Creuser.Scripting</c>
+    /// (and future plugins) consume.
+    /// </summary>
+    async Task<ChatClientResolution> IChatClientResolver.ResolveAsync(
+        string? provider,
+        string? modelOverride,
+        CancellationToken ct
+    )
+    {
+        var outcome = await ResolveAsync(provider, modelOverride, ct);
+        return new ChatClientResolution(
+            Client: outcome.Client?.Client,
+            Provider: outcome.Client?.Provider,
+            Model: outcome.Client?.Model,
+            Reason: outcome.Reason
+        );
     }
 
     public sealed record ResolvedClient(
