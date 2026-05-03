@@ -208,6 +208,23 @@ export const ApiResultOfBrandingConfigSchema = {
   },
 } as const;
 
+export const ApiResultOfConventionsListResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/ConventionsListResult',
+        },
+      ],
+    },
+  },
+} as const;
+
 export const ApiResultOfCreateUserResultSchema = {
   required: ['result'],
   type: 'object',
@@ -242,6 +259,23 @@ export const ApiResultOfEchoResponseSchema = {
   },
 } as const;
 
+export const ApiResultOfEntityDetailSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/EntityDetail',
+        },
+      ],
+    },
+  },
+} as const;
+
 export const ApiResultOfEnvironmentConfigViewSchema = {
   required: ['result'],
   type: 'object',
@@ -266,6 +300,19 @@ export const ApiResultOfGuidSchema = {
     result: {
       type: ['null', 'string'],
       format: 'uuid',
+    },
+  },
+} as const;
+
+export const ApiResultOfIReadOnlyListOfEntitySummarySchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      type: ['null', 'array'],
+      items: {
+        $ref: '#/components/schemas/EntitySummary',
+      },
     },
   },
 } as const;
@@ -440,6 +487,23 @@ export const ApiResultOfScheduleResultSchema = {
         },
         {
           $ref: '#/components/schemas/ScheduleResult',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfSyncProjectionResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/SyncProjectionResult',
         },
       ],
     },
@@ -714,6 +778,68 @@ export const ChromeTokensSchema = {
   },
 } as const;
 
+export const ConventionLoadErrorSchema = {
+  required: ['source', 'message'],
+  type: 'object',
+  properties: {
+    source: {
+      type: ['null', 'string'],
+    },
+    message: {
+      type: 'string',
+    },
+  },
+} as const;
+
+export const ConventionsListResultSchema = {
+  required: ['conventions', 'errors'],
+  type: 'object',
+  properties: {
+    conventions: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/ConventionSummary',
+      },
+    },
+    errors: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/ConventionLoadError',
+      },
+    },
+  },
+} as const;
+
+export const ConventionSummarySchema = {
+  required: ['id', 'description', 'priority', 'glob', 'extends', 'contentHash', 'sourcePath'],
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+    },
+    description: {
+      type: ['null', 'string'],
+    },
+    priority: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    glob: {
+      type: 'string',
+    },
+    extends: {
+      type: ['null', 'string'],
+    },
+    contentHash: {
+      type: 'string',
+    },
+    sourcePath: {
+      type: ['null', 'string'],
+    },
+  },
+} as const;
+
 export const CreateJobScriptRequestSchema = {
   required: ['slug', 'name', 'description', 'pattern', 'frontmatter', 'body', 'status'],
   type: 'object',
@@ -863,6 +989,112 @@ export const EchoResponseSchema = {
   type: 'object',
   properties: {
     message: {
+      type: 'string',
+    },
+  },
+} as const;
+
+export const EntityDetailSchema = {
+  required: [
+    'id',
+    'kind',
+    'slug',
+    'path',
+    'conventionId',
+    'metadataJson',
+    'contentHash',
+    'lastSeenAt',
+    'refsOut',
+    'refsIn',
+  ],
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      format: 'uuid',
+    },
+    kind: {
+      type: 'string',
+    },
+    slug: {
+      type: 'string',
+    },
+    path: {
+      type: 'string',
+    },
+    conventionId: {
+      type: 'string',
+    },
+    metadataJson: {
+      type: 'string',
+    },
+    contentHash: {
+      type: 'string',
+    },
+    lastSeenAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+    refsOut: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/EntityRefSummary',
+      },
+    },
+    refsIn: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/EntityRefSummary',
+      },
+    },
+  },
+} as const;
+
+export const EntityRefSummarySchema = {
+  required: ['id', 'toEntityId', 'relationship', 'targetKind', 'targetSlug'],
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      format: 'uuid',
+    },
+    toEntityId: {
+      type: ['null', 'string'],
+      format: 'uuid',
+    },
+    relationship: {
+      type: 'string',
+    },
+    targetKind: {
+      type: ['null', 'string'],
+    },
+    targetSlug: {
+      type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const EntitySummarySchema = {
+  required: ['id', 'kind', 'slug', 'path', 'conventionId', 'contentHash'],
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      format: 'uuid',
+    },
+    kind: {
+      type: 'string',
+    },
+    slug: {
+      type: 'string',
+    },
+    path: {
+      type: 'string',
+    },
+    conventionId: {
+      type: 'string',
+    },
+    contentHash: {
       type: 'string',
     },
   },
@@ -1263,6 +1495,77 @@ export const PingResponseSchema = {
   },
 } as const;
 
+export const ProjectionReportSchema = {
+  required: [
+    'syncedAt',
+    'scanDurationMs',
+    'conventionCount',
+    'entitiesByKind',
+    'entityTotal',
+    'refsResolved',
+    'refsUnresolved',
+    'schemaFailures',
+    'conventionConflicts',
+    'conventionVersions',
+  ],
+  type: 'object',
+  properties: {
+    syncedAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+    scanDurationMs: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int64',
+    },
+    conventionCount: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    entitiesByKind: {
+      type: 'object',
+      additionalProperties: {
+        pattern: '^-?(?:0|[1-9]\\d*)$',
+        type: ['integer', 'string'],
+        format: 'int32',
+      },
+    },
+    entityTotal: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    refsResolved: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    refsUnresolved: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    schemaFailures: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    conventionConflicts: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    conventionVersions: {
+      type: 'object',
+      additionalProperties: {
+        type: 'string',
+      },
+    },
+  },
+} as const;
+
 export const ResetPasswordRequestSchema = {
   type: 'object',
   properties: {
@@ -1396,6 +1699,16 @@ export const SmtpConfigSchema = {
     },
     fromName: {
       type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const SyncProjectionResultSchema = {
+  required: ['report'],
+  type: 'object',
+  properties: {
+    report: {
+      $ref: '#/components/schemas/ProjectionReport',
     },
   },
 } as const;

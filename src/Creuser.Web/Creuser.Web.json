@@ -1455,6 +1455,175 @@
         }
       }
     },
+    "/api/workspaces/{slug}/conventions": {
+      "get": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "ListConventions",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConventionsListResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/entities": {
+      "get": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "QueryEntities",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entitySlug",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pathGlob",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfEntitySummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/entities/{kind}/{entitySlug}": {
+      "get": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "GetEntity",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entitySlug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEntityDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/projections/sync": {
+      "post": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "SyncProjection",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfSyncProjectionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ping": {
       "get": {
         "tags": [
@@ -1786,6 +1955,24 @@
           }
         }
       },
+      "ApiResultOfConventionsListResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConventionsListResult"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfCreateUserResult": {
         "required": [
           "result"
@@ -1822,6 +2009,24 @@
           }
         }
       },
+      "ApiResultOfEntityDetail": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EntityDetail"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfEnvironmentConfigView": {
         "required": [
           "result"
@@ -1852,6 +2057,23 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "ApiResultOfIReadOnlyListOfEntitySummary": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            }
           }
         }
       },
@@ -2059,6 +2281,24 @@
               },
               {
                 "$ref": "#/components/schemas/ScheduleResult"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfSyncProjectionResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SyncProjectionResult"
               }
             ]
           }
@@ -2432,6 +2672,94 @@
           }
         }
       },
+      "ConventionLoadError": {
+        "required": [
+          "source",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ConventionsListResult": {
+        "required": [
+          "conventions",
+          "errors"
+        ],
+        "type": "object",
+        "properties": {
+          "conventions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConventionSummary"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConventionLoadError"
+            }
+          }
+        }
+      },
+      "ConventionSummary": {
+        "required": [
+          "id",
+          "description",
+          "priority",
+          "glob",
+          "extends",
+          "contentHash",
+          "sourcePath"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "priority": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "glob": {
+            "type": "string"
+          },
+          "extends": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "sourcePath": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CreateJobScriptRequest": {
         "required": [
           "slug",
@@ -2625,6 +2953,131 @@
         "type": "object",
         "properties": {
           "message": {
+            "type": "string"
+          }
+        }
+      },
+      "EntityDetail": {
+        "required": [
+          "id",
+          "kind",
+          "slug",
+          "path",
+          "conventionId",
+          "metadataJson",
+          "contentHash",
+          "lastSeenAt",
+          "refsOut",
+          "refsIn"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "conventionId": {
+            "type": "string"
+          },
+          "metadataJson": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "refsOut": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityRefSummary"
+            }
+          },
+          "refsIn": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityRefSummary"
+            }
+          }
+        }
+      },
+      "EntityRefSummary": {
+        "required": [
+          "id",
+          "toEntityId",
+          "relationship",
+          "targetKind",
+          "targetSlug"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "toEntityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "relationship": {
+            "type": "string"
+          },
+          "targetKind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetSlug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "EntitySummary": {
+        "required": [
+          "id",
+          "kind",
+          "slug",
+          "path",
+          "conventionId",
+          "contentHash"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "conventionId": {
+            "type": "string"
+          },
+          "contentHash": {
             "type": "string"
           }
         }
@@ -3124,6 +3577,100 @@
           }
         }
       },
+      "ProjectionReport": {
+        "required": [
+          "syncedAt",
+          "scanDurationMs",
+          "conventionCount",
+          "entitiesByKind",
+          "entityTotal",
+          "refsResolved",
+          "refsUnresolved",
+          "schemaFailures",
+          "conventionConflicts",
+          "conventionVersions"
+        ],
+        "type": "object",
+        "properties": {
+          "syncedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scanDurationMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "conventionCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "entitiesByKind": {
+            "type": "object",
+            "additionalProperties": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          "entityTotal": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "refsResolved": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "refsUnresolved": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "schemaFailures": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "conventionConflicts": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "conventionVersions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "ResetPasswordRequest": {
         "type": "object",
         "properties": {
@@ -3299,6 +3846,17 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "SyncProjectionResult": {
+        "required": [
+          "report"
+        ],
+        "type": "object",
+        "properties": {
+          "report": {
+            "$ref": "#/components/schemas/ProjectionReport"
           }
         }
       },
@@ -3803,6 +4361,9 @@
     },
     {
       "name": "Schedules"
+    },
+    {
+      "name": "Projections"
     },
     {
       "name": "Diagnostics"

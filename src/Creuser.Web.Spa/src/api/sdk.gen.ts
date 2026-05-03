@@ -40,6 +40,8 @@ import type {
   GetBrandingResponses,
   GetCurrentUserData,
   GetCurrentUserResponses,
+  GetEntityData,
+  GetEntityResponses,
   GetEnvironmentData,
   GetEnvironmentResponses,
   GetJobData,
@@ -48,6 +50,8 @@ import type {
   GetRunResponses,
   GetWorkspaceData,
   GetWorkspaceResponses,
+  ListConventionsData,
+  ListConventionsResponses,
   ListEnvironmentSecretsData,
   ListEnvironmentSecretsResponses,
   ListJobRunsData,
@@ -72,6 +76,8 @@ import type {
   LogoutResponses,
   PingData,
   PingResponses,
+  QueryEntitiesData,
+  QueryEntitiesResponses,
   ResetUserPasswordData,
   ResetUserPasswordResponses,
   RunJobData,
@@ -82,6 +88,8 @@ import type {
   SetUserActiveResponses,
   SetUserRoleData,
   SetUserRoleResponses,
+  SyncProjectionData,
+  SyncProjectionResponses,
   SyncWorkspaceData,
   SyncWorkspaceResponses,
   TestWorkspaceConnectionData,
@@ -598,6 +606,44 @@ export class Schedules {
   ) {
     return (options.client ?? client).post<FireScheduleResponses, unknown, ThrowOnError>({
       url: '/api/workspaces/{slug}/schedules/{scheduleId}/fire',
+      ...options,
+    });
+  }
+}
+
+export class Projections {
+  public static listConventions<ThrowOnError extends boolean = false>(
+    options: Options<ListConventionsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListConventionsResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/conventions',
+      ...options,
+    });
+  }
+
+  public static queryEntities<ThrowOnError extends boolean = false>(
+    options: Options<QueryEntitiesData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<QueryEntitiesResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/entities',
+      ...options,
+    });
+  }
+
+  public static getEntity<ThrowOnError extends boolean = false>(
+    options: Options<GetEntityData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<GetEntityResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/entities/{kind}/{entitySlug}',
+      ...options,
+    });
+  }
+
+  public static syncProjection<ThrowOnError extends boolean = false>(
+    options: Options<SyncProjectionData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<SyncProjectionResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/projections/sync',
       ...options,
     });
   }

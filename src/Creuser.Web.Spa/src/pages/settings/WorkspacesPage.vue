@@ -3,10 +3,9 @@
     <header class="cr-ws-header">
       <h1 class="text-h5 q-ma-none">Workspaces</h1>
       <p class="cr-ws-subhead">
-        Configured repository connections. Each workspace is an operational
-        target for jobs, agents, and dashboards. v1 supports git repos and
-        local filesystem paths — S3 lands later. Sync clones (first time)
-        or fetches + resets to the working branch.
+        Configured repository connections. Each workspace is an operational target for jobs, agents,
+        and dashboards. v1 supports git repos and local filesystem paths — S3 lands later. Sync
+        clones (first time) or fetches + resets to the working branch.
       </p>
     </header>
 
@@ -186,122 +185,125 @@
                 outlined
               />
 
-            <div class="cr-ws-auth-row">
-              <span class="cr-ws-auth-label">Authentication</span>
-              <q-chip
-                v-if="editingSlug && currentWorkspace?.authSecretPresent"
+              <div class="cr-ws-auth-row">
+                <span class="cr-ws-auth-label">Authentication</span>
+                <q-chip
+                  v-if="editingSlug && currentWorkspace?.authSecretPresent"
+                  dense
+                  outline
+                  color="positive"
+                  text-color="positive"
+                  class="cr-ws-auth-chip"
+                >
+                  Credential set
+                </q-chip>
+                <q-chip
+                  v-else-if="editingSlug && form.authMode !== 'none'"
+                  dense
+                  outline
+                  color="grey-6"
+                  text-color="grey-6"
+                  class="cr-ws-auth-chip"
+                >
+                  Optional · Not set
+                </q-chip>
+              </div>
+              <q-btn-toggle
+                v-model="form.authMode"
+                :options="authModeOptions"
+                unelevated
+                no-caps
+                toggle-color="primary"
+                class="cr-ws-toggle"
+              />
+
+              <q-input
+                v-if="form.authMode === 'https-pat'"
+                v-model="form.authCredential"
+                :type="showSecret ? 'text' : 'password'"
+                label="Personal Access Token"
+                :hint="
+                  editingSlug && currentWorkspace?.authSecretPresent
+                    ? 'Leave blank to keep the existing token. Type a new one to rotate.'
+                    : 'Paste your PAT. Stored at /data/secrets/workspace-' +
+                      form.slug +
+                      '.pat (chmod 600).'
+                "
                 dense
-                outline
-                color="positive"
-                text-color="positive"
-                class="cr-ws-auth-chip"
+                outlined
+                autocomplete="off"
               >
-                Credential set
-              </q-chip>
-              <q-chip
-                v-else-if="editingSlug && form.authMode !== 'none'"
+                <template #append>
+                  <q-icon
+                    :name="showSecret ? 'visibility_off' : 'visibility'"
+                    class="cursor-pointer"
+                    @click="showSecret = !showSecret"
+                  />
+                </template>
+              </q-input>
+
+              <q-input
+                v-if="form.authMode === 'ssh-key'"
+                v-model="form.authCredential"
+                type="textarea"
+                label="OpenSSH private key"
+                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
+                :hint="
+                  editingSlug && currentWorkspace?.authSecretPresent
+                    ? 'Leave blank to keep the existing key. Paste a new one to rotate.'
+                    : 'Paste the full key. Stored at /data/secrets/workspace-' +
+                      form.slug +
+                      '.key (chmod 600). Generate-keypair flow lands next pass.'
+                "
                 dense
-                outline
-                color="grey-6"
-                text-color="grey-6"
-                class="cr-ws-auth-chip"
-              >
-                Optional · Not set
-              </q-chip>
-            </div>
-            <q-btn-toggle
-              v-model="form.authMode"
-              :options="authModeOptions"
-              unelevated
-              no-caps
-              toggle-color="primary"
-              class="cr-ws-toggle"
-            />
+                outlined
+                autogrow
+                input-class="cr-ws-key-input"
+                autocomplete="off"
+              />
 
-            <q-input
-              v-if="form.authMode === 'https-pat'"
-              v-model="form.authCredential"
-              :type="showSecret ? 'text' : 'password'"
-              label="Personal Access Token"
-              :hint="
-                editingSlug && currentWorkspace?.authSecretPresent
-                  ? 'Leave blank to keep the existing token. Type a new one to rotate.'
-                  : 'Paste your PAT. Stored at /data/secrets/workspace-' + form.slug + '.pat (chmod 600).'
-              "
-              dense
-              outlined
-              autocomplete="off"
-            >
-              <template #append>
-                <q-icon
-                  :name="showSecret ? 'visibility_off' : 'visibility'"
-                  class="cursor-pointer"
-                  @click="showSecret = !showSecret"
-                />
-              </template>
-            </q-input>
-
-            <q-input
-              v-if="form.authMode === 'ssh-key'"
-              v-model="form.authCredential"
-              type="textarea"
-              label="OpenSSH private key"
-              placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
-              :hint="
-                editingSlug && currentWorkspace?.authSecretPresent
-                  ? 'Leave blank to keep the existing key. Paste a new one to rotate.'
-                  : 'Paste the full key. Stored at /data/secrets/workspace-' + form.slug + '.key (chmod 600). Generate-keypair flow lands next pass.'
-              "
-              dense
-              outlined
-              autogrow
-              input-class="cr-ws-key-input"
-              autocomplete="off"
-            />
-
-            <div class="cr-ws-section-title">Branching</div>
-            <q-input
-              v-model="form.workingBranch"
-              label="Working branch"
-              hint="Branch the platform commits to. Default: creuser/main"
-              dense
-              outlined
-            />
-            <q-input
-              v-model="form.sourceBranch"
-              label="Source branch"
-              hint="Branch to sync content from."
-              dense
-              outlined
-            />
-            <q-select
-              v-model="form.mode"
-              :options="modeOptions"
-              label="Mode"
-              dense
-              outlined
-              emit-value
-              map-options
-            />
-            <q-select
-              v-model="form.pushFrequency"
-              :options="pushFrequencyOptions"
-              label="Push frequency"
-              dense
-              outlined
-              emit-value
-              map-options
-            />
+              <div class="cr-ws-section-title">Branching</div>
+              <q-input
+                v-model="form.workingBranch"
+                label="Working branch"
+                hint="Branch the platform commits to. Default: creuser/main"
+                dense
+                outlined
+              />
+              <q-input
+                v-model="form.sourceBranch"
+                label="Source branch"
+                hint="Branch to sync content from."
+                dense
+                outlined
+              />
+              <q-select
+                v-model="form.mode"
+                :options="modeOptions"
+                label="Mode"
+                dense
+                outlined
+                emit-value
+                map-options
+              />
+              <q-select
+                v-model="form.pushFrequency"
+                :options="pushFrequencyOptions"
+                label="Push frequency"
+                dense
+                outlined
+                emit-value
+                map-options
+              />
             </template>
 
             <template v-if="form.type === 'local'">
               <div class="cr-ws-section-title">Local path</div>
               <p class="cr-ws-local-hint">
-                A filesystem path the Creuser process can read (and optionally write).
-                In Docker deployments, this is typically a mounted volume
-                (<code>/workspaces/myrepo</code>); in dev / on-host runs it can be any
-                directory. No checkout / commits / branches — writes go directly to
-                disk.
+                A filesystem path the Creuser process can read (and optionally write). In Docker
+                deployments, this is typically a mounted volume (<code>/workspaces/myrepo</code>);
+                in dev / on-host runs it can be any directory. No checkout / commits / branches —
+                writes go directly to disk.
               </p>
               <q-input
                 v-model="form.localPath"
@@ -363,11 +365,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useQuasar, type QTableColumn } from 'quasar';
-import {
-  Workspaces,
-  type WorkspaceConnectionTestResult,
-  type WorkspaceResult,
-} from 'src/api';
+import { Workspaces, type WorkspaceConnectionTestResult, type WorkspaceResult } from 'src/api';
 import StatusBanner from 'components/StatusBanner.vue';
 
 const $q = useQuasar();
@@ -408,7 +406,7 @@ const form = reactive<FormState>(emptyForm());
 // chip and the "leave blank to keep existing" hint copy on the credential
 // input. Recomputed from the source list whenever the dialog opens.
 const currentWorkspace = computed<WorkspaceResult | null>(() =>
-  editingSlug.value ? workspaces.value.find((w) => w.slug === editingSlug.value) ?? null : null,
+  editingSlug.value ? (workspaces.value.find((w) => w.slug === editingSlug.value) ?? null) : null,
 );
 
 // Whether the form has enough type-specific input to attempt a test.
@@ -691,9 +689,7 @@ async function onSync(ws: WorkspaceResult, force = false) {
 
     if (result?.ok) {
       const fallback =
-        ws.type === 'local'
-          ? `Path verified for ${ws.slug}.`
-          : `Workspace ${ws.slug} synced.`;
+        ws.type === 'local' ? `Path verified for ${ws.slug}.` : `Workspace ${ws.slug} synced.`;
       $q.notify({
         type: 'positive',
         position: 'top',

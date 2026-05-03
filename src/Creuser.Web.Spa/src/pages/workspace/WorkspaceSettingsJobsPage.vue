@@ -14,17 +14,15 @@
         />
       </div>
       <p class="cr-jobs-subhead">
-        Job scripts compose steps (LLM calls, scripts, file mutations, frontmatter
-        edits, HTTP requests) into runs. Each run is recorded with full audit —
-        inputs, outputs, token usage, file changes, commit SHAs, replay handles.
-        Single-step jobs declare a top-level <code>type:</code> + body; multi-step
-        jobs declare a <code>steps:</code> array with <code>depends_on</code> +
-        <code>$step_id.field</code> bindings between them. Available step types:
-        <code>llm-chat</code>, <code>llm-tool-loop</code>, <code>shell</code>,
-        <code>csharp</code>, <code>python</code>, <code>node</code>,
-        <code>file-mutate</code>, <code>file-frontmatter</code>, and
-        <code>http</code>. The plan-then-execute pattern (<code>llm-planner</code>)
-        lands in a subsequent pass.
+        Job scripts compose steps (LLM calls, scripts, file mutations, frontmatter edits, HTTP
+        requests) into runs. Each run is recorded with full audit — inputs, outputs, token usage,
+        file changes, commit SHAs, replay handles. Single-step jobs declare a top-level
+        <code>type:</code> + body; multi-step jobs declare a <code>steps:</code> array with
+        <code>depends_on</code> + <code>$step_id.field</code> bindings between them. Available step
+        types: <code>llm-chat</code>, <code>llm-tool-loop</code>, <code>shell</code>,
+        <code>csharp</code>, <code>python</code>, <code>node</code>, <code>file-mutate</code>,
+        <code>file-frontmatter</code>, and <code>http</code>. The plan-then-execute pattern
+        (<code>llm-planner</code>) lands in a subsequent pass.
       </p>
     </header>
 
@@ -95,8 +93,7 @@
     <header class="cr-jobs-header q-mt-lg">
       <h2 class="text-h6 q-ma-none">Recent runs</h2>
       <p class="cr-jobs-subhead">
-        Most recent <strong>{{ recentRuns.length }}</strong> runs across this
-        workspace's jobs.
+        Most recent <strong>{{ recentRuns.length }}</strong> runs across this workspace's jobs.
       </p>
     </header>
 
@@ -134,8 +131,8 @@
         <q-card-section>
           <div class="text-h6">{{ editingId ? 'Edit job' : 'New job' }}</div>
           <div class="text-caption" :style="{ color: 'var(--cr-fg-secondary)' }">
-            v0.1: single-step jobs. Frontmatter declares the runner type
-            (<code>type: llm-chat</code>); body becomes the prompt.
+            v0.1: single-step jobs. Frontmatter declares the runner type (<code>type: llm-chat</code
+            >); body becomes the prompt.
           </div>
         </q-card-section>
         <q-card-section>
@@ -223,16 +220,9 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue';
 import { useQuasar, type QTableColumn } from 'quasar';
-import {
-  Jobs,
-  type JobRunResult,
-  type JobScriptResult,
-} from 'src/api';
+import { Jobs, type JobRunResult, type JobScriptResult } from 'src/api';
 import { useActiveWorkspace } from 'src/composables/useActiveWorkspace';
-import {
-  injectAllowedCommands,
-  splitAllowedCommands,
-} from 'src/composables/jobYamlHelpers';
+import { injectAllowedCommands, splitAllowedCommands } from 'src/composables/jobYamlHelpers';
 import ToolPicker from 'components/ToolPicker.vue';
 
 const $q = useQuasar();
@@ -292,11 +282,22 @@ const cols: QTableColumn<JobScriptResult>[] = [
 
 const runCols: QTableColumn<JobRunResult>[] = [
   { name: 'startedAt', label: 'When', field: 'startedAt', align: 'left' },
-  { name: 'jobScriptId', label: 'Job', field: 'jobScriptId', align: 'left',
-    format: (v: unknown) => jobs.value.find((j) => j.jobScriptId === v)?.name ?? String(v).slice(0, 8) },
+  {
+    name: 'jobScriptId',
+    label: 'Job',
+    field: 'jobScriptId',
+    align: 'left',
+    format: (v: unknown) =>
+      jobs.value.find((j) => j.jobScriptId === v)?.name ?? String(v).slice(0, 8),
+  },
   { name: 'status', label: 'Status', field: 'status', align: 'left' },
-  { name: 'durationMs', label: 'Duration', field: 'durationMs', align: 'right',
-    format: (v: unknown) => `${typeof v === 'number' ? v : 0}ms` },
+  {
+    name: 'durationMs',
+    label: 'Duration',
+    field: 'durationMs',
+    align: 'right',
+    format: (v: unknown) => `${typeof v === 'number' ? v : 0}ms`,
+  },
   { name: 'tokens', label: 'Tokens', field: 'totalTokensUsed', align: 'right' },
 ];
 
@@ -340,7 +341,6 @@ function emptyForm(): FormState {
     allowedCommands: [],
   };
 }
-
 
 async function load() {
   if (!slug.value) return;
@@ -467,7 +467,7 @@ async function onRun(job: JobScriptResult) {
       position: 'top',
       message: ok
         ? `${job.name}: ${result?.totalTokensUsed ?? 0} tokens, ${result?.durationMs ?? 0}ms`
-        : result?.failureMessage ?? 'Run failed.',
+        : (result?.failureMessage ?? 'Run failed.'),
       timeout: 6000,
     });
     void loadRuns();

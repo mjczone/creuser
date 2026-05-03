@@ -3,8 +3,8 @@
     <header class="cr-wsgen-header">
       <h1 class="text-h5 q-ma-none">General</h1>
       <p class="cr-wsgen-subhead">
-        Workspace name, description, and sync cadence. Editing this from inside the
-        workspace lands soon — for now, edit via
+        Workspace name, description, and sync cadence. Editing this from inside the workspace lands
+        soon — for now, edit via
         <router-link to="/settings/workspaces" class="cr-wsgen-link">
           Platform Settings → Workspaces </router-link
         >.

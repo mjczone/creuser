@@ -410,6 +410,7 @@ public static class WorkspacesEndpoints
         ILogger<SyncMarker> logger,
         Creuser.Core.Execution.IScheduleStore scheduleStore,
         Creuser.Web.Schedules.IJobScheduleDispatcher dispatcher,
+        IServiceScopeFactory scopeFactory,
         CancellationToken ct,
         // Two-phase confirmation: a first call with force=false returns
         // RequiresForce=true (and the dirty count) when the working tree has
@@ -514,6 +515,56 @@ public static class WorkspacesEndpoints
                         slug
                     );
                 }
+
+                // Run the projection sync as a fire-and-forget continuation.
+                // Fresh DI scope per dispatch so the request scope's
+                // disposal doesn't tear down our dependencies. The
+                // projection sync is idempotent and full-rebuild — running
+                // it on every successful sync is the entire design.
+                var workspaceForProjection = existing;
+                _ = Task.Run(
+                    async () =>
+                    {
+                        await using var scope = scopeFactory.CreateAsyncScope();
+                        var sp = scope.ServiceProvider;
+                        var projectionSync =
+                            sp.GetRequiredService<Creuser.Core.Projections.IProjectionSyncService>();
+                        var workingTree =
+                            sp.GetRequiredService<Creuser.Core.Execution.IWorkspaceWorkingTree>();
+                        var projectionLogger = sp.GetRequiredService<ILogger<SyncMarker>>();
+                        try
+                        {
+                            var path = await workingTree.ResolvePathAsync(
+                                workspaceForProjection,
+                                CancellationToken.None
+                            );
+                            if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
+                                return;
+                            var report = await projectionSync.RunAsync(
+                                workspaceForProjection,
+                                path,
+                                CancellationToken.None
+                            );
+                            projectionLogger.LogInformation(
+                                "Projection sync for {Slug}: {Total} entities ({Resolved} refs resolved, {Unresolved} unresolved) in {Ms}ms",
+                                workspaceForProjection.Slug,
+                                report.EntityTotal,
+                                report.RefsResolved,
+                                report.RefsUnresolved,
+                                report.ScanDurationMs
+                            );
+                        }
+                        catch (Exception ex)
+                        {
+                            projectionLogger.LogError(
+                                ex,
+                                "Projection sync failed for {Slug} after workspace sync",
+                                workspaceForProjection.Slug
+                            );
+                        }
+                    },
+                    CancellationToken.None
+                );
             }
 
             return TypedResults.Ok(new ApiResult<WorkspaceSyncResult>(result));

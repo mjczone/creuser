@@ -91,12 +91,7 @@
 
       <template v-if="auth.isAdmin">
         <q-separator />
-        <q-item
-          clickable
-          v-close-popup
-          to="/settings/workspaces"
-          class="cr-wpicker-manage"
-        >
+        <q-item clickable v-close-popup to="/settings/workspaces" class="cr-wpicker-manage">
           <q-item-section avatar>
             <q-icon name="settings" size="16px" />
           </q-item-section>

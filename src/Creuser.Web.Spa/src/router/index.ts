@@ -41,9 +41,7 @@ export default defineRouter((/* { store, ssrContext } */) => {
     const isPublic = to.matched.some((r) => r.meta.public === true);
     const requiresAdmin = to.matched.some((r) => r.meta.requiresAdmin === true);
     const isWorkspaceScoped = to.matched.some((r) => r.meta.workspaceScoped === true);
-    const requiresWorkspaceEditor = to.matched.some(
-      (r) => r.meta.requiresWorkspaceEditor === true,
-    );
+    const requiresWorkspaceEditor = to.matched.some((r) => r.meta.requiresWorkspaceEditor === true);
 
     if (!auth.isAuthenticated && !isPublic) {
       return { name: 'login', query: { redirect: to.fullPath } };
@@ -55,8 +53,7 @@ export default defineRouter((/* { store, ssrContext } */) => {
       return { path: '/' };
     }
     if (isWorkspaceScoped) {
-      const slug =
-        typeof to.params.workspaceSlug === 'string' ? to.params.workspaceSlug : null;
+      const slug = typeof to.params.workspaceSlug === 'string' ? to.params.workspaceSlug : null;
       if (!slug) {
         return { path: '/' };
       }

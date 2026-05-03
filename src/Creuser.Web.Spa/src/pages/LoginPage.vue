@@ -57,9 +57,7 @@
         </q-form>
 
         <q-form v-else class="login-form" @submit.prevent="onPasswordChange">
-          <div class="password-change-notice">
-            You must change your password before continuing.
-          </div>
+          <div class="password-change-notice">You must change your password before continuing.</div>
 
           <q-input
             v-model="passwordForm.newPassword"
@@ -209,7 +207,8 @@ async function onPasswordChange() {
 .login-grid {
   position: absolute;
   inset: 0;
-  background-image: linear-gradient(var(--cr-border-subtle) 1px, transparent 1px),
+  background-image:
+    linear-gradient(var(--cr-border-subtle) 1px, transparent 1px),
     linear-gradient(90deg, var(--cr-border-subtle) 1px, transparent 1px);
   background-size: 40px 40px;
   mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);

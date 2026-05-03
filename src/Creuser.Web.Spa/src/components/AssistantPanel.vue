@@ -42,8 +42,7 @@
           <q-icon name="auto_awesome" size="32px" class="cr-assistant-empty-icon" />
           <p class="cr-assistant-empty-title">How can I help?</p>
           <p class="cr-assistant-empty-hint">
-            Ask anything. Currently I only see what you type — no per-screen
-            context yet.
+            Ask anything. Currently I only see what you type — no per-screen context yet.
           </p>
         </div>
 
@@ -65,7 +64,8 @@
                   :href="part.url"
                   class="cr-assistant-msg-link"
                   @click.prevent="onLinkClick(part.url)"
-                >{{ part.text }}</a>
+                  >{{ part.text }}</a
+                >
                 <span v-else>{{ part.text }}</span>
               </template>
             </div>

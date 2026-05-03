@@ -81,6 +81,30 @@ public sealed class DbInitializer : IHostedService
                 tx: null,
                 cancellationToken: cancellationToken
             );
+            await conn.CreateTableIfNotExistsAsync<entities>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
+            await conn.CreateTableIfNotExistsAsync<entity_refs>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
+
+            // GIN index on JSONB metadata — enables fast `metadata->>'key' = value`
+            // queries (used by matrix views + projection toolset filters).
+            // Postgres' `IF NOT EXISTS` makes this idempotent.
+            await conn.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_entities_metadata
+                        ON cr.entities USING GIN (metadata);
+                    CREATE INDEX IF NOT EXISTS idx_entity_refs_unresolved
+                        ON cr.entity_refs (workspace_id, target_kind, target_slug)
+                        WHERE to_entity_id IS NULL;
+                    """,
+                    cancellationToken: cancellationToken
+                )
+            );
 
             // Additive migrations on cr.workspaces. Postgres' `IF NOT EXISTS`
             // makes this idempotent — the columns get added once on the first

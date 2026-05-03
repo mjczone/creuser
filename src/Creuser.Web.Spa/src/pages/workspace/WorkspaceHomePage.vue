@@ -63,8 +63,8 @@
     <div class="cr-wshome-coming">
       <q-icon name="construction" size="18px" class="cr-wshome-coming-icon" />
       <span>
-        Workspace dashboards land in the next pass — the icon bar will populate with
-        Operations, plus any standalone dashboards or groups admins create.
+        Workspace dashboards land in the next pass — the icon bar will populate with Operations,
+        plus any standalone dashboards or groups admins create.
       </span>
     </div>
   </q-page>
@@ -84,8 +84,7 @@ function iconForType(type: string): string {
 }
 
 const locationLabel = computed(() => {
-  if (workspace.value?.gitSettings?.repositoryUrl)
-    return workspace.value.gitSettings.repositoryUrl;
+  if (workspace.value?.gitSettings?.repositoryUrl) return workspace.value.gitSettings.repositoryUrl;
   if (workspace.value?.localSettings?.path) return workspace.value.localSettings.path;
   return null;
 });

@@ -8,9 +8,8 @@
       <template #avatar>
         <q-icon name="construction" class="cr-dphold-icon" />
       </template>
-      Dashboards become composable surfaces in the next pass — dockview-vue layout,
-      widget palette, drag-and-drop. This is a placeholder to exercise the
-      workspace-scoped routing.
+      Dashboards become composable surfaces in the next pass — dockview-vue layout, widget palette,
+      drag-and-drop. This is a placeholder to exercise the workspace-scoped routing.
     </q-banner>
   </q-page>
 </template>

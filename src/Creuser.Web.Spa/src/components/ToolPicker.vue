@@ -8,8 +8,8 @@
     </div>
     <p v-if="modelValue.length === 0" class="cr-toolpicker-warning">
       <q-icon name="warning" size="14px" />
-      No commands selected — shell jobs will reject every script. Pick from below or
-      add custom binaries.
+      No commands selected — shell jobs will reject every script. Pick from below or add custom
+      binaries.
     </p>
 
     <div class="cr-toolpicker-selected">
@@ -25,9 +25,7 @@
       >
         {{ cmd }}
       </q-chip>
-      <span v-if="modelValue.length === 0" class="cr-toolpicker-empty">
-        (none)
-      </span>
+      <span v-if="modelValue.length === 0" class="cr-toolpicker-empty"> (none) </span>
     </div>
 
     <q-input

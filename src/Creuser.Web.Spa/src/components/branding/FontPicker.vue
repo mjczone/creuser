@@ -43,12 +43,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import {
-  fontsForType,
-  loadIfBundled,
-  lookupFont,
-  type FontType,
-} from 'src/css/fonts/registry';
+import { fontsForType, loadIfBundled, lookupFont, type FontType } from 'src/css/fonts/registry';
 
 interface Props {
   modelValue: string;
@@ -103,7 +98,9 @@ const selectedFontStyle = computed(() =>
   // Show the selected (closed-state) label rendered in its own font when
   // it's a known recipe; for custom values, fall through to the input's
   // own preview, since we can't know what font the user typed.
-  selectedId.value === 'custom' || selectedId.value === 'system-sans' || selectedId.value === 'system-mono'
+  selectedId.value === 'custom' ||
+  selectedId.value === 'system-sans' ||
+  selectedId.value === 'system-mono'
     ? {}
     : { fontFamily: selectedOption.value.cssFamily },
 );

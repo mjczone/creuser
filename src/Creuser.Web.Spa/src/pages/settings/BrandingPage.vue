@@ -3,8 +3,8 @@
     <header class="cr-branding-header">
       <h1 class="text-h5 q-ma-none">Branding</h1>
       <p class="cr-branding-subhead">
-        Logo, product name, color palette, chrome, typography. Changes apply
-        live as you edit; click <strong>Save</strong> to persist for everyone.
+        Logo, product name, color palette, chrome, typography. Changes apply live as you edit; click
+        <strong>Save</strong> to persist for everyone.
       </p>
     </header>
 
@@ -62,8 +62,8 @@
       >
         <div class="cr-branding-section-body">
           <p class="cr-branding-section-hint">
-            This is the fallback for users on <em>auto</em> whose browser has
-            no <code>prefers-color-scheme</code> signal.
+            This is the fallback for users on <em>auto</em> whose browser has no
+            <code>prefers-color-scheme</code> signal.
           </p>
           <q-btn-toggle
             v-model="draft.mode"
@@ -93,9 +93,8 @@
       >
         <div class="cr-branding-section-body">
           <p class="cr-branding-section-hint">
-            Picking a preset overwrites the palette + chrome (both modes)
-            below; identity, fonts, and custom CSS are preserved. Tweak
-            afterward to taste.
+            Picking a preset overwrites the palette + chrome (both modes) below; identity, fonts,
+            and custom CSS are preserved. Tweak afterward to taste.
           </p>
           <PalettePicker :active-id="activePresetId" @pick="onPickPreset" />
         </div>
@@ -114,9 +113,8 @@
       >
         <div class="cr-branding-section-body">
           <p class="cr-branding-section-hint">
-            Hex (or rgba) values. Leave blank to use the baked-in default.
-            The palette applies to both modes — for per-mode brand-color
-            tuning, use the Custom CSS section below.
+            Hex (or rgba) values. Leave blank to use the baked-in default. The palette applies to
+            both modes — for per-mode brand-color tuning, use the Custom CSS section below.
           </p>
 
           <div class="cr-branding-grid">
@@ -144,12 +142,10 @@
       >
         <div class="cr-branding-section-body">
           <p class="cr-branding-section-hint">
-            Background, foreground, and border tokens for the app shell.
-            You're editing values for
-            <strong>{{ chromeModeLabel }}</strong> mode — switch your theme
-            (top right) to edit the other mode. For more elaborate per-mode
-            tweaks (e.g. dark sidebar in light mode), use the Custom CSS
-            section below.
+            Background, foreground, and border tokens for the app shell. You're editing values for
+            <strong>{{ chromeModeLabel }}</strong> mode — switch your theme (top right) to edit the
+            other mode. For more elaborate per-mode tweaks (e.g. dark sidebar in light mode), use
+            the Custom CSS section below.
           </p>
 
           <div class="cr-branding-grid">
@@ -177,10 +173,9 @@
       >
         <div class="cr-branding-section-body">
           <p class="cr-branding-section-hint">
-            Pick from the curated bundled set, leave on <em>System default</em>
-            for the OS stack, or choose <em>Custom</em> to paste a font-family
-            list. Bundled fonts are lazy-loaded — the woff2 only ships when
-            an admin selects it.
+            Pick from the curated bundled set, leave on <em>System default</em> for the OS stack, or
+            choose <em>Custom</em> to paste a font-family list. Bundled fonts are lazy-loaded — the
+            woff2 only ships when an admin selects it.
           </p>
 
           <FontPicker
@@ -211,25 +206,48 @@
       >
         <div class="cr-branding-section-body">
           <p class="cr-branding-section-hint">
-            Injected last, so it wins over the structured overrides above.
-            Use the available tokens or target arbitrary selectors.
+            Injected last, so it wins over the structured overrides above. Use the available tokens
+            or target arbitrary selectors.
           </p>
 
           <details class="cr-branding-help">
             <summary>Available tokens and mode selectors</summary>
             <div class="cr-branding-help-body">
               <p><strong>Per-mode rules:</strong></p>
-              <pre>body.body--light .cr-drawer { background: #1a1a1d; color: #fff; }
-body.body--dark  .cr-header { background: #000; }</pre>
-              <p><strong>Available <code>--cr-*</code> tokens (overridable directly):</strong></p>
+              <pre>
+body.body--light .cr-drawer { background: #1a1a1d; color: #fff; }
+body.body--dark  .cr-header { background: #000; }</pre
+              >
+              <p>
+                <strong>Available <code>--cr-*</code> tokens (overridable directly):</strong>
+              </p>
               <ul>
-                <li><code>--cr-bg-page</code>, <code>--cr-bg-surface</code>, <code>--cr-bg-header</code>, <code>--cr-bg-sidebar</code>, <code>--cr-bg-elevated</code></li>
-                <li><code>--cr-fg-primary</code>, <code>--cr-fg-secondary</code>, <code>--cr-fg-tertiary</code>, <code>--cr-fg-on-brand</code></li>
-                <li><code>--cr-border-subtle</code>, <code>--cr-border-default</code>, <code>--cr-border-strong</code>, <code>--cr-border-header</code>, <code>--cr-border-logo</code></li>
-                <li><code>--cr-bg-hover</code>, <code>--cr-bg-active</code>, <code>--cr-brand-tint-soft</code>, <code>--cr-brand-tint-medium</code></li>
+                <li>
+                  <code>--cr-bg-page</code>, <code>--cr-bg-surface</code>,
+                  <code>--cr-bg-header</code>, <code>--cr-bg-sidebar</code>,
+                  <code>--cr-bg-elevated</code>
+                </li>
+                <li>
+                  <code>--cr-fg-primary</code>, <code>--cr-fg-secondary</code>,
+                  <code>--cr-fg-tertiary</code>, <code>--cr-fg-on-brand</code>
+                </li>
+                <li>
+                  <code>--cr-border-subtle</code>, <code>--cr-border-default</code>,
+                  <code>--cr-border-strong</code>, <code>--cr-border-header</code>,
+                  <code>--cr-border-logo</code>
+                </li>
+                <li>
+                  <code>--cr-bg-hover</code>, <code>--cr-bg-active</code>,
+                  <code>--cr-brand-tint-soft</code>, <code>--cr-brand-tint-medium</code>
+                </li>
                 <li><code>--cr-font-family</code>, <code>--cr-font-family-mono</code></li>
               </ul>
-              <p><strong>Quasar palette tokens:</strong> <code>--q-primary</code>, <code>--q-secondary</code>, <code>--q-accent</code>, <code>--q-positive</code>, <code>--q-negative</code>, <code>--q-info</code>, <code>--q-warning</code>, <code>--q-dark</code>, <code>--q-dark-page</code>.</p>
+              <p>
+                <strong>Quasar palette tokens:</strong> <code>--q-primary</code>,
+                <code>--q-secondary</code>, <code>--q-accent</code>, <code>--q-positive</code>,
+                <code>--q-negative</code>, <code>--q-info</code>, <code>--q-warning</code>,
+                <code>--q-dark</code>, <code>--q-dark-page</code>.
+              </p>
             </div>
           </details>
 
@@ -292,14 +310,7 @@ import LogoUploadField from 'components/branding/LogoUploadField.vue';
 import PalettePicker from 'components/branding/PalettePicker.vue';
 import { detectActivePreset, type PalettePreset } from 'src/css/palettes/registry';
 
-type PaletteKey =
-  | 'primary'
-  | 'secondary'
-  | 'accent'
-  | 'positive'
-  | 'negative'
-  | 'info'
-  | 'warning';
+type PaletteKey = 'primary' | 'secondary' | 'accent' | 'positive' | 'negative' | 'info' | 'warning';
 
 interface FieldDef<K> {
   key: K;
@@ -467,24 +478,22 @@ function onReset() {
  * and easy to misclick. Save still required to persist.
  */
 function onResetAll() {
-  $q
-    .dialog({
-      title: 'Reset all branding?',
-      message:
-        'This reverts every branding setting (logo, palette, chrome, typography, custom CSS) ' +
-        'back to the bundled defaults. Click Save afterward to persist for everyone.',
-      ok: { label: 'Reset all', color: 'negative', unelevated: true, noCaps: true },
-      cancel: { flat: true, noCaps: true },
-      persistent: true,
-    })
-    .onOk(() => {
-      Object.assign(draft, cloneConfig(defaultBranding));
-      fontFamilyField.value = draft.fontFamily ?? '';
-      fontFamilyMonoField.value = draft.fontFamilyMono ?? '';
-      loginTaglineField.value = draft.loginTagline ?? '';
-      customCssField.value = draft.customCss ?? '';
-      onLiveChange();
-    });
+  $q.dialog({
+    title: 'Reset all branding?',
+    message:
+      'This reverts every branding setting (logo, palette, chrome, typography, custom CSS) ' +
+      'back to the bundled defaults. Click Save afterward to persist for everyone.',
+    ok: { label: 'Reset all', color: 'negative', unelevated: true, noCaps: true },
+    cancel: { flat: true, noCaps: true },
+    persistent: true,
+  }).onOk(() => {
+    Object.assign(draft, cloneConfig(defaultBranding));
+    fontFamilyField.value = draft.fontFamily ?? '';
+    fontFamilyMonoField.value = draft.fontFamilyMono ?? '';
+    loginTaglineField.value = draft.loginTagline ?? '';
+    customCssField.value = draft.customCss ?? '';
+    onLiveChange();
+  });
 }
 
 function syncFieldsFromConfig() {

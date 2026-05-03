@@ -35,14 +35,7 @@
         dense
         class="cr-secret-input-field cr-secret-input-mask"
       />
-      <q-btn
-        no-caps
-        unelevated
-        color="primary"
-        icon="edit"
-        label="Edit"
-        @click="enterEdit"
-      />
+      <q-btn no-caps unelevated color="primary" icon="edit" label="Edit" @click="enterEdit" />
       <q-btn
         flat
         no-caps
@@ -204,16 +197,15 @@ async function onSave() {
 }
 
 function onClear() {
-  $q
-    .dialog({
-      title: `Clear ${props.label}?`,
-      message:
-        'The value will be removed from disk. Anything that depends on this secret ' +
-        '(API calls, SMTP) will fail until you set it again.',
-      ok: { label: 'Clear', color: 'negative', unelevated: true, noCaps: true },
-      cancel: { flat: true, noCaps: true },
-      persistent: true,
-    })
+  $q.dialog({
+    title: `Clear ${props.label}?`,
+    message:
+      'The value will be removed from disk. Anything that depends on this secret ' +
+      '(API calls, SMTP) will fail until you set it again.',
+    ok: { label: 'Clear', color: 'negative', unelevated: true, noCaps: true },
+    cancel: { flat: true, noCaps: true },
+    persistent: true,
+  })
     // eslint-disable-next-line @typescript-eslint/no-misused-promises
     .onOk(async () => {
       saving.value = true;

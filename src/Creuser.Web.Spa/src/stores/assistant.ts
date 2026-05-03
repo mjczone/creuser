@@ -103,7 +103,7 @@ export const useAssistantStore = defineStore('assistant', () => {
         role: 'assistant',
         content: result?.reply ?? '',
         createdAt: Date.now(),
-        error: result?.ok ? undefined : result?.error ?? 'AI request failed.',
+        error: result?.ok ? undefined : (result?.error ?? 'AI request failed.'),
         provider: result?.provider,
         model: result?.model,
       };

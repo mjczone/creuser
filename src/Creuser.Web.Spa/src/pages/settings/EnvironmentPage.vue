@@ -3,9 +3,8 @@
     <header class="cr-env-header">
       <h1 class="text-h5 q-ma-none">Environment</h1>
       <p class="cr-env-subhead">
-        Platform-level configuration: SMTP, AI providers, base URL.
-        Secrets are stored on disk under <code>/data/secrets/</code> and never
-        returned by the API.
+        Platform-level configuration: SMTP, AI providers, base URL. Secrets are stored on disk under
+        <code>/data/secrets/</code> and never returned by the API.
       </p>
     </header>
 
@@ -23,10 +22,9 @@
       >
         <div class="cr-env-section-body">
           <p class="cr-env-section-hint">
-            <code>BaseUrl</code> shows up in outbound emails and webhook
-            payloads — set this to the URL operators see in their browsers
-            (e.g. <code>https://creuser.example.com</code>). Timezone is used
-            for human-readable timestamps in emails and reports.
+            <code>BaseUrl</code> shows up in outbound emails and webhook payloads — set this to the
+            URL operators see in their browsers (e.g. <code>https://creuser.example.com</code>).
+            Timezone is used for human-readable timestamps in emails and reports.
           </p>
 
           <q-input
@@ -62,8 +60,8 @@
       >
         <div class="cr-env-section-body">
           <p class="cr-env-section-hint">
-            Used by password-reset emails, run-failure notifications, and
-            invite flows once those land.
+            Used by password-reset emails, run-failure notifications, and invite flows once those
+            land.
           </p>
 
           <q-input v-model="smtpHost" label="Host" dense outlined class="cr-env-input" />
@@ -133,9 +131,9 @@
       >
         <div class="cr-env-section-body">
           <p class="cr-env-section-hint">
-            Configure at least one provider to enable in-app AI assistance,
-            agent runs, and <code>llm-*</code> job types. The default provider
-            is what unspecified chats and agentic jobs route to.
+            Configure at least one provider to enable in-app AI assistance, agent runs, and
+            <code>llm-*</code> job types. The default provider is what unspecified chats and agentic
+            jobs route to.
           </p>
 
           <div class="cr-env-subsection">
@@ -274,16 +272,15 @@
             </template>
 
             <p class="cr-env-section-hint">
-              Any OpenAI-compatible local server. Quick presets fill in the
-              defaults; tweak afterward to taste.
+              Any OpenAI-compatible local server. Quick presets fill in the defaults; tweak
+              afterward to taste.
               <br />
               <strong>Networking:</strong> when Creuser runs in Docker, use
-              <code>host.docker.internal</code> (auto-mapped in the bundled
-              compose) to reach a server on the host machine, or
-              <code>http://&lt;service-name&gt;:&lt;port&gt;/v1</code> for
-              an Ollama / LM Studio sibling container in the same compose
-              stack. The presets below pick the right one based on how
-              you're running.
+              <code>host.docker.internal</code> (auto-mapped in the bundled compose) to reach a
+              server on the host machine, or
+              <code>http://&lt;service-name&gt;:&lt;port&gt;/v1</code> for an Ollama / LM Studio
+              sibling container in the same compose stack. The presets below pick the right one
+              based on how you're running.
             </p>
 
             <div class="cr-env-local-presets">
@@ -574,7 +571,9 @@ const localDefaultModel = computed({
 function localHostnameForBrowser(): string {
   if (typeof window === 'undefined') return 'localhost';
   const h = window.location.hostname;
-  return h === 'localhost' || h === '127.0.0.1' || h === '::1' ? 'localhost' : 'host.docker.internal';
+  return h === 'localhost' || h === '127.0.0.1' || h === '::1'
+    ? 'localhost'
+    : 'host.docker.internal';
 }
 
 function applyLocalPreset(kind: 'ollama' | 'lmstudio') {
@@ -616,8 +615,7 @@ function unpackToDraft(c: EnvironmentConfig) {
   draft.smtpFromAddress = c.smtp.fromAddress ?? '';
   draft.smtpFromName = c.smtp.fromName ?? '';
 
-  draft.aiDefaultProvider =
-    c.aiProviders.defaultProvider === 'openai' ? 'openai' : 'anthropic';
+  draft.aiDefaultProvider = c.aiProviders.defaultProvider === 'openai' ? 'openai' : 'anthropic';
 
   const anthro = c.aiProviders.anthropic ?? {};
   draft.anthropicKeySecret = anthro.apiKeySecret ?? 'anthropic.key';
@@ -919,7 +917,6 @@ onMounted(() => {
   color: var(--cr-fg-tertiary);
   margin: 0;
 }
-
 
 .cr-env-input {
   max-width: 520px;

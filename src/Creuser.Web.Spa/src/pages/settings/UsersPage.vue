@@ -18,15 +18,7 @@
       />
     </div>
 
-    <q-table
-      :rows="users"
-      :columns="cols"
-      row-key="userId"
-      :loading="loading"
-      flat
-      bordered
-      dense
-    >
+    <q-table :rows="users" :columns="cols" row-key="userId" :loading="loading" flat bordered dense>
       <template #body-cell-role="props">
         <q-td :props="props">
           <q-chip
@@ -43,13 +35,7 @@
       <template #body-cell-status="props">
         <q-td :props="props">
           <div class="cr-status-cell">
-            <q-chip
-              v-if="!props.row.isActive"
-              dense
-              outline
-              color="negative"
-              text-color="negative"
-            >
+            <q-chip v-if="!props.row.isActive" dense outline color="negative" text-color="negative">
               Inactive
             </q-chip>
             <q-chip
@@ -81,31 +67,17 @@
 
       <template #body-cell-actions="props">
         <q-td :props="props" auto-width>
-          <q-btn
-            flat
-            dense
-            round
-            icon="more_vert"
-            :aria-label="`Actions for ${props.row.email}`"
-          >
+          <q-btn flat dense round icon="more_vert" :aria-label="`Actions for ${props.row.email}`">
             <q-menu auto-close>
               <q-list dense style="min-width: 200px">
-                <q-item
-                  clickable
-                  :disable="isSelf(props.row)"
-                  @click="onResetPassword(props.row)"
-                >
+                <q-item clickable :disable="isSelf(props.row)" @click="onResetPassword(props.row)">
                   <q-item-section avatar>
                     <q-icon name="lock_reset" size="18px" />
                   </q-item-section>
                   <q-item-section>Reset password</q-item-section>
                 </q-item>
 
-                <q-item
-                  clickable
-                  :disable="isSelf(props.row)"
-                  @click="onToggleRole(props.row)"
-                >
+                <q-item clickable :disable="isSelf(props.row)" @click="onToggleRole(props.row)">
                   <q-item-section avatar>
                     <q-icon
                       :name="props.row.role === 'Admin' ? 'person' : 'admin_panel_settings'"
@@ -117,16 +89,9 @@
                   </q-item-section>
                 </q-item>
 
-                <q-item
-                  clickable
-                  :disable="isSelf(props.row)"
-                  @click="onToggleActive(props.row)"
-                >
+                <q-item clickable :disable="isSelf(props.row)" @click="onToggleActive(props.row)">
                   <q-item-section avatar>
-                    <q-icon
-                      :name="props.row.isActive ? 'person_off' : 'person'"
-                      size="18px"
-                    />
+                    <q-icon :name="props.row.isActive ? 'person_off' : 'person'" size="18px" />
                   </q-item-section>
                   <q-item-section>
                     {{ props.row.isActive ? 'Deactivate' : 'Activate' }}
@@ -159,8 +124,8 @@
         <q-card-section>
           <div class="text-h6">Invite user</div>
           <div class="text-caption" :style="{ color: 'var(--cr-fg-secondary)' }">
-            A temporary password is generated (or you can supply one). It will be shown once —
-            send it to the user out of band.
+            A temporary password is generated (or you can supply one). It will be shown once — send
+            it to the user out of band.
           </div>
         </q-card-section>
         <q-card-section>
@@ -205,8 +170,8 @@
           <div class="text-h6">Reset password</div>
           <div class="text-caption" :style="{ color: 'var(--cr-fg-secondary)' }">
             Reset the password for <strong>{{ resetTarget?.email }}</strong
-            >. The user will be forced to change it on next sign-in. The new temp password is
-            shown once after submit.
+            >. The user will be forced to change it on next sign-in. The new temp password is shown
+            once after submit.
           </div>
         </q-card-section>
         <q-card-section>
@@ -432,17 +397,21 @@ function resetResetForm() {
 
 function onToggleRole(user: UserResult) {
   const nextRole = user.role === 'Admin' ? 'User' : 'Admin';
-  $q
-    .dialog({
-      title: nextRole === 'Admin' ? 'Promote to Admin?' : 'Demote to User?',
-      message:
-        nextRole === 'Admin'
-          ? `Grant ${user.email} full admin access to platform settings, users, and workspaces.`
-          : `Remove admin privileges from ${user.email}. They'll only see workspaces they're explicitly granted membership to.`,
-      ok: { label: nextRole === 'Admin' ? 'Promote' : 'Demote', color: 'primary', unelevated: true, noCaps: true },
-      cancel: { flat: true, noCaps: true },
-      persistent: true,
-    })
+  $q.dialog({
+    title: nextRole === 'Admin' ? 'Promote to Admin?' : 'Demote to User?',
+    message:
+      nextRole === 'Admin'
+        ? `Grant ${user.email} full admin access to platform settings, users, and workspaces.`
+        : `Remove admin privileges from ${user.email}. They'll only see workspaces they're explicitly granted membership to.`,
+    ok: {
+      label: nextRole === 'Admin' ? 'Promote' : 'Demote',
+      color: 'primary',
+      unelevated: true,
+      noCaps: true,
+    },
+    cancel: { flat: true, noCaps: true },
+    persistent: true,
+  })
     // onOk's callback runs synchronously from Quasar's perspective; we kick
     // off the async work and let any thrown errors surface via the
     // try/catch + $q.notify below.
@@ -479,21 +448,20 @@ function onToggleRole(user: UserResult) {
 
 function onToggleActive(user: UserResult) {
   const nextActive = !user.isActive;
-  $q
-    .dialog({
-      title: nextActive ? 'Activate user?' : 'Deactivate user?',
-      message: nextActive
-        ? `Re-enable sign-in for ${user.email}.`
-        : `Block sign-in for ${user.email}. Existing sessions stay active until they expire (14 days). The account is preserved and can be re-activated.`,
-      ok: {
-        label: nextActive ? 'Activate' : 'Deactivate',
-        color: nextActive ? 'primary' : 'negative',
-        unelevated: true,
-        noCaps: true,
-      },
-      cancel: { flat: true, noCaps: true },
-      persistent: true,
-    })
+  $q.dialog({
+    title: nextActive ? 'Activate user?' : 'Deactivate user?',
+    message: nextActive
+      ? `Re-enable sign-in for ${user.email}.`
+      : `Block sign-in for ${user.email}. Existing sessions stay active until they expire (14 days). The account is preserved and can be re-activated.`,
+    ok: {
+      label: nextActive ? 'Activate' : 'Deactivate',
+      color: nextActive ? 'primary' : 'negative',
+      unelevated: true,
+      noCaps: true,
+    },
+    cancel: { flat: true, noCaps: true },
+    persistent: true,
+  })
     // onOk's callback runs synchronously from Quasar's perspective; we kick
     // off the async work and let any thrown errors surface via the
     // try/catch + $q.notify below.
@@ -529,24 +497,23 @@ function onToggleActive(user: UserResult) {
 }
 
 function onDelete(user: UserResult) {
-  $q
-    .dialog({
-      title: 'Permanently delete user?',
-      message:
-        `<p><strong>This is irreversible.</strong> ${user.email}'s account will be removed ` +
-        `from the database, along with their workspace memberships.</p>` +
-        `<p>For most cases — "user left the team" — <strong>Deactivate</strong> is safer ` +
-        `(it preserves their audit trail).</p>`,
-      html: true,
-      ok: {
-        label: 'Delete forever',
-        color: 'negative',
-        unelevated: true,
-        noCaps: true,
-      },
-      cancel: { flat: true, noCaps: true, label: 'Cancel' },
-      persistent: true,
-    })
+  $q.dialog({
+    title: 'Permanently delete user?',
+    message:
+      `<p><strong>This is irreversible.</strong> ${user.email}'s account will be removed ` +
+      `from the database, along with their workspace memberships.</p>` +
+      `<p>For most cases — "user left the team" — <strong>Deactivate</strong> is safer ` +
+      `(it preserves their audit trail).</p>`,
+    html: true,
+    ok: {
+      label: 'Delete forever',
+      color: 'negative',
+      unelevated: true,
+      noCaps: true,
+    },
+    cancel: { flat: true, noCaps: true, label: 'Cancel' },
+    persistent: true,
+  })
     // onOk's callback runs synchronously from Quasar's perspective; we kick
     // off the async work and let any thrown errors surface via the
     // try/catch + $q.notify below.

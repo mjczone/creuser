@@ -3,9 +3,8 @@
     <header class="cr-home-header">
       <h1 class="text-h5 q-ma-none">Welcome{{ greeting }}</h1>
       <p class="cr-home-subhead">
-        Pick a workspace to enter. Each workspace is a connected content source —
-        a git repository or local filesystem path — that the platform reads from
-        and writes back to.
+        Pick a workspace to enter. Each workspace is a connected content source — a git repository
+        or local filesystem path — that the platform reads from and writes back to.
       </p>
     </header>
 
@@ -29,8 +28,7 @@
         >.
       </p>
       <p v-else class="cr-home-empty-copy">
-        You don't have access to any workspaces yet. Ask your administrator to grant
-        you access.
+        You don't have access to any workspaces yet. Ask your administrator to grant you access.
       </p>
     </div>
 
@@ -67,8 +65,8 @@
     </div>
 
     <p v-if="!loading && workspaces.length > 0" class="cr-home-foot">
-      Workspace dashboards (groups + standalone) land in the next pass — for now
-      a workspace lands you on its overview page.
+      Workspace dashboards (groups + standalone) land in the next pass — for now a workspace lands
+      you on its overview page.
     </p>
   </q-page>
 </template>

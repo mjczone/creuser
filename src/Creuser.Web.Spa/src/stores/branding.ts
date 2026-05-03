@@ -89,8 +89,7 @@ function buildChromeRules(
 function buildTypographyRules(next: BrandingConfig): string {
   const declarations: string[] = [];
   if (next.fontFamily) declarations.push(`  --cr-font-family: ${next.fontFamily};`);
-  if (next.fontFamilyMono)
-    declarations.push(`  --cr-font-family-mono: ${next.fontFamilyMono};`);
+  if (next.fontFamilyMono) declarations.push(`  --cr-font-family-mono: ${next.fontFamilyMono};`);
   return declarations.length ? `:root {\n${declarations.join('\n')}\n}` : '';
 }
 

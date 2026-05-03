@@ -47,8 +47,8 @@
 
     <p v-if="error" class="cr-logo-error">{{ error }}</p>
     <p v-else class="cr-logo-hint">
-      PNG, JPG, WebP, SVG, ICO. Up to 2 MB. Used for the sidebar logo,
-      login screen, and the browser tab favicon.
+      PNG, JPG, WebP, SVG, ICO. Up to 2 MB. Used for the sidebar logo, login screen, and the browser
+      tab favicon.
     </p>
 
     <input

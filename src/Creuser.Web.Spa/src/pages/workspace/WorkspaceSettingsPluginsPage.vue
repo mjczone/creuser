@@ -3,11 +3,11 @@
     <header class="cr-wsplugins-header">
       <h1 class="text-h5 q-ma-none">Plugins</h1>
       <p class="cr-wsplugins-subhead">
-        Plugins are .NET assemblies dropped into <code>/data/plugins/</code>. They're
-        loaded once per Creuser instance and contribute job runners, widgets, agent
-        providers, parsers, and capabilities. This page chooses which loaded plugins
-        are <strong>enabled for this workspace</strong> — disabled plugins are
-        invisible to the workspace's job runner picker and widget palette.
+        Plugins are .NET assemblies dropped into <code>/data/plugins/</code>. They're loaded once
+        per Creuser instance and contribute job runners, widgets, agent providers, parsers, and
+        capabilities. This page chooses which loaded plugins are
+        <strong>enabled for this workspace</strong> — disabled plugins are invisible to the
+        workspace's job runner picker and widget palette.
       </p>
     </header>
 
@@ -33,21 +33,13 @@
         <q-icon name="extension_off" size="48px" class="cr-wsplugins-empty-icon" />
         <h2 class="text-h6 q-ma-none">No plugins loaded</h2>
         <p class="cr-wsplugins-empty-copy">
-          Once a plugin assembly is in <code>/data/plugins/</code> and the platform has
-          restarted, it will appear here. Each row will offer an enable / disable toggle
-          and surface what the plugin contributes (job runners, widgets, agent providers).
+          Once a plugin assembly is in <code>/data/plugins/</code> and the platform has restarted,
+          it will appear here. Each row will offer an enable / disable toggle and surface what the
+          plugin contributes (job runners, widgets, agent providers).
         </p>
       </div>
 
-      <q-table
-        v-else
-        :rows="plugins"
-        :columns="cols"
-        row-key="pluginId"
-        flat
-        bordered
-        dense
-      >
+      <q-table v-else :rows="plugins" :columns="cols" row-key="pluginId" flat bordered dense>
         <template #body-cell-status="props">
           <q-td :props="props">
             <q-chip

@@ -62,6 +62,10 @@ export type ApiResultOfBrandingConfig = {
   result: null | BrandingConfig;
 };
 
+export type ApiResultOfConventionsListResult = {
+  result: null | ConventionsListResult;
+};
+
 export type ApiResultOfCreateUserResult = {
   result: null | CreateUserResult;
 };
@@ -70,12 +74,20 @@ export type ApiResultOfEchoResponse = {
   result: null | EchoResponse;
 };
 
+export type ApiResultOfEntityDetail = {
+  result: null | EntityDetail;
+};
+
 export type ApiResultOfEnvironmentConfigView = {
   result: null | EnvironmentConfigView;
 };
 
 export type ApiResultOfGuid = {
   result: null | string;
+};
+
+export type ApiResultOfIReadOnlyListOfEntitySummary = {
+  result: null | Array<EntitySummary>;
 };
 
 export type ApiResultOfIReadOnlyListOfJobRunResult = {
@@ -124,6 +136,10 @@ export type ApiResultOfPingResponse = {
 
 export type ApiResultOfScheduleResult = {
   result: null | ScheduleResult;
+};
+
+export type ApiResultOfSyncProjectionResult = {
+  result: null | SyncProjectionResult;
 };
 
 export type ApiResultOfUserResult = {
@@ -206,6 +222,26 @@ export type ChromeTokens = {
   borderStrong?: null | string;
 };
 
+export type ConventionLoadError = {
+  source: null | string;
+  message: string;
+};
+
+export type ConventionsListResult = {
+  conventions: Array<ConventionSummary>;
+  errors: Array<ConventionLoadError>;
+};
+
+export type ConventionSummary = {
+  id: string;
+  description: null | string;
+  priority: number | string;
+  glob: string;
+  extends: null | string;
+  contentHash: string;
+  sourcePath: null | string;
+};
+
 export type CreateJobScriptRequest = {
   slug: string;
   name: string;
@@ -254,6 +290,36 @@ export type EchoRequest = {
 
 export type EchoResponse = {
   message: string;
+};
+
+export type EntityDetail = {
+  id: string;
+  kind: string;
+  slug: string;
+  path: string;
+  conventionId: string;
+  metadataJson: string;
+  contentHash: string;
+  lastSeenAt: string;
+  refsOut: Array<EntityRefSummary>;
+  refsIn: Array<EntityRefSummary>;
+};
+
+export type EntityRefSummary = {
+  id: string;
+  toEntityId: null | string;
+  relationship: string;
+  targetKind: null | string;
+  targetSlug: null | string;
+};
+
+export type EntitySummary = {
+  id: string;
+  kind: string;
+  slug: string;
+  path: string;
+  conventionId: string;
+  contentHash: string;
 };
 
 export type EnvironmentConfig = {
@@ -371,6 +437,23 @@ export type PingResponse = {
   serverTime: string;
 };
 
+export type ProjectionReport = {
+  syncedAt: string;
+  scanDurationMs: number | string;
+  conventionCount: number | string;
+  entitiesByKind: {
+    [key: string]: number | string;
+  };
+  entityTotal: number | string;
+  refsResolved: number | string;
+  refsUnresolved: number | string;
+  schemaFailures: number | string;
+  conventionConflicts: number | string;
+  conventionVersions: {
+    [key: string]: string;
+  };
+};
+
 export type ResetPasswordRequest = {
   temporaryPassword?: null | string;
 };
@@ -415,6 +498,10 @@ export type SmtpConfig = {
   encryption?: null | string;
   fromAddress?: null | string;
   fromName?: null | string;
+};
+
+export type SyncProjectionResult = {
+  report: ProjectionReport;
 };
 
 export type TestWorkspaceConnectionRequest = {
@@ -1283,6 +1370,85 @@ export type FireScheduleResponses = {
 };
 
 export type FireScheduleResponse = FireScheduleResponses[keyof FireScheduleResponses];
+
+export type ListConventionsData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/conventions';
+};
+
+export type ListConventionsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfConventionsListResult;
+};
+
+export type ListConventionsResponse = ListConventionsResponses[keyof ListConventionsResponses];
+
+export type QueryEntitiesData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: {
+    kind?: string;
+    entitySlug?: string;
+    pathGlob?: string;
+    limit?: number | string;
+  };
+  url: '/api/workspaces/{slug}/entities';
+};
+
+export type QueryEntitiesResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfEntitySummary;
+};
+
+export type QueryEntitiesResponse = QueryEntitiesResponses[keyof QueryEntitiesResponses];
+
+export type GetEntityData = {
+  body?: never;
+  path: {
+    slug: string;
+    kind: string;
+    entitySlug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/entities/{kind}/{entitySlug}';
+};
+
+export type GetEntityResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfEntityDetail;
+};
+
+export type GetEntityResponse = GetEntityResponses[keyof GetEntityResponses];
+
+export type SyncProjectionData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/projections/sync';
+};
+
+export type SyncProjectionResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfSyncProjectionResult;
+};
+
+export type SyncProjectionResponse = SyncProjectionResponses[keyof SyncProjectionResponses];
 
 export type PingData = {
   body?: never;

@@ -3,8 +3,12 @@ using Creuser.Auth.Abstractions;
 using Creuser.Auth.Core;
 using Creuser.Auth.Providers.Local;
 using Creuser.Core.Execution;
+using Creuser.Core.Projections;
 using Creuser.Persistence;
 using Creuser.Persistence.Repositories;
+using Creuser.Projections.Conventions;
+using Creuser.Projections.Scanner;
+using Creuser.Projections.Sync;
 using Creuser.Scripting;
 using Creuser.Scripting.ToolLoop;
 using Creuser.Web.Agents;
@@ -101,6 +105,7 @@ builder.Services.AddKeyedScoped<IStepRunner, NodeStepRunner>("node");
 builder.Services.AddKeyedScoped<IStepRunner, FileFrontmatterStepRunner>("file-frontmatter");
 builder.Services.AddKeyedScoped<IStepRunner, HttpStepRunner>("http");
 builder.Services.AddKeyedScoped<IStepRunner, LlmToolLoopStepRunner>("llm-tool-loop");
+builder.Services.AddKeyedScoped<IStepRunner, ProjectionSyncStepRunner>("projection-sync");
 
 // Tool registries contributed to the agentic llm-tool-loop runner.
 // Multi-binding — every IToolLoopToolRegistry the runner finds in DI gets
@@ -108,6 +113,21 @@ builder.Services.AddKeyedScoped<IStepRunner, LlmToolLoopStepRunner>("llm-tool-lo
 // union and dispatches by tool name. Plugins (when the loader lands)
 // register additional registries here, e.g. for projection / domain tools.
 builder.Services.AddScoped<IToolLoopToolRegistry, WorkspaceToolLoopRegistry>();
+
+// Projections — conventions / scanner / entity store / sync service.
+// The projection sync runs automatically as a fire-and-forget continuation
+// of WorkspacesEndpoints.Sync after a successful pull (mirrors the
+// schedules sync-hook integration). It's also exposed as a `projection-sync`
+// step type for explicit DAG composition.
+builder.Services.AddScoped<IEntityStore, entitiesRepository>();
+builder.Services.AddScoped<IEntityRefStore, entityRefsRepository>();
+builder.Services.AddScoped<IConventionLoader, ConventionLoader>();
+builder.Services.AddScoped<ProjectionScanner>();
+builder.Services.AddScoped<IProjectionSyncService, ProjectionSyncService>();
+builder.Services.AddScoped<
+    IToolLoopToolRegistry,
+    Creuser.Projections.ToolLoop.ProjectionToolLoopRegistry
+>();
 
 // HTTP step runner uses IHttpClientFactory for socket + DNS lifecycle.
 // Two named clients differ on redirect behavior; the runner picks at
@@ -269,6 +289,7 @@ app.MapWorkspacesEndpoints();
 app.MapJobsEndpoints();
 app.MapToolsEndpoints();
 app.MapSchedulesEndpoints();
+app.MapProjectionsEndpoints();
 app.MapPingEndpoints();
 app.MapEchoEndpoints();
 app.MapHub<NotificationsHub>("/hub/notifications");

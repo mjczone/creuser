@@ -106,7 +106,8 @@ function isValidColor(v: string): boolean {
   border: 1px solid var(--cr-border-default);
   cursor: pointer;
   flex-shrink: 0;
-  background-image: linear-gradient(45deg, var(--cr-bg-elevated) 25%, transparent 25%),
+  background-image:
+    linear-gradient(45deg, var(--cr-bg-elevated) 25%, transparent 25%),
     linear-gradient(-45deg, var(--cr-bg-elevated) 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, var(--cr-bg-elevated) 75%),
     linear-gradient(-45deg, transparent 75%, var(--cr-bg-elevated) 75%);

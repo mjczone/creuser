@@ -13,12 +13,14 @@
     <Project Path="src/Creuser.Core/Creuser.Core.csproj" />
     <Project Path="src/Creuser.Git/Creuser.Git.csproj" />
     <Project Path="src/Creuser.Persistence/Creuser.Persistence.csproj" />
+    <Project Path="src/Creuser.Projections/Creuser.Projections.csproj" />
     <Project Path="src/Creuser.Scripting/Creuser.Scripting.csproj" />
     <Project Path="src/Creuser.Web/Creuser.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Creuser.Core.Tests/Creuser.Core.Tests.csproj" />
     <Project Path="tests/Creuser.Integration.Tests/Creuser.Integration.Tests.csproj" />
+    <Project Path="tests/Creuser.Projections.Tests/Creuser.Projections.Tests.csproj" />
     <Project Path="tests/Creuser.Scripting.Tests/Creuser.Scripting.Tests.csproj" />
   </Folder>
 </Solution>

@@ -15,15 +15,15 @@
         />
       </div>
       <p class="cr-schedules-subhead">
-        Schedules fire jobs automatically. <strong>Cron</strong> schedules tick
-        on a UTC cron expression (5 fields <code>m h dom mon dow</code> or 6
-        with seconds). <strong>Sync</strong> schedules fire after every
-        successful workspace sync — useful for "rebuild summary on every pull"
-        loops. Use <em>Fire now</em> to run a schedule immediately, bypassing
-        the tick.
+        Schedules fire jobs automatically. <strong>Cron</strong> schedules tick on a UTC cron
+        expression (5 fields <code>m h dom mon dow</code> or 6 with seconds).
+        <strong>Sync</strong> schedules fire after every successful workspace sync — useful for
+        "rebuild summary on every pull" loops. Use <em>Fire now</em> to run a schedule immediately,
+        bypassing the tick.
       </p>
       <p v-if="!jobs.length" class="cr-schedules-empty-hint">
-        No jobs in this workspace yet. Create one in <router-link :to="`/w/${slug}/settings/jobs`">Jobs</router-link>
+        No jobs in this workspace yet. Create one in
+        <router-link :to="`/w/${slug}/settings/jobs`">Jobs</router-link>
         before scheduling it.
       </p>
     </header>
@@ -179,12 +179,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useQuasar, type QTableColumn } from 'quasar';
-import {
-  Jobs,
-  Schedules,
-  type JobScriptResult,
-  type ScheduleResult,
-} from 'src/api';
+import { Jobs, Schedules, type JobScriptResult, type ScheduleResult } from 'src/api';
 import { useActiveWorkspace } from 'src/composables/useActiveWorkspace';
 
 const $q = useQuasar();
@@ -311,8 +306,7 @@ async function onSubmit() {
   try {
     // Sync schedules forbid a cron expression on the wire; null-out so the
     // server-side validator doesn't reject the request.
-    const cronExpression =
-      form.kind === 'cron' ? form.cronExpression.trim() || null : null;
+    const cronExpression = form.kind === 'cron' ? form.cronExpression.trim() || null : null;
     if (editingId.value) {
       const res = await Schedules.updateSchedule({
         path: { slug: slug.value, scheduleId: editingId.value },

@@ -58,29 +58,25 @@ const routes: RouteRecordRaw[] = [
           {
             path: 'general',
             name: 'workspace-settings-general',
-            component: () =>
-              import('pages/workspace/WorkspaceSettingsGeneralPage.vue'),
+            component: () => import('pages/workspace/WorkspaceSettingsGeneralPage.vue'),
             meta: { title: 'General', workspaceScoped: true, requiresWorkspaceEditor: true },
           },
           {
             path: 'plugins',
             name: 'workspace-settings-plugins',
-            component: () =>
-              import('pages/workspace/WorkspaceSettingsPluginsPage.vue'),
+            component: () => import('pages/workspace/WorkspaceSettingsPluginsPage.vue'),
             meta: { title: 'Plugins', workspaceScoped: true, requiresWorkspaceEditor: true },
           },
           {
             path: 'jobs',
             name: 'workspace-settings-jobs',
-            component: () =>
-              import('pages/workspace/WorkspaceSettingsJobsPage.vue'),
+            component: () => import('pages/workspace/WorkspaceSettingsJobsPage.vue'),
             meta: { title: 'Jobs', workspaceScoped: true, requiresWorkspaceEditor: true },
           },
           {
             path: 'schedules',
             name: 'workspace-settings-schedules',
-            component: () =>
-              import('pages/workspace/WorkspaceSettingsSchedulesPage.vue'),
+            component: () => import('pages/workspace/WorkspaceSettingsSchedulesPage.vue'),
             meta: { title: 'Schedules', workspaceScoped: true, requiresWorkspaceEditor: true },
           },
         ],
