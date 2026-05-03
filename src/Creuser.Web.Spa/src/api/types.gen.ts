@@ -74,12 +74,20 @@ export type ApiResultOfEnvironmentConfigView = {
   result: null | EnvironmentConfigView;
 };
 
+export type ApiResultOfGuid = {
+  result: null | string;
+};
+
 export type ApiResultOfIReadOnlyListOfJobRunResult = {
   result: null | Array<JobRunResult>;
 };
 
 export type ApiResultOfIReadOnlyListOfJobScriptResult = {
   result: null | Array<JobScriptResult>;
+};
+
+export type ApiResultOfIReadOnlyListOfScheduleResult = {
+  result: null | Array<ScheduleResult>;
 };
 
 export type ApiResultOfIReadOnlyListOfstring = {
@@ -112,6 +120,10 @@ export type ApiResultOfJobScriptResult = {
 
 export type ApiResultOfPingResponse = {
   result: null | PingResponse;
+};
+
+export type ApiResultOfScheduleResult = {
+  result: null | ScheduleResult;
 };
 
 export type ApiResultOfUserResult = {
@@ -202,6 +214,13 @@ export type CreateJobScriptRequest = {
   frontmatter: string;
   body: string;
   status: string;
+};
+
+export type CreateScheduleRequest = {
+  jobScriptId: string;
+  kind: string;
+  cronExpression: null | string;
+  enabled: boolean;
 };
 
 export type CreateUserRequest = {
@@ -362,6 +381,20 @@ export type RunJobScriptRequest = {
   };
 };
 
+export type ScheduleResult = {
+  scheduleId: string;
+  workspaceId: string;
+  jobScriptId: string;
+  jobName: string;
+  kind: string;
+  cronExpression: null | string;
+  enabled: boolean;
+  nextDueAt: null | string;
+  lastFiredAt: null | string;
+  lastRunId: null | string;
+  createdAt: string;
+};
+
 export type SetActiveRequest = {
   isActive: boolean;
 };
@@ -404,6 +437,12 @@ export type UpdateJobScriptRequest = {
   frontmatter: string;
   body: string;
   status: string;
+};
+
+export type UpdateScheduleRequest = {
+  kind: string;
+  cronExpression: null | string;
+  enabled: boolean;
 };
 
 export type UpdateWorkspaceRequest = {
@@ -1151,6 +1190,99 @@ export type ListToolsResponses = {
 };
 
 export type ListToolsResponse = ListToolsResponses[keyof ListToolsResponses];
+
+export type ListSchedulesData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/schedules';
+};
+
+export type ListSchedulesResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfScheduleResult;
+};
+
+export type ListSchedulesResponse = ListSchedulesResponses[keyof ListSchedulesResponses];
+
+export type CreateScheduleData = {
+  body: CreateScheduleRequest;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/schedules';
+};
+
+export type CreateScheduleResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfScheduleResult;
+};
+
+export type CreateScheduleResponse = CreateScheduleResponses[keyof CreateScheduleResponses];
+
+export type DeleteScheduleData = {
+  body?: never;
+  path: {
+    slug: string;
+    scheduleId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/schedules/{scheduleId}';
+};
+
+export type DeleteScheduleResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfboolean;
+};
+
+export type DeleteScheduleResponse = DeleteScheduleResponses[keyof DeleteScheduleResponses];
+
+export type UpdateScheduleData = {
+  body: UpdateScheduleRequest;
+  path: {
+    slug: string;
+    scheduleId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/schedules/{scheduleId}';
+};
+
+export type UpdateScheduleResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfScheduleResult;
+};
+
+export type UpdateScheduleResponse = UpdateScheduleResponses[keyof UpdateScheduleResponses];
+
+export type FireScheduleData = {
+  body?: never;
+  path: {
+    slug: string;
+    scheduleId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/schedules/{scheduleId}/fire';
+};
+
+export type FireScheduleResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfGuid;
+};
+
+export type FireScheduleResponse = FireScheduleResponses[keyof FireScheduleResponses];
 
 export type PingData = {
   body?: never;

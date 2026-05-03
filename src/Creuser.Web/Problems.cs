@@ -181,4 +181,15 @@ public static class Problems
                 Detail = $"No job run exists with id '{id}'.",
             }
         );
+
+    public static ProblemHttpResult ScheduleNotFound(Guid id) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "schedule-not-found",
+                Title = "Schedule not found",
+                Status = StatusCodes.Status404NotFound,
+                Detail = $"No schedule exists with id '{id}'.",
+            }
+        );
 }

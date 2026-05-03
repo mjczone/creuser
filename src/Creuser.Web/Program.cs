@@ -12,6 +12,7 @@ using Creuser.Web.Branding;
 using Creuser.Web.Endpoints;
 using Creuser.Web.Environment;
 using Creuser.Web.Hubs;
+using Creuser.Web.Schedules;
 using Creuser.Web.Workspaces;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -127,6 +128,15 @@ builder
 builder.Services.AddScoped<IWorkspaceWorkingTree, WorkspaceWorkingTree>();
 builder.Services.AddSingleton<IToolCatalog, BaselineToolCatalog>();
 builder.Services.AddScoped<JobExecutor>();
+
+// Schedules. The dispatcher fires a job in a fresh DI scope so neither
+// the cron tick nor the sync hook pin the executor's lifetime. The
+// SchedulerService is the cron tick — checks `cr.schedules` every
+// `CREUSER_SCHEDULER_INTERVAL_MS` (default 30000ms) and dispatches due
+// rows. Sync-triggered schedules fire inline from WorkspacesEndpoints.Sync.
+builder.Services.AddScoped<IScheduleStore, schedulesRepository>();
+builder.Services.AddScoped<IJobScheduleDispatcher, JobScheduleDispatcher>();
+builder.Services.AddHostedService<SchedulerService>();
 
 // Capability registry. Add additional ICapabilityProvider registrations
 // here as new modules / plugins land; CapabilityRegistry composes whatever
@@ -249,6 +259,7 @@ app.MapAgentsEndpoints();
 app.MapWorkspacesEndpoints();
 app.MapJobsEndpoints();
 app.MapToolsEndpoints();
+app.MapSchedulesEndpoints();
 app.MapPingEndpoints();
 app.MapEchoEndpoints();
 app.MapHub<NotificationsHub>("/hub/notifications");

@@ -408,6 +408,8 @@ public static class WorkspacesEndpoints
         WorkspaceFilesystemService fs,
         TimeProvider time,
         ILogger<SyncMarker> logger,
+        Creuser.Core.Execution.IScheduleStore scheduleStore,
+        Creuser.Web.Schedules.IJobScheduleDispatcher dispatcher,
         CancellationToken ct,
         // Two-phase confirmation: a first call with force=false returns
         // RequiresForce=true (and the dirty count) when the working tree has
@@ -481,6 +483,37 @@ public static class WorkspacesEndpoints
                     result.Ok ? result.Message : result.Error,
                     ct
                 );
+            }
+
+            // Fire any sync-triggered schedules for this workspace. Inline
+            // dispatch (fire-and-forget) so the sync API responds quickly;
+            // the dispatcher creates its own scope per job so the request
+            // scope can dispose normally. Don't fire if the sync itself
+            // failed — sync schedules are meant to react to a successful
+            // pull.
+            if (result.Ok && !result.RequiresForce)
+            {
+                try
+                {
+                    var syncSchedules = await scheduleStore.ListSyncTriggeredAsync(existing.Id, ct);
+                    foreach (var schedule in syncSchedules)
+                    {
+                        var s = schedule;
+                        _ = Task.Run(
+                            async () =>
+                                await dispatcher.DispatchAsync(s, "sync", CancellationToken.None),
+                            CancellationToken.None
+                        );
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(
+                        ex,
+                        "Failed to dispatch sync-triggered schedules for {Slug}",
+                        slug
+                    );
+                }
             }
 
             return TypedResults.Ok(new ApiResult<WorkspaceSyncResult>(result));

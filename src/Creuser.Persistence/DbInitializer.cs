@@ -77,6 +77,10 @@ public sealed class DbInitializer : IHostedService
                 tx: null,
                 cancellationToken: cancellationToken
             );
+            await conn.CreateTableIfNotExistsAsync<schedules>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
 
             // Additive migrations on cr.workspaces. Postgres' `IF NOT EXISTS`
             // makes this idempotent — the columns get added once on the first

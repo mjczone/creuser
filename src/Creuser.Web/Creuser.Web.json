@@ -1262,6 +1262,199 @@
         }
       }
     },
+    "/api/workspaces/{slug}/schedules": {
+      "get": {
+        "tags": [
+          "Schedules"
+        ],
+        "operationId": "ListSchedules",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfScheduleResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Schedules"
+        ],
+        "operationId": "CreateSchedule",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfScheduleResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/schedules/{scheduleId}": {
+      "put": {
+        "tags": [
+          "Schedules"
+        ],
+        "operationId": "UpdateSchedule",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfScheduleResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Schedules"
+        ],
+        "operationId": "DeleteSchedule",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfboolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/schedules/{scheduleId}/fire": {
+      "post": {
+        "tags": [
+          "Schedules"
+        ],
+        "operationId": "FireSchedule",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scheduleId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfGuid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ping": {
       "get": {
         "tags": [
@@ -1647,6 +1840,21 @@
           }
         }
       },
+      "ApiResultOfGuid": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "ApiResultOfIReadOnlyListOfJobRunResult": {
         "required": [
           "result"
@@ -1677,6 +1885,23 @@
             ],
             "items": {
               "$ref": "#/components/schemas/JobScriptResult"
+            }
+          }
+        }
+      },
+      "ApiResultOfIReadOnlyListOfScheduleResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ScheduleResult"
             }
           }
         }
@@ -1816,6 +2041,24 @@
               },
               {
                 "$ref": "#/components/schemas/PingResponse"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfScheduleResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleResult"
               }
             ]
           }
@@ -2224,6 +2467,33 @@
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "CreateScheduleRequest": {
+        "required": [
+          "jobScriptId",
+          "kind",
+          "cronExpression",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "jobScriptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "cronExpression": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
           }
         }
       },
@@ -2879,6 +3149,76 @@
           }
         }
       },
+      "ScheduleResult": {
+        "required": [
+          "scheduleId",
+          "workspaceId",
+          "jobScriptId",
+          "jobName",
+          "kind",
+          "cronExpression",
+          "enabled",
+          "nextDueAt",
+          "lastFiredAt",
+          "lastRunId",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "scheduleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "jobScriptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "jobName": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "cronExpression": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "nextDueAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastFiredAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastRunId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "SetActiveRequest": {
         "required": [
           "isActive"
@@ -3050,6 +3390,28 @@
           },
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "UpdateScheduleRequest": {
+        "required": [
+          "kind",
+          "cronExpression",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "cronExpression": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
           }
         }
       },
@@ -3438,6 +3800,9 @@
     },
     {
       "name": "Tools"
+    },
+    {
+      "name": "Schedules"
     },
     {
       "name": "Diagnostics"

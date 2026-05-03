@@ -259,6 +259,17 @@ export const ApiResultOfEnvironmentConfigViewSchema = {
   },
 } as const;
 
+export const ApiResultOfGuidSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      type: ['null', 'string'],
+      format: 'uuid',
+    },
+  },
+} as const;
+
 export const ApiResultOfIReadOnlyListOfJobRunResultSchema = {
   required: ['result'],
   type: 'object',
@@ -280,6 +291,19 @@ export const ApiResultOfIReadOnlyListOfJobScriptResultSchema = {
       type: ['null', 'array'],
       items: {
         $ref: '#/components/schemas/JobScriptResult',
+      },
+    },
+  },
+} as const;
+
+export const ApiResultOfIReadOnlyListOfScheduleResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      type: ['null', 'array'],
+      items: {
+        $ref: '#/components/schemas/ScheduleResult',
       },
     },
   },
@@ -399,6 +423,23 @@ export const ApiResultOfPingResponseSchema = {
         },
         {
           $ref: '#/components/schemas/PingResponse',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfScheduleResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/ScheduleResult',
         },
       ],
     },
@@ -697,6 +738,26 @@ export const CreateJobScriptRequestSchema = {
     },
     status: {
       type: 'string',
+    },
+  },
+} as const;
+
+export const CreateScheduleRequestSchema = {
+  required: ['jobScriptId', 'kind', 'cronExpression', 'enabled'],
+  type: 'object',
+  properties: {
+    jobScriptId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    kind: {
+      type: 'string',
+    },
+    cronExpression: {
+      type: ['null', 'string'],
+    },
+    enabled: {
+      type: 'boolean',
     },
   },
 } as const;
@@ -1221,6 +1282,65 @@ export const RunJobScriptRequestSchema = {
   },
 } as const;
 
+export const ScheduleResultSchema = {
+  required: [
+    'scheduleId',
+    'workspaceId',
+    'jobScriptId',
+    'jobName',
+    'kind',
+    'cronExpression',
+    'enabled',
+    'nextDueAt',
+    'lastFiredAt',
+    'lastRunId',
+    'createdAt',
+  ],
+  type: 'object',
+  properties: {
+    scheduleId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    workspaceId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    jobScriptId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    jobName: {
+      type: 'string',
+    },
+    kind: {
+      type: 'string',
+    },
+    cronExpression: {
+      type: ['null', 'string'],
+    },
+    enabled: {
+      type: 'boolean',
+    },
+    nextDueAt: {
+      type: ['null', 'string'],
+      format: 'date-time',
+    },
+    lastFiredAt: {
+      type: ['null', 'string'],
+      format: 'date-time',
+    },
+    lastRunId: {
+      type: ['null', 'string'],
+      format: 'uuid',
+    },
+    createdAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+  },
+} as const;
+
 export const SetActiveRequestSchema = {
   required: ['isActive'],
   type: 'object',
@@ -1350,6 +1470,22 @@ export const UpdateJobScriptRequestSchema = {
     },
     status: {
       type: 'string',
+    },
+  },
+} as const;
+
+export const UpdateScheduleRequestSchema = {
+  required: ['kind', 'cronExpression', 'enabled'],
+  type: 'object',
+  properties: {
+    kind: {
+      type: 'string',
+    },
+    cronExpression: {
+      type: ['null', 'string'],
+    },
+    enabled: {
+      type: 'boolean',
     },
   },
 } as const;

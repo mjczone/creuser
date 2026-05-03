@@ -16,6 +16,8 @@ import type {
   CheckAgentHealthResponses,
   CreateJobData,
   CreateJobResponses,
+  CreateScheduleData,
+  CreateScheduleResponses,
   CreateUserData,
   CreateUserResponses,
   CreateWorkspaceData,
@@ -24,12 +26,16 @@ import type {
   DeleteEnvironmentSecretResponses,
   DeleteJobData,
   DeleteJobResponses,
+  DeleteScheduleData,
+  DeleteScheduleResponses,
   DeleteUserData,
   DeleteUserResponses,
   DeleteWorkspaceData,
   DeleteWorkspaceResponses,
   EchoData,
   EchoResponses,
+  FireScheduleData,
+  FireScheduleResponses,
   GetBrandingData,
   GetBrandingResponses,
   GetCurrentUserData,
@@ -48,6 +54,8 @@ import type {
   ListJobRunsResponses,
   ListJobsData,
   ListJobsResponses,
+  ListSchedulesData,
+  ListSchedulesResponses,
   ListToolsData,
   ListToolsResponses,
   ListUsersData,
@@ -84,6 +92,8 @@ import type {
   UpdateEnvironmentResponses,
   UpdateJobData,
   UpdateJobResponses,
+  UpdateScheduleData,
+  UpdateScheduleResponses,
   UpdateWorkspaceData,
   UpdateWorkspaceResponses,
   UploadLogoData,
@@ -533,6 +543,61 @@ export class Tools {
   ) {
     return (options?.client ?? client).get<ListToolsResponses, unknown, ThrowOnError>({
       url: '/api/tools',
+      ...options,
+    });
+  }
+}
+
+export class Schedules {
+  public static listSchedules<ThrowOnError extends boolean = false>(
+    options: Options<ListSchedulesData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListSchedulesResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/schedules',
+      ...options,
+    });
+  }
+
+  public static createSchedule<ThrowOnError extends boolean = false>(
+    options: Options<CreateScheduleData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<CreateScheduleResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/schedules',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static deleteSchedule<ThrowOnError extends boolean = false>(
+    options: Options<DeleteScheduleData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).delete<DeleteScheduleResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/schedules/{scheduleId}',
+      ...options,
+    });
+  }
+
+  public static updateSchedule<ThrowOnError extends boolean = false>(
+    options: Options<UpdateScheduleData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<UpdateScheduleResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/schedules/{scheduleId}',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static fireSchedule<ThrowOnError extends boolean = false>(
+    options: Options<FireScheduleData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<FireScheduleResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/schedules/{scheduleId}/fire',
       ...options,
     });
   }

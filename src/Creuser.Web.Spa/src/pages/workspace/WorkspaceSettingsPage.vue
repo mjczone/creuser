@@ -86,7 +86,6 @@ const items = computed<NavItem[]>(() => {
       label: 'Schedules',
       caption: 'Cron triggers, sync cadence',
       route: `${base}/schedules`,
-      disabled: true,
     },
     {
       icon: 'transform',

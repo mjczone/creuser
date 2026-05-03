@@ -76,6 +76,13 @@ const routes: RouteRecordRaw[] = [
               import('pages/workspace/WorkspaceSettingsJobsPage.vue'),
             meta: { title: 'Jobs', workspaceScoped: true, requiresWorkspaceEditor: true },
           },
+          {
+            path: 'schedules',
+            name: 'workspace-settings-schedules',
+            component: () =>
+              import('pages/workspace/WorkspaceSettingsSchedulesPage.vue'),
+            meta: { title: 'Schedules', workspaceScoped: true, requiresWorkspaceEditor: true },
+          },
         ],
       },
       {

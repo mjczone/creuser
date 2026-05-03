@@ -725,9 +725,13 @@ Conflict policy when a script is edited in both DB and filesystem: last-write-wi
 
 Three trigger types in v1:
 
-- **Cron** — `cr.schedules.cron_expression` parsed by NCrontab. The platform's scheduler tick fires due jobs.
-- **Workspace sync** — `cr.schedules.trigger_on: ["sync"]` runs the job after every successful sync of its workspace.
-- **Manual / API** — `POST /api/jobs/{id}/run` with parameters.
+- **Cron** — `cr.schedules.kind = 'cron'` with a NCrontab-parseable `cron_expression`. UTC-evaluated; 5-field (`m h dom mon dow`) and 6-field (with seconds) both supported. The `SchedulerService` is a `BackgroundService` that ticks every `CREUSER_SCHEDULER_INTERVAL_MS` (default 30s), runs a single indexed query against `cr.schedules WHERE enabled AND kind='cron' AND next_due_at <= now`, and dispatches each due row.
+- **Workspace sync** — `cr.schedules.kind = 'sync'` (no cron expression — mutually exclusive). Fires inline from the workspace `Sync` endpoint after a successful pull. Sync schedules never acquire a `next_due_at` so the cron tick won't double-fire them.
+- **Manual / API** — `POST /api/jobs/{id}/run` with parameters, or `POST /api/workspaces/{slug}/schedules/{id}/fire` to dispatch a configured schedule on demand without waiting for the tick.
+
+Both cron-tick and sync-hook paths route through `IJobScheduleDispatcher`, which creates a fresh DI scope per dispatch (so neither the cron tick nor the sync request pins the executor's lifetime), runs the job, then writes back `last_fired_at` + `last_run_id` and recomputes `next_due_at` for cron schedules. The dispatcher swallows + logs run-time exceptions so a busted job doesn't take down the tick loop. `JobRun.TriggerKind` records which path triggered the run (`cron`, `sync`, `manual`) so the audit timeline can render the cause.
+
+Multi-instance deployments will need a Postgres advisory lock around the tick to prevent the same schedule firing from two hosts at once. Single-tenant on-prem v0.1 is fine without.
 
 Future triggers (post-v1): git push (webhook), file-pattern change (sync diff intersected with a glob), HTTP webhook with body-as-input.
 
@@ -751,7 +755,7 @@ The minimal pragmatic slice that exercises the model end-to-end:
 6. CRUD endpoints for Jobs (admin); `POST /api/workspaces/{slug}/jobs/{jobId}/run` to trigger.
 7. SPA: workspace settings → Jobs page (list + edit + run), workspace home → recent runs.
 
-Subsequent slices add `llm-tool-loop`, `llm-planner`, then schedules, then Wolverine for durable execution.
+Subsequent slices add `llm-tool-loop`, `llm-planner`, then Wolverine for durable execution. Schedules + cron / sync triggers landed in v0.1: `cr.schedules` + `SchedulerService` (cron tick) + `IJobScheduleDispatcher` (shared by tick + sync hook + manual fire), with a workspace-settings UI to manage them.
 
 ### Sandbox model (forward-looking)
 
