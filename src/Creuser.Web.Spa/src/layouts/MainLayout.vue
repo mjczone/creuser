@@ -91,6 +91,48 @@
               {{ nav.label }}
             </q-item-section>
           </q-item>
+
+          <q-item
+            v-if="canCreateDashboards"
+            clickable
+            class="cr-nav-item"
+            data-testid="cr-add-dashboard"
+          >
+            <q-item-section avatar>
+              <q-icon name="add" />
+              <q-tooltip
+                v-if="!$q.screen.lt.md"
+                anchor="center right"
+                self="center left"
+                :offset="[8, 0]"
+              >
+                New dashboard / group
+              </q-tooltip>
+            </q-item-section>
+            <q-item-section>New…</q-item-section>
+            <q-menu anchor="center right" self="center left" :offset="[8, 0]">
+              <q-list dense>
+                <q-item clickable v-close-popup @click="openCreateDashboard">
+                  <q-item-section avatar>
+                    <q-icon name="dashboard" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>New dashboard</q-item-label>
+                    <q-item-label caption>Standalone or in a group</q-item-label>
+                  </q-item-section>
+                </q-item>
+                <q-item clickable v-close-popup @click="openCreateGroup">
+                  <q-item-section avatar>
+                    <q-icon name="folder" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label>New group</q-item-label>
+                    <q-item-label caption>Folder for related dashboards</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </q-list>
+            </q-menu>
+          </q-item>
         </q-list>
 
         <q-space />
@@ -159,6 +201,8 @@ import { useDashboardsStore } from 'stores/dashboards';
 import AssistantPanel from 'components/AssistantPanel.vue';
 import ThemeModeToggle from 'components/ThemeModeToggle.vue';
 import WorkspacePicker from 'components/WorkspacePicker.vue';
+import CreateDashboardDialog from 'components/CreateDashboardDialog.vue';
+import CreateDashboardGroupDialog from 'components/CreateDashboardGroupDialog.vue';
 
 const $q = useQuasar();
 const route = useRoute();
@@ -207,11 +251,17 @@ const navTree = computed(() =>
 const topNavItems = computed<NavItem[]>(() => {
   if (isWorkspaceScoped.value && activeSlug.value) {
     const items: NavItem[] = [];
-    // Home is special — always present, always first. The seeder ships it
-    // as a standalone dashboard with slug "home"; if for some reason it's
-    // missing (operator hard-deleted via DB), fall back to a metadata-only
-    // route so the icon doesn't disappear.
-    items.push({ icon: 'home', label: 'Home', route: `/w/${activeSlug.value}` });
+    // Home is special — always present, always first. Routes to the seeded
+    // Home dashboard (`/w/:slug/d/home`) when one exists in the nav tree;
+    // falls back to the workspace metadata page (`/w/:slug`) for workspaces
+    // without a Home dashboard yet (e.g. before the backfill service has
+    // run on a fresh deployment).
+    const hasHomeDashboard = navTree.value?.standalones.some((d) => d.slug === 'home');
+    items.push({
+      icon: 'home',
+      label: 'Home',
+      route: hasHomeDashboard ? `/w/${activeSlug.value}/d/home` : `/w/${activeSlug.value}`,
+    });
 
     if (navTree.value) {
       // Standalone dashboards (excluding the Home one we already added).
@@ -223,14 +273,16 @@ const topNavItems = computed<NavItem[]>(() => {
           route: `/w/${activeSlug.value}/d/${dash.slug}`,
         });
       }
-      // Group icons — clicking opens the sub-sidebar (sub-sidebar lands in
-      // the next pass; for now click navigates to the group's first child).
+      // Group icons — always route to the group landing page
+      // (`/w/:slug/g/:groupSlug`). That page redirects to the group's first
+      // child when one exists, or renders an empty-state CTA when the group
+      // has no dashboards yet. Sub-sidebar UI lands in a follow-up pass.
       for (const grp of navTree.value.groups) {
-        const firstChild = grp.children[0];
-        const target = firstChild
-          ? `/w/${activeSlug.value}/d/${firstChild.slug}`
-          : `/w/${activeSlug.value}`;
-        items.push({ icon: grp.icon, label: grp.name, route: target });
+        items.push({
+          icon: grp.icon,
+          label: grp.name,
+          route: `/w/${activeSlug.value}/g/${grp.slug}`,
+        });
       }
     }
     return items;
@@ -280,6 +332,46 @@ function onNavClick() {
 async function logout() {
   await auth.logout();
   await router.push({ name: 'login' });
+}
+
+// "+" affordance is admin-only (mutations are admin-gated server-side)
+// and only meaningful inside a workspace context. Hidden everywhere else.
+const canCreateDashboards = computed(
+  () => isWorkspaceScoped.value && !!activeSlug.value && auth.isAdmin,
+);
+
+function openCreateDashboard() {
+  if (!activeSlug.value) return;
+  const groups = navTree.value?.groups.map((g) => ({ slug: g.slug, name: g.name })) ?? [];
+  $q.dialog({
+    component: CreateDashboardDialog,
+    componentProps: { workspaceSlug: activeSlug.value, groups },
+  }).onOk((created: { slug?: string } | null) => {
+    void onDashboardCreated(created);
+  });
+}
+
+async function onDashboardCreated(created: { slug?: string } | null) {
+  if (!activeSlug.value) return;
+  await dashboardsStore.ensureNavTree(activeSlug.value, true);
+  if (created?.slug) {
+    await router.push(`/w/${activeSlug.value}/d/${created.slug}`);
+  }
+}
+
+function openCreateGroup() {
+  if (!activeSlug.value) return;
+  $q.dialog({
+    component: CreateDashboardGroupDialog,
+    componentProps: { workspaceSlug: activeSlug.value },
+  }).onOk(() => {
+    void onGroupCreated();
+  });
+}
+
+async function onGroupCreated() {
+  if (!activeSlug.value) return;
+  await dashboardsStore.ensureNavTree(activeSlug.value, true);
 }
 </script>
 

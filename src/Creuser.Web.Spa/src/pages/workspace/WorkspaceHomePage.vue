@@ -60,13 +60,6 @@
       </section>
     </div>
 
-    <div class="cr-wshome-coming">
-      <q-icon name="construction" size="18px" class="cr-wshome-coming-icon" />
-      <span>
-        Workspace dashboards land in the next pass — the icon bar will populate with Operations,
-        plus any standalone dashboards or groups admins create.
-      </span>
-    </div>
   </q-page>
 </template>
 
@@ -209,22 +202,4 @@ function formatRelative(when: string | null | undefined): string {
   color: var(--cr-fg-secondary);
 }
 
-.cr-wshome-coming {
-  margin-top: 32px;
-  padding: 14px 16px;
-  border: 1px dashed var(--cr-border-subtle);
-  border-radius: 6px;
-  background: var(--cr-bg-elevated);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  color: var(--cr-fg-secondary);
-  line-height: 1.5;
-}
-
-.cr-wshome-coming-icon {
-  color: var(--cr-fg-tertiary);
-  flex-shrink: 0;
-}
 </style>

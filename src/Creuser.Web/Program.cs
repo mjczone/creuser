@@ -303,6 +303,12 @@ builder.Services.AddHostedService<SchedulerService>();
 builder.Services.AddScoped<IDashboardStore, dashboardsRepository>();
 builder.Services.AddScoped<IDashboardSeeder, DashboardSeeder>();
 
+// Backfill defaults for any workspace that doesn't have them yet — pre-existing
+// workspaces created before the composer slice shipped, plus any workspace
+// where the create-time seeder failed silently. Idempotent; matches on
+// (workspace_id, slug) so re-runs leave user-edited rows untouched.
+builder.Services.AddHostedService<DashboardBackfillService>();
+
 // Workspace memberships. The store is the source of truth for non-admin
 // access — admins bypass it entirely (admin-ness implies Editor on every
 // workspace per the architecture's auth model). Endpoints are admin-gated

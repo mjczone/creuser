@@ -48,7 +48,15 @@ public sealed class DashboardSeeder : IDashboardSeeder
                     Slug: "home",
                     Name: "Home",
                     Icon: "home",
-                    LayoutJson: SerializeLayout(HomeLayout()),
+                    // Empty layout — DashboardPage's applyLayout fallback
+                    // spawns one panel per widget instance via dockview's
+                    // addPanel (which sets `contentComponent` + `params`
+                    // correctly). Constructing the SerializedDockview shape
+                    // server-side risks divergence when dockview's schema
+                    // changes; letting the SPA build it from the widget
+                    // instances avoids that. The first edit-mode "Done" save
+                    // overwrites this with dockview's canonical toJSON.
+                    LayoutJson: "{}",
                     WidgetsJson: SerializeWidgets(HomeWidgets()),
                     Position: 0,
                     IsDefault: true,
@@ -144,7 +152,7 @@ public sealed class DashboardSeeder : IDashboardSeeder
                 Slug: slug,
                 Name: name,
                 Icon: icon,
-                LayoutJson: SerializeLayout(SinglePaneLayout(widgets)),
+                LayoutJson: "{}",
                 WidgetsJson: SerializeWidgets(widgets),
                 Position: position,
                 IsDefault: true,
@@ -180,112 +188,6 @@ public sealed class DashboardSeeder : IDashboardSeeder
             widgetType,
             props,
         };
-
-    /// <summary>
-    /// Three-pane layout — runs on the left, scripts top-right, schedules
-    /// bottom-right. A reasonable default for a fresh workspace.
-    /// </summary>
-    private static object HomeLayout()
-    {
-        // Mixed leaf+branch nodes share a tagged shape with a string `type`,
-        // so the array holds them as `object` to keep C# happy with anonymous
-        // type inference. dockview ignores the .NET-side typing on the wire.
-        var leafRuns = (object)
-            new
-            {
-                type = "leaf",
-                data = new
-                {
-                    views = new[] { "p-runs" },
-                    activeView = "p-runs",
-                    id = "g-1",
-                },
-                size = 600,
-            };
-        var leafScripts = (object)
-            new
-            {
-                type = "leaf",
-                data = new
-                {
-                    views = new[] { "p-scripts" },
-                    activeView = "p-scripts",
-                    id = "g-2",
-                },
-                size = 350,
-            };
-        var leafSchedules = (object)
-            new
-            {
-                type = "leaf",
-                data = new
-                {
-                    views = new[] { "p-schedules" },
-                    activeView = "p-schedules",
-                    id = "g-3",
-                },
-                size = 350,
-            };
-        var rightBranch = (object)
-            new
-            {
-                type = "branch",
-                data = new[] { leafScripts, leafSchedules },
-                size = 600,
-            };
-        return new
-        {
-            grid = new
-            {
-                root = new
-                {
-                    type = "branch",
-                    data = new[] { leafRuns, rightBranch },
-                    size = 700,
-                },
-                width = 1200,
-                height = 700,
-                orientation = "HORIZONTAL",
-            },
-            panels = new
-            {
-                pRuns = new { id = "p-runs", title = "Runs" },
-                pScripts = new { id = "p-scripts", title = "Scripts" },
-                pSchedules = new { id = "p-schedules", title = "Schedules" },
-            },
-        };
-    }
-
-    private static object SinglePaneLayout(IReadOnlyList<object> widgets)
-    {
-        var panelId = "p-only";
-        return new
-        {
-            grid = new
-            {
-                root = new
-                {
-                    type = "leaf",
-                    data = new
-                    {
-                        views = new[] { panelId },
-                        activeView = panelId,
-                        id = "g-1",
-                    },
-                    size = 1200,
-                },
-                width = 1200,
-                height = 700,
-                orientation = "HORIZONTAL",
-            },
-            panels = new Dictionary<string, object>
-            {
-                [panelId] = new { id = panelId, title = "" },
-            },
-        };
-    }
-
-    private static string SerializeLayout(object layout) => JsonSerializer.Serialize(layout);
 
     private static string SerializeWidgets(IReadOnlyList<object> widgets) =>
         JsonSerializer.Serialize(widgets);

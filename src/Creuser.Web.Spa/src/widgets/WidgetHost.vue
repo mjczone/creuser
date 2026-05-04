@@ -21,15 +21,17 @@
 
 <script setup lang="ts">
 /**
- * Universal pane content for the dockview composer. Each panel's `params`
- * carries `{ instanceId }` and the host's parent (DashboardPage) supplies
+ * Universal pane content for the dockview composer. Each panel's params
+ * carry `{ instanceId }` and the host's parent (DashboardPage) supplies
  * the dashboard's widget instance list. WidgetHost looks up the instance
- * by id, resolves widgetType -> registered component, and renders.
+ * by id, resolves widgetType → registered component, and renders.
  *
- * Renders an error tile if the instance id is unknown (data drift) or if
- * the widget type isn't registered (a plugin removed without migrating
- * dashboards). Either case is recoverable — the operator deletes or
- * reconfigures the offending panel.
+ * dockview-vue's prop shape for registered components is
+ * `props.params = { params: <user-params>, api, containerApi, tabLocation }`
+ * — i.e. the user's params nest under another `params` key. The
+ * destructuring template-slot syntax (`<template #X="{ params }">`) hides
+ * this from the user, but registered components see the full object.
+ * Hence `props.params.params.instanceId`.
  */
 import { computed, inject } from 'vue';
 import type { Ref } from 'vue';
@@ -41,10 +43,16 @@ interface WidgetInstance {
   props: Record<string, unknown>;
 }
 
-const props = defineProps<{
-  /** Set by dockview from the panel params. */
-  params: { instanceId: string };
-}>();
+interface DockviewPanelParams {
+  /** The user-supplied params from `addPanel({ params: { instanceId } })`. */
+  params?: { instanceId?: string } & Record<string, unknown>;
+  /** dockview's per-panel api — unused here but documented. */
+  api?: unknown;
+  containerApi?: unknown;
+  tabLocation?: unknown;
+}
+
+const props = defineProps<{ params: DockviewPanelParams }>();
 
 const widgetInstances = inject<Ref<WidgetInstance[]>>(
   'cr-widget-instances',
@@ -52,7 +60,7 @@ const widgetInstances = inject<Ref<WidgetInstance[]>>(
 );
 const workspaceSlug = inject<Ref<string>>('cr-workspace-slug', null as unknown as Ref<string>);
 
-const instanceId = computed(() => props.params?.instanceId ?? '');
+const instanceId = computed(() => props.params?.params?.instanceId ?? '');
 const instance = computed(
   () => widgetInstances?.value?.find((w) => w.id === instanceId.value) ?? null,
 );

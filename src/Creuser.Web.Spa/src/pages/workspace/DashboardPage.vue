@@ -47,11 +47,24 @@
     </div>
 
     <div v-else class="cr-dash-canvas dockview-theme-dark" :class="{ 'is-edit': editMode }">
-      <DockviewVue :disableDnd="!editMode" :singleTabMode="'fullwidth'" @ready="onReady">
-        <template #WidgetHost="{ params }">
-          <WidgetHost :params="params as { instanceId: string }" />
-        </template>
-      </DockviewVue>
+      <!--
+        WidgetHost is registered globally in `boot/widgets.ts` (via
+        `app.component('WidgetHost', WidgetHost)`). dockview-vue's
+        `createComponent` callback resolves panel `component:` strings
+        through Vue's component registry, so no template slot is needed.
+
+        `:key` is the dashboard slug so each dashboard navigation forces
+        Vue to remount DockviewVue with a fresh dockview-core instance.
+        Without this, a previous dashboard's failed fromJSON leaves
+        dockview's internal Tabs collection in a half-state that crashes
+        the next applyLayout's `api.clear()` call.
+      -->
+      <DockviewVue
+        :key="dashboardSlug"
+        :disableDnd="!editMode"
+        :singleTabMode="'fullwidth'"
+        @ready="onReady"
+      />
     </div>
   </q-page>
 </template>
@@ -65,7 +78,6 @@ import type { DockviewApi, DockviewReadyEvent, SerializedDockview } from 'dockvi
 import 'dockview-core/dist/styles/dockview.css';
 import { useDashboardsStore } from 'src/stores/dashboards';
 import { useAuthStore } from 'src/stores/auth';
-import WidgetHost from 'src/widgets/WidgetHost.vue';
 import AddWidgetDialog from 'src/components/AddWidgetDialog.vue';
 
 interface WidgetInstance {
@@ -115,7 +127,12 @@ async function loadDashboard() {
     const d = await dashboardsStore.ensureDashboard(workspaceSlug.value, dashboardSlug.value);
     dashboard.value = d;
     widgetInstances.value = parseWidgets(d?.widgetsJson ?? '[]');
-    if (dockviewApi) applyLayout(dockviewApi, d?.layoutJson ?? '{}', widgetInstances.value);
+    // No applyLayout call here — the DockviewVue's :key="dashboardSlug"
+    // forces a remount on every dashboard switch, so onReady fires for
+    // the fresh instance and runs applyLayout from there. Calling it here
+    // races against that remount: dockviewApi may still point at the
+    // about-to-be-disposed instance, and api.clear() blows up on the
+    // dead Tabs collection.
   } finally {
     loading.value = false;
   }
@@ -158,15 +175,28 @@ function applyLayout(api: DockviewApi, layoutJson: string, instances: WidgetInst
     /* fall through */
   }
 
+  let layoutWasRejected = false;
   if (layout) {
     try {
       api.fromJSON(layout);
-      return;
+      // dockview catches deserialization errors internally and reverts —
+      // it doesn't always re-throw, so we can't trust a missing exception
+      // to mean success. Verify panels actually landed; if not, fall
+      // through to the spawn-from-instances path.
+      if (api.panels.length > 0) return;
+      layoutWasRejected = true;
     } catch {
       /* layout incompatible; fall through */
+      layoutWasRejected = true;
     }
   }
 
+  // Fallback: spawn one panel per widget instance via dockview's addPanel,
+  // which sets `contentComponent` + `params` correctly. This is the path
+  // taken on (a) seeded dashboards (empty layout, populated widgets array),
+  // (b) layouts dockview rejected, and (c) hand-edited DB rows that broke
+  // the schema. The first edit-mode "Done" save overwrites the layout
+  // with dockview's canonical toJSON output.
   for (const instance of instances) {
     api.addPanel({
       id: instance.id,
@@ -174,6 +204,32 @@ function applyLayout(api: DockviewApi, layoutJson: string, instances: WidgetInst
       title: prettyTitleFor(instance.widgetType),
       params: { instanceId: instance.id },
     });
+  }
+
+  // If the saved layout JSON was non-empty but dockview rejected it,
+  // proactively repair the row so subsequent loads don't keep tripping
+  // dockview's deserializer (which logs a noisy console error each time).
+  // Admin-only — non-admins land on the fallback path indefinitely until
+  // an admin edits the dashboard.
+  if (layoutWasRejected && auth.isAdmin && workspaceSlug.value) {
+    void repairLayout();
+  }
+}
+
+async function repairLayout() {
+  if (!dockviewApi || !workspaceSlug.value) return;
+  try {
+    const layoutJson = JSON.stringify(dockviewApi.toJSON());
+    const widgetsJson = JSON.stringify(widgetInstances.value);
+    await dashboardsStore.saveLayout(
+      workspaceSlug.value,
+      dashboardSlug.value,
+      layoutJson,
+      widgetsJson,
+    );
+  } catch {
+    // Silent — the user can still recover by clicking Edit → Done.
+    // No notify(); this is a quiet self-heal not user-facing action.
   }
 }
 
@@ -222,7 +278,6 @@ function openAddWidget() {
 }
 
 function addWidgetInstance(payload: AddWidgetPayload) {
-  if (!dockviewApi) return;
   const instance: WidgetInstance = {
     id:
       'w-' +
@@ -230,22 +285,49 @@ function addWidgetInstance(payload: AddWidgetPayload) {
     widgetType: payload.widgetType,
     props: payload.props,
   };
+  // Always update the widgets array first — that way the instance survives
+  // even if dockview is mid-remount and the api isn't reachable. The next
+  // onReady's applyLayout fallback path picks it up.
   widgetInstances.value = [...widgetInstances.value, instance];
+
+  if (!dockviewApi) {
+    $q.notify({
+      type: 'warning',
+      message: 'Dashboard not ready yet — widget queued; saving the dashboard will persist it.',
+      timeout: 3000,
+    });
+    return;
+  }
 
   // Default placement: tab into the active group, mirroring the design
   // doc's note that v1 ships the simplest case. The user drags from
   // there if they want a split.
-  dockviewApi.addPanel({
-    id: instance.id,
-    component: 'WidgetHost',
-    title: prettyTitleFor(instance.widgetType),
-    params: { instanceId: instance.id },
-  });
+  try {
+    dockviewApi.addPanel({
+      id: instance.id,
+      component: 'WidgetHost',
+      title: prettyTitleFor(instance.widgetType),
+      params: { instanceId: instance.id },
+    });
+  } catch (ex: unknown) {
+    $q.notify({
+      type: 'negative',
+      message:
+        ex instanceof Error
+          ? `Failed to add widget: ${ex.message}`
+          : 'Failed to add widget.',
+      timeout: 5000,
+    });
+  }
 }
 
 watch(
   [workspaceSlug, dashboardSlug],
   () => {
+    // Drop the stale api reference — :key on DockviewVue forces a
+    // remount on dashboardSlug change, and the previous api is about to
+    // be disposed. The new instance assigns dockviewApi from onReady.
+    dockviewApi = null;
     void loadDashboard();
   },
   { immediate: true },

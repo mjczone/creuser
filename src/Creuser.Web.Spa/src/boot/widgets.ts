@@ -1,5 +1,6 @@
 import { boot } from 'quasar/wrappers';
 import { registerWidget } from 'src/widgets/registry';
+import WidgetHost from 'src/widgets/WidgetHost.vue';
 import RunsList from 'src/widgets/RunsList.vue';
 import RunInspector from 'src/widgets/RunInspector.vue';
 import ScheduleList from 'src/widgets/ScheduleList.vue';
@@ -29,7 +30,15 @@ import WorkspaceMembers from 'src/widgets/WorkspaceMembers.vue';
  * plugin's first widget can ship as a placeholder while the real
  * implementation is iterated).
  */
-export default boot(() => {
+export default boot(({ app }) => {
+  // dockview-vue's createComponent callback resolves panel components via
+  // Vue's component registry (instance.components or appContext.components).
+  // The README's <template #X> slot syntax doesn't actually work in this
+  // version — slots aren't scraped into the component registry. So we
+  // register WidgetHost globally here; DashboardPage's addPanel calls then
+  // hit `appContext.components.WidgetHost` cleanly.
+  app.component('WidgetHost', WidgetHost);
+
   registerWidget({
     type: 'RunsList',
     name: 'Runs',
