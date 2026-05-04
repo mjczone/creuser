@@ -303,6 +303,12 @@ builder.Services.AddHostedService<SchedulerService>();
 builder.Services.AddScoped<IDashboardStore, dashboardsRepository>();
 builder.Services.AddScoped<IDashboardSeeder, DashboardSeeder>();
 
+// Workspace memberships. The store is the source of truth for non-admin
+// access — admins bypass it entirely (admin-ness implies Editor on every
+// workspace per the architecture's auth model). Endpoints are admin-gated
+// in v1; v0.2 may relax read access to workspace-viewers.
+builder.Services.AddScoped<IWorkspaceMemberStore, workspaceMembersRepository>();
+
 // Capability registry. Add additional ICapabilityProvider registrations
 // here as new modules / plugins land; CapabilityRegistry composes whatever
 // providers it finds in DI.
@@ -426,6 +432,7 @@ app.MapJobsEndpoints();
 app.MapToolsEndpoints();
 app.MapSchedulesEndpoints();
 app.MapDashboardsEndpoints();
+app.MapMembersEndpoints();
 app.MapProjectionsEndpoints();
 app.MapPlansEndpoints();
 app.MapPingEndpoints();

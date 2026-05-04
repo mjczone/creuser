@@ -1963,6 +1963,160 @@
         }
       }
     },
+    "/api/workspaces/{slug}/members": {
+      "get": {
+        "tags": [
+          "Members"
+        ],
+        "operationId": "ListWorkspaceMembers",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfMemberResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Members"
+        ],
+        "operationId": "AddWorkspaceMember",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfMemberResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/members/{userId}": {
+      "put": {
+        "tags": [
+          "Members"
+        ],
+        "operationId": "UpdateWorkspaceMember",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfMemberResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Members"
+        ],
+        "operationId": "RemoveWorkspaceMember",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfboolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{slug}/conventions": {
       "get": {
         "tags": [
@@ -2282,6 +2436,22 @@
   },
   "components": {
     "schemas": {
+      "AddMemberRequest": {
+        "required": [
+          "userId",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
       "AgentChatRequest": {
         "required": [
           "message"
@@ -2783,6 +2953,23 @@
           }
         }
       },
+      "ApiResultOfIReadOnlyListOfMemberResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/MemberResult"
+            }
+          }
+        }
+      },
       "ApiResultOfIReadOnlyListOfPlanSummary": {
         "required": [
           "result"
@@ -2934,6 +3121,24 @@
               },
               {
                 "$ref": "#/components/schemas/JobScriptResult"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfMemberResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MemberResult"
               }
             ]
           }
@@ -4560,6 +4765,47 @@
           }
         }
       },
+      "MemberResult": {
+        "required": [
+          "userId",
+          "email",
+          "displayName",
+          "role",
+          "grantedAt",
+          "grantedBy",
+          "isActive"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "grantedBy": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
       "OpenAIConfig": {
         "type": "object",
         "properties": {
@@ -5209,6 +5455,17 @@
           }
         }
       },
+      "UpdateMemberRequest": {
+        "required": [
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          }
+        }
+      },
       "UpdateScheduleRequest": {
         "required": [
           "kind",
@@ -5640,6 +5897,9 @@
     },
     {
       "name": "DashboardGroups"
+    },
+    {
+      "name": "Members"
     },
     {
       "name": "Projections"

@@ -1,6 +1,5 @@
 import { boot } from 'quasar/wrappers';
 import { registerWidget } from 'src/widgets/registry';
-import PlaceholderWidget from 'src/widgets/PlaceholderWidget.vue';
 import RunsList from 'src/widgets/RunsList.vue';
 import RunInspector from 'src/widgets/RunInspector.vue';
 import ScheduleList from 'src/widgets/ScheduleList.vue';
@@ -8,6 +7,7 @@ import JobScriptList from 'src/widgets/JobScriptList.vue';
 import JobScriptEditor from 'src/widgets/JobScriptEditor.vue';
 import Markdown from 'src/widgets/Markdown.vue';
 import ProjectionReport from 'src/widgets/ProjectionReport.vue';
+import WorkspaceMembers from 'src/widgets/WorkspaceMembers.vue';
 
 /**
  * Registers the v1 widget set against the global widget registry. Each
@@ -22,7 +22,12 @@ import ProjectionReport from 'src/widgets/ProjectionReport.vue';
  *  - Markdown            (real)
  *  - ProjectionReport    (real)
  *  - JobScriptEditor     (real, Monaco-loaded from CDN per `boot/monaco.ts`)
- *  - WorkspaceMembers    (placeholder — member API surface needed first)
+ *  - WorkspaceMembers    (real)
+ *
+ * `PlaceholderWidget` is no longer referenced by the registry but is kept
+ * around as the canonical pattern for future widget contributions (a
+ * plugin's first widget can ship as a placeholder while the real
+ * implementation is iterated).
  */
 export default boot(() => {
   registerWidget({
@@ -142,7 +147,7 @@ export default boot(() => {
     name: 'Members',
     description: 'Workspace members and their roles (read-only).',
     icon: 'group',
-    component: PlaceholderWidget,
+    component: WorkspaceMembers,
     propsSchema: { type: 'object', properties: {} },
     defaultProps: {},
     defaultDockview: { minWidth: 240, preferredPosition: 'tab' },

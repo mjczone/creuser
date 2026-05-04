@@ -97,6 +97,10 @@ public sealed class DbInitializer : IHostedService
                 tx: null,
                 cancellationToken: cancellationToken
             );
+            await conn.CreateTableIfNotExistsAsync<workspace_members>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
             await conn.CreateTableIfNotExistsAsync<dashboard_groups>(
                 tx: null,
                 cancellationToken: cancellationToken

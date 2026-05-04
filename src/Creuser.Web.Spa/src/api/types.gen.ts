@@ -4,6 +4,11 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AddMemberRequest = {
+  userId: string;
+  role: string;
+};
+
 export type AgentChatRequest = {
   message: string;
   history?: null | Array<ChatTurn>;
@@ -114,6 +119,10 @@ export type ApiResultOfIReadOnlyListOfJobScriptResult = {
   result: null | Array<JobScriptResult>;
 };
 
+export type ApiResultOfIReadOnlyListOfMemberResult = {
+  result: null | Array<MemberResult>;
+};
+
 export type ApiResultOfIReadOnlyListOfPlanSummary = {
   result: null | Array<PlanSummary>;
 };
@@ -148,6 +157,10 @@ export type ApiResultOfJobRunResult = {
 
 export type ApiResultOfJobScriptResult = {
   result: null | JobScriptResult;
+};
+
+export type ApiResultOfMemberResult = {
+  result: null | MemberResult;
 };
 
 export type ApiResultOfPingResponse = {
@@ -522,6 +535,16 @@ export type LoginRequest = {
   password: string;
 };
 
+export type MemberResult = {
+  userId: string;
+  email: string;
+  displayName: string;
+  role: string;
+  grantedAt: string;
+  grantedBy: null | string;
+  isActive: boolean;
+};
+
 export type OpenAiConfig = {
   apiKeySecret?: null | string;
   defaultModel?: null | string;
@@ -670,6 +693,10 @@ export type UpdateJobScriptRequest = {
   frontmatter: string;
   body: string;
   status: string;
+};
+
+export type UpdateMemberRequest = {
+  role: string;
 };
 
 export type UpdateScheduleRequest = {
@@ -1772,6 +1799,84 @@ export type UpdateDashboardGroupResponses = {
 
 export type UpdateDashboardGroupResponse =
   UpdateDashboardGroupResponses[keyof UpdateDashboardGroupResponses];
+
+export type ListWorkspaceMembersData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/members';
+};
+
+export type ListWorkspaceMembersResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfMemberResult;
+};
+
+export type ListWorkspaceMembersResponse =
+  ListWorkspaceMembersResponses[keyof ListWorkspaceMembersResponses];
+
+export type AddWorkspaceMemberData = {
+  body: AddMemberRequest;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/members';
+};
+
+export type AddWorkspaceMemberResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfMemberResult;
+};
+
+export type AddWorkspaceMemberResponse =
+  AddWorkspaceMemberResponses[keyof AddWorkspaceMemberResponses];
+
+export type RemoveWorkspaceMemberData = {
+  body?: never;
+  path: {
+    slug: string;
+    userId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/members/{userId}';
+};
+
+export type RemoveWorkspaceMemberResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfboolean;
+};
+
+export type RemoveWorkspaceMemberResponse =
+  RemoveWorkspaceMemberResponses[keyof RemoveWorkspaceMemberResponses];
+
+export type UpdateWorkspaceMemberData = {
+  body: UpdateMemberRequest;
+  path: {
+    slug: string;
+    userId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/members/{userId}';
+};
+
+export type UpdateWorkspaceMemberResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfMemberResult;
+};
+
+export type UpdateWorkspaceMemberResponse =
+  UpdateWorkspaceMemberResponses[keyof UpdateWorkspaceMemberResponses];
 
 export type ListConventionsData = {
   body?: never;

@@ -8,6 +8,8 @@ import {
 } from './client';
 import { client } from './client.gen';
 import type {
+  AddWorkspaceMemberData,
+  AddWorkspaceMemberResponses,
   AgentChatData,
   AgentChatResponses,
   ChangePasswordData,
@@ -86,6 +88,8 @@ import type {
   ListToolsResponses,
   ListUsersData,
   ListUsersResponses,
+  ListWorkspaceMembersData,
+  ListWorkspaceMembersResponses,
   ListWorkspacePluginsData,
   ListWorkspacePluginsResponses,
   ListWorkspaceRunsData,
@@ -100,6 +104,8 @@ import type {
   PingResponses,
   QueryEntitiesData,
   QueryEntitiesResponses,
+  RemoveWorkspaceMemberData,
+  RemoveWorkspaceMemberResponses,
   ResetUserPasswordData,
   ResetUserPasswordResponses,
   RunJobData,
@@ -133,6 +139,8 @@ import type {
   UpdateScheduleData,
   UpdateScheduleResponses,
   UpdateWorkspaceData,
+  UpdateWorkspaceMemberData,
+  UpdateWorkspaceMemberResponses,
   UpdateWorkspaceResponses,
   UploadLogoData,
   UploadLogoResponses,
@@ -787,6 +795,51 @@ export class DashboardGroups {
   ) {
     return (options.client ?? client).put<UpdateDashboardGroupResponses, unknown, ThrowOnError>({
       url: '/api/workspaces/{slug}/dashboard-groups/{groupSlug}',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+}
+
+export class Members {
+  public static listWorkspaceMembers<ThrowOnError extends boolean = false>(
+    options: Options<ListWorkspaceMembersData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListWorkspaceMembersResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/members',
+      ...options,
+    });
+  }
+
+  public static addWorkspaceMember<ThrowOnError extends boolean = false>(
+    options: Options<AddWorkspaceMemberData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<AddWorkspaceMemberResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/members',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static removeWorkspaceMember<ThrowOnError extends boolean = false>(
+    options: Options<RemoveWorkspaceMemberData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).delete<RemoveWorkspaceMemberResponses, unknown, ThrowOnError>(
+      { url: '/api/workspaces/{slug}/members/{userId}', ...options },
+    );
+  }
+
+  public static updateWorkspaceMember<ThrowOnError extends boolean = false>(
+    options: Options<UpdateWorkspaceMemberData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<UpdateWorkspaceMemberResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/members/{userId}',
       ...options,
       headers: {
         'Content-Type': 'application/json',
