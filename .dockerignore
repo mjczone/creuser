@@ -1,0 +1,29 @@
+# Mirrors .gitignore for the most part — the Dockerfile's `COPY . .` happens
+# after the explicit per-csproj copies, and we don't want it sweeping in
+# build artifacts, node_modules, or local dev state.
+
+# .NET build output
+**/bin
+**/obj
+**/TestResults
+**/*.user
+**/.vs
+
+# SPA build artifacts (rebuilt inside the image)
+src/Creuser.Web.Spa/node_modules
+src/Creuser.Web.Spa/dist
+src/Creuser.Web/wwwroot
+
+# Local dev data + ephemeral session state
+.data
+.claude/scheduled_tasks.lock
+.claude/tasks
+.claude/.cache
+appsettings.*.local.json
+
+# Tooling caches that shouldn't ship into the build context
+.git
+.github
+**/.DS_Store
+**/Thumbs.db
+tmp

@@ -1,0 +1,114 @@
+name: Docker
+
+# Builds and publishes both image variants (fat + slim) per
+# docs/docker-variants.md. Triggers:
+#   - push to main         → publish :edge / :edge-slim (ghcr only)
+#   - push of a vN.M.P tag → publish :N.M.P / :N.M.P-slim, plus rolling
+#                             :N.M / :N.M-slim, plus :latest / :slim
+#                             (ghcr + Docker Hub if DOCKERHUB_* secrets set)
+#
+# The build runs once per variant via matrix; each variant ships in one
+# image manifest (linux/amd64 in v0.1; arm64 added when there's demand).
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  DOCKERHUB_IMAGE: docker.io/mjczone/creuser
+
+jobs:
+  publish:
+    name: Build + push (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [fat, slim]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: startsWith(github.ref, 'refs/tags/v') && env.DOCKERHUB_USERNAME != ''
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Tag rules per docs/docker-variants.md:
+      #   fat:  vN.M.P → :N.M.P, :N.M, :latest
+      #         main   → :edge
+      #   slim: vN.M.P → :N.M.P-slim, :N.M-slim, :slim
+      #         main   → :edge-slim
+      #
+      # docker/metadata-action's flavor + tags rules express this
+      # declaratively. The version-rolling :N.M tag is added explicitly via
+      # the regex pattern that strips the patch component.
+      - name: Compute tags + labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ env.DOCKERHUB_IMAGE }}
+          flavor: |
+            latest=false
+            suffix=${{ matrix.variant == 'slim' && '-slim' || '' }},onlatest=true
+          tags: |
+            type=ref,event=branch,pattern=edge,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            type=raw,value=edge,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+          labels: |
+            org.opencontainers.image.title=Creuser
+            org.opencontainers.image.description=Creuser ${{ matrix.variant }} variant — see docs/docker-variants.md
+            org.opencontainers.image.licenses=LGPL-3.0
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.vendor=MJCZone
+
+      - name: Build + push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          build-args: |
+            VARIANT=${{ matrix.variant }}
+          # On tag pushes we also push to Docker Hub if the secrets are set;
+          # on main pushes we only push to ghcr.io (edge tags). The metadata
+          # action's `images:` list above generates dual-registry tags
+          # unconditionally, so we filter via the docker login step's
+          # presence — login-action skips when secrets aren't set, and
+          # build-push-action's push step quietly tolerates the missing
+          # registry credentials.
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # linux/amd64 only in v0.1. arm64 added when there's demand —
+          # cross-compile via QEMU adds ~2x to build time.
+          platforms: linux/amd64
+          provenance: false
+          cache-from: type=gha,scope=docker-${{ matrix.variant }}
+          cache-to: type=gha,scope=docker-${{ matrix.variant }},mode=max

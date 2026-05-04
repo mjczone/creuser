@@ -1,0 +1,79 @@
+name: CI
+
+# Runs on every PR + every push to main. Lint + build the .NET solution and
+# the SPA, then run the full test suite (Core + Projections + Scripting +
+# Integration). Integration tests spin a Postgres container via Testcontainers,
+# so the runner needs Docker — using ubuntu-latest gets us that for free.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (.NET + SPA)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore .NET tools
+        run: dotnet tool restore
+      - name: Verify CSharpier formatting
+        run: dotnet csharpier check .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: src/Creuser.Web.Spa/package-lock.json
+      - name: Install SPA deps
+        run: npm --prefix src/Creuser.Web.Spa ci --no-audit --no-fund
+      - name: Run ESLint
+        run: npm --prefix src/Creuser.Web.Spa run lint
+
+  test:
+    name: Build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: src/Creuser.Web.Spa/package-lock.json
+
+      # SPA codegen needs the OpenAPI doc that Web emits at build time —
+      # restore + build .NET first, then codegen + build the SPA, then run
+      # the test suite end-to-end.
+      - name: Restore .NET
+        run: dotnet restore Creuser.slnx
+      - name: Install SPA deps
+        run: npm --prefix src/Creuser.Web.Spa ci --no-audit --no-fund
+      - name: Build .NET (Release)
+        run: dotnet build Creuser.slnx -c Release --no-restore
+      - name: SPA codegen
+        run: npm --prefix src/Creuser.Web.Spa run codegen
+      - name: Build SPA
+        run: npm --prefix src/Creuser.Web.Spa run build
+      - name: Run tests
+        run: dotnet test Creuser.slnx -c Release --no-build --nologo --logger "trx;LogFileName=test-results.trx"
+      - name: Upload TRX artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+          if-no-files-found: ignore

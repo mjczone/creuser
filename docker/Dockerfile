@@ -24,18 +24,27 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
 
 # Restore .NET deps first so layer caches survive code-only changes.
 COPY Creuser.slnx global.json dotnet-tools.json ./
-COPY src/Creuser.Core/Creuser.Core.csproj                                    src/Creuser.Core/
-COPY src/Creuser.Persistence/Creuser.Persistence.csproj                      src/Creuser.Persistence/
-COPY src/Creuser.Git/Creuser.Git.csproj                                      src/Creuser.Git/
-COPY src/Creuser.Scripting/Creuser.Scripting.csproj                          src/Creuser.Scripting/
-COPY src/Creuser.Agents/Creuser.Agents.csproj                                src/Creuser.Agents/
-COPY src/Creuser.Auth.Abstractions/Creuser.Auth.Abstractions.csproj          src/Creuser.Auth.Abstractions/
-COPY src/Creuser.Auth.Core/Creuser.Auth.Core.csproj                          src/Creuser.Auth.Core/
-COPY src/Creuser.Auth.Providers.Local/Creuser.Auth.Providers.Local.csproj    src/Creuser.Auth.Providers.Local/
-COPY src/Creuser.Auth.Providers.Google/Creuser.Auth.Providers.Google.csproj  src/Creuser.Auth.Providers.Google/
-COPY src/Creuser.Web/Creuser.Web.csproj                                      src/Creuser.Web/
-COPY tests/Creuser.Core.Tests/Creuser.Core.Tests.csproj                      tests/Creuser.Core.Tests/
-COPY tests/Creuser.Integration.Tests/Creuser.Integration.Tests.csproj        tests/Creuser.Integration.Tests/
+COPY src/Creuser.Core/Creuser.Core.csproj                                                src/Creuser.Core/
+COPY src/Creuser.Persistence/Creuser.Persistence.csproj                                  src/Creuser.Persistence/
+COPY src/Creuser.Git/Creuser.Git.csproj                                                  src/Creuser.Git/
+COPY src/Creuser.Scripting/Creuser.Scripting.csproj                                      src/Creuser.Scripting/
+COPY src/Creuser.Agents/Creuser.Agents.csproj                                            src/Creuser.Agents/
+COPY src/Creuser.Sagas/Creuser.Sagas.csproj                                              src/Creuser.Sagas/
+COPY src/Creuser.Projections/Creuser.Projections.csproj                                  src/Creuser.Projections/
+COPY src/Creuser.Plugins.Abstractions/Creuser.Plugins.Abstractions.csproj                src/Creuser.Plugins.Abstractions/
+COPY src/Creuser.Plugins.Loader/Creuser.Plugins.Loader.csproj                            src/Creuser.Plugins.Loader/
+COPY src/Creuser.Auth.Abstractions/Creuser.Auth.Abstractions.csproj                      src/Creuser.Auth.Abstractions/
+COPY src/Creuser.Auth.Core/Creuser.Auth.Core.csproj                                      src/Creuser.Auth.Core/
+COPY src/Creuser.Auth.Providers.Local/Creuser.Auth.Providers.Local.csproj                src/Creuser.Auth.Providers.Local/
+COPY src/Creuser.Auth.Providers.Google/Creuser.Auth.Providers.Google.csproj              src/Creuser.Auth.Providers.Google/
+COPY src/Creuser.Web/Creuser.Web.csproj                                                  src/Creuser.Web/
+COPY src/plugins/Creuser.Plugins.Examples.Hello/Creuser.Plugins.Examples.Hello.csproj                src/plugins/Creuser.Plugins.Examples.Hello/
+COPY src/plugins/Creuser.Plugins.Examples.Slack/Creuser.Plugins.Examples.Slack.csproj                src/plugins/Creuser.Plugins.Examples.Slack/
+COPY src/plugins/Creuser.Plugins.Examples.GitHubTools/Creuser.Plugins.Examples.GitHubTools.csproj    src/plugins/Creuser.Plugins.Examples.GitHubTools/
+COPY tests/Creuser.Core.Tests/Creuser.Core.Tests.csproj                                  tests/Creuser.Core.Tests/
+COPY tests/Creuser.Scripting.Tests/Creuser.Scripting.Tests.csproj                        tests/Creuser.Scripting.Tests/
+COPY tests/Creuser.Projections.Tests/Creuser.Projections.Tests.csproj                    tests/Creuser.Projections.Tests/
+COPY tests/Creuser.Integration.Tests/Creuser.Integration.Tests.csproj                    tests/Creuser.Integration.Tests/
 RUN dotnet restore Creuser.slnx
 
 # Restore SPA deps separately (same caching reason).
