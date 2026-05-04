@@ -5,6 +5,7 @@ import RunsList from 'src/widgets/RunsList.vue';
 import RunInspector from 'src/widgets/RunInspector.vue';
 import ScheduleList from 'src/widgets/ScheduleList.vue';
 import JobScriptList from 'src/widgets/JobScriptList.vue';
+import JobScriptEditor from 'src/widgets/JobScriptEditor.vue';
 import Markdown from 'src/widgets/Markdown.vue';
 import ProjectionReport from 'src/widgets/ProjectionReport.vue';
 
@@ -20,7 +21,7 @@ import ProjectionReport from 'src/widgets/ProjectionReport.vue';
  *  - ScheduleList        (real)
  *  - Markdown            (real)
  *  - ProjectionReport    (real)
- *  - JobScriptEditor     (placeholder — needs Monaco)
+ *  - JobScriptEditor     (real, Monaco-loaded from CDN per `boot/monaco.ts`)
  *  - WorkspaceMembers    (placeholder — member API surface needed first)
  */
 export default boot(() => {
@@ -82,7 +83,7 @@ export default boot(() => {
     name: 'Script Editor',
     description: 'Monaco-based YAML + markdown editor for one job script.',
     icon: 'edit_note',
-    component: PlaceholderWidget,
+    component: JobScriptEditor,
     propsSchema: {
       type: 'object',
       properties: {
