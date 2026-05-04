@@ -31,6 +31,8 @@ import type {
   DeleteUserData,
   DeleteUserResponses,
   DeleteWorkspaceData,
+  DeleteWorkspacePluginSettingsData,
+  DeleteWorkspacePluginSettingsResponses,
   DeleteWorkspaceResponses,
   EchoData,
   EchoResponses,
@@ -51,6 +53,8 @@ import type {
   GetRunData,
   GetRunResponses,
   GetWorkspaceData,
+  GetWorkspacePluginSettingsData,
+  GetWorkspacePluginSettingsResponses,
   GetWorkspaceResponses,
   ListConventionsData,
   ListConventionsResponses,
@@ -94,6 +98,8 @@ import type {
   SetUserRoleResponses,
   SetWorkspacePluginEnabledData,
   SetWorkspacePluginEnabledResponses,
+  SetWorkspacePluginSettingsData,
+  SetWorkspacePluginSettingsResponses,
   SyncProjectionData,
   SyncProjectionResponses,
   SyncWorkspaceData,
@@ -464,6 +470,43 @@ export class Workspaces {
       ThrowOnError
     >({
       url: '/api/workspaces/{slug}/plugins/{pluginId}',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static deleteWorkspacePluginSettings<ThrowOnError extends boolean = false>(
+    options: Options<DeleteWorkspacePluginSettingsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).delete<
+      DeleteWorkspacePluginSettingsResponses,
+      unknown,
+      ThrowOnError
+    >({ url: '/api/workspaces/{slug}/plugins/{pluginId}/settings', ...options });
+  }
+
+  public static getWorkspacePluginSettings<ThrowOnError extends boolean = false>(
+    options: Options<GetWorkspacePluginSettingsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      GetWorkspacePluginSettingsResponses,
+      unknown,
+      ThrowOnError
+    >({ url: '/api/workspaces/{slug}/plugins/{pluginId}/settings', ...options });
+  }
+
+  public static setWorkspacePluginSettings<ThrowOnError extends boolean = false>(
+    options: Options<SetWorkspacePluginSettingsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<
+      SetWorkspacePluginSettingsResponses,
+      unknown,
+      ThrowOnError
+    >({
+      url: '/api/workspaces/{slug}/plugins/{pluginId}/settings',
       ...options,
       headers: {
         'Content-Type': 'application/json',

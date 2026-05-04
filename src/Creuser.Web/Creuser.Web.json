@@ -936,6 +936,126 @@
         }
       }
     },
+    "/api/workspaces/{slug}/plugins/{pluginId}/settings": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "GetWorkspacePluginSettings",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspacePluginSettingsResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "SetWorkspacePluginSettings",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPluginSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspacePluginSettingsResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "DeleteWorkspacePluginSettings",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfboolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{slug}/jobs": {
       "get": {
         "tags": [
@@ -2534,6 +2654,24 @@
           }
         }
       },
+      "ApiResultOfWorkspacePluginSettingsResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspacePluginSettingsResult"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfWorkspacePluginsResult": {
         "required": [
           "result"
@@ -3674,6 +3812,7 @@
           }
         }
       },
+      "JsonElement": { },
       "LocalProviderConfig": {
         "type": "object",
         "properties": {
@@ -4114,6 +4253,17 @@
           }
         }
       },
+      "SetPluginSettingsRequest": {
+        "required": [
+          "settings"
+        ],
+        "type": "object",
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        }
+      },
       "SetSecretRequest": {
         "required": [
           "value"
@@ -4486,6 +4636,21 @@
               "string"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "WorkspacePluginSettingsResult": {
+        "required": [
+          "pluginId",
+          "settingsJson"
+        ],
+        "type": "object",
+        "properties": {
+          "pluginId": {
+            "type": "string"
+          },
+          "settingsJson": {
+            "type": "string"
           }
         }
       },

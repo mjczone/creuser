@@ -21,5 +21,24 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Creuser.Web\Creuser.Web.csproj" />
+    <!-- Example plugin projects are referenced as build-time-only dependencies
+         (no transitive runtime DLLs in the test bin) so the test fixtures find
+         their published output via PluginStaging without bundling them into
+         the test's main DI container. -->
+    <ProjectReference
+      Include="..\..\src\plugins\Creuser.Plugins.Examples.Hello\Creuser.Plugins.Examples.Hello.csproj"
+      ReferenceOutputAssembly="false"
+      Private="false"
+    />
+    <ProjectReference
+      Include="..\..\src\plugins\Creuser.Plugins.Examples.Slack\Creuser.Plugins.Examples.Slack.csproj"
+      ReferenceOutputAssembly="false"
+      Private="false"
+    />
+    <ProjectReference
+      Include="..\..\src\plugins\Creuser.Plugins.Examples.GitHubTools\Creuser.Plugins.Examples.GitHubTools.csproj"
+      ReferenceOutputAssembly="false"
+      Private="false"
+    />
   </ItemGroup>
 </Project>

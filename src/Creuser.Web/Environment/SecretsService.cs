@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Creuser.Core.Secrets;
 
 namespace Creuser.Web.Environment;
 
@@ -18,7 +19,7 @@ namespace Creuser.Web.Environment;
 /// only domain code that needs the secret (Anthropic provider, SMTP client,
 /// etc.) calls <see cref="ReadInternal"/>.
 /// </summary>
-public sealed class SecretsService
+public sealed class SecretsService : ISecretsReader
 {
     public string DirectoryPath { get; }
 
@@ -114,6 +115,14 @@ public sealed class SecretsService
             return null;
         return (await File.ReadAllTextAsync(path, ct)).Trim();
     }
+
+    /// <summary>
+    /// <see cref="ISecretsReader"/> contract — same as
+    /// <see cref="ReadInternalAsync"/> with a stable name plugins
+    /// can target.
+    /// </summary>
+    Task<string?> ISecretsReader.ReadAsync(string name, CancellationToken ct) =>
+        ReadInternalAsync(name, ct);
 
     private static void EnsureSafeName(string name)
     {

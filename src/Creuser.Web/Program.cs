@@ -5,6 +5,7 @@ using Creuser.Auth.Providers.Local;
 using Creuser.Core.Execution;
 using Creuser.Core.Projections;
 using Creuser.Core.Repositories;
+using Creuser.Core.Secrets;
 using Creuser.Persistence;
 using Creuser.Persistence.Repositories;
 using Creuser.Plugins.Loader;
@@ -89,7 +90,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(new BrandingAssetsService(dataDir));
-builder.Services.AddSingleton(new SecretsService(dataDir));
+var secretsService = new SecretsService(dataDir);
+builder.Services.AddSingleton(secretsService);
+builder.Services.AddSingleton<ISecretsReader>(secretsService);
 builder.Services.AddSingleton(new WorkspaceFilesystemService(dataDir));
 builder.Services.AddSingleton<AgentClientFactory>();
 builder.Services.AddScoped<AgentClientResolver>();
@@ -257,6 +260,14 @@ Directory.CreateDirectory(pluginsRoot);
 var pluginLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
 var pluginDiscoveryLogger = pluginLoggerFactory.CreateLogger<PluginDiscovery>();
 var discovered = new PluginDiscovery(pluginDiscoveryLogger).Discover(pluginsRoot);
+
+// Contributions registry must be in DI BEFORE plugin activation so the
+// AddPluginStepRunner / AddPluginToolRegistry helpers can find + populate
+// it during each plugin's Configure() call. The same instance is later
+// resolved by the dispatch path to gate per-workspace enablement.
+var pluginContributions = new PluginContributions();
+builder.Services.AddSingleton<IPluginContributions>(pluginContributions);
+
 new PluginActivator().ActivateAll(discovered, builder.Services, pluginLoggerFactory);
 var pluginRegistry = new PluginRegistry();
 builder.Services.AddSingleton(pluginRegistry);
@@ -264,6 +275,7 @@ builder.Services.AddSingleton<IPluginRegistry>(pluginRegistry);
 builder.Services.AddSingleton<IReadOnlyList<DiscoveredPlugin>>(discovered);
 builder.Services.AddScoped<IPluginRecordStore, pluginsRepository>();
 builder.Services.AddScoped<IWorkspacePluginStore, workspacePluginsRepository>();
+builder.Services.AddScoped<IPluginSettingsStore, workspacePluginSettingsRepository>();
 builder.Services.AddHostedService<PluginInitializer>();
 
 // Schedules. The dispatcher fires a job in a fresh DI scope so neither

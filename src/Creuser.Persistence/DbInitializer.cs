@@ -93,6 +93,10 @@ public sealed class DbInitializer : IHostedService
                 tx: null,
                 cancellationToken: cancellationToken
             );
+            await conn.CreateTableIfNotExistsAsync<workspace_plugin_settings>(
+                tx: null,
+                cancellationToken: cancellationToken
+            );
             await conn.CreateTableIfNotExistsAsync<entities>(
                 tx: null,
                 cancellationToken: cancellationToken

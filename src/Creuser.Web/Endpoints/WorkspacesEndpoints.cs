@@ -61,6 +61,17 @@ public static class WorkspacesEndpoints
             .MapPut("/{slug}/plugins/{pluginId}", (Delegate)SetPluginEnabled)
             .RequireAuthorization(p => p.RequireRole(Roles.Admin))
             .WithName("SetWorkspacePluginEnabled");
+        group
+            .MapGet("/{slug}/plugins/{pluginId}/settings", (Delegate)GetPluginSettings)
+            .WithName("GetWorkspacePluginSettings");
+        group
+            .MapPut("/{slug}/plugins/{pluginId}/settings", (Delegate)SetPluginSettings)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("SetWorkspacePluginSettings");
+        group
+            .MapDelete("/{slug}/plugins/{pluginId}/settings", (Delegate)DeletePluginSettings)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("DeleteWorkspacePluginSettings");
 
         return app;
     }
@@ -469,6 +480,129 @@ public static class WorkspacesEndpoints
     }
 
     public sealed record SetPluginEnabledRequest(bool Enabled);
+
+    [AiCapability(
+        "workspaces.plugins.settings.get",
+        "workspaces",
+        "Read plugin settings for a workspace",
+        "Return the JSON settings the workspace has configured for a plugin (e.g. Slack webhook secret name + default channel, GitHub PAT secret name + default repo). Plugin authors define their own settings shape; the host stores the JSON verbatim. Returns the raw JSON or an empty object if no row exists.",
+        "show plugin settings",
+        "what is the plugin configured with",
+        "plugin settings",
+        Route = "/w/:slug/settings/plugins",
+        RequiresRole = Roles.Admin
+    )]
+    private static async Task<
+        Results<Ok<ApiResult<WorkspacePluginSettingsResult>>, ProblemHttpResult>
+    > GetPluginSettings(
+        string slug,
+        string pluginId,
+        IWorkspaceStore store,
+        IPluginRegistry registry,
+        IPluginSettingsStore settings
+    )
+    {
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+        if (registry.Find(pluginId) is null)
+            return Problems.NotFound($"Plugin '{pluginId}' is not loaded.");
+        var json = await settings.GetAsync(existing.Id, pluginId);
+        return TypedResults.Ok(
+            new ApiResult<WorkspacePluginSettingsResult>(
+                new WorkspacePluginSettingsResult(pluginId, json ?? "{}")
+            )
+        );
+    }
+
+    [AiCapability(
+        "workspaces.plugins.settings.set",
+        "workspaces",
+        "Save plugin settings for a workspace",
+        "Upsert the workspace's JSON settings for a plugin. The body is a `{ \"settings\": <object> }` payload — the host validates only that it parses as JSON; per-plugin shape is the plugin's responsibility. Secrets do NOT belong in this payload — store secret filenames here and the value in /data/secrets/<filename>.",
+        "save plugin settings",
+        "configure plugin",
+        "set plugin webhook",
+        Route = "/w/:slug/settings/plugins",
+        RequiresRole = Roles.Admin,
+        Mutates = true
+    )]
+    private static async Task<
+        Results<Ok<ApiResult<WorkspacePluginSettingsResult>>, ProblemHttpResult>
+    > SetPluginSettings(
+        string slug,
+        string pluginId,
+        SetPluginSettingsRequest request,
+        IWorkspaceStore store,
+        IPluginRegistry registry,
+        IPluginSettingsStore settings,
+        HttpContext http
+    )
+    {
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+        if (registry.Find(pluginId) is null)
+            return Problems.NotFound($"Plugin '{pluginId}' is not loaded.");
+
+        // Settings is a free-form JSON object the plugin defined the shape
+        // of. We re-serialize the parsed JsonElement so what we persist is
+        // canonical JSON (no extraneous whitespace, no BOM); validating it
+        // round-trips also catches obviously malformed payloads early.
+        string json;
+        try
+        {
+            json = JsonSerializer.Serialize(request.Settings);
+        }
+        catch (Exception ex)
+        {
+            return Problems.ValidationFailed(
+                new Dictionary<string, string[]>
+                {
+                    ["settings"] = new[] { $"Settings must be a JSON object: {ex.Message}" },
+                }
+            );
+        }
+
+        await settings.SetAsync(existing.Id, pluginId, json, CookieAuthHelpers.GetUserId(http));
+        return TypedResults.Ok(
+            new ApiResult<WorkspacePluginSettingsResult>(
+                new WorkspacePluginSettingsResult(pluginId, json)
+            )
+        );
+    }
+
+    [AiCapability(
+        "workspaces.plugins.settings.delete",
+        "workspaces",
+        "Reset plugin settings for a workspace",
+        "Delete the saved settings row for a plugin so the plugin reverts to its built-in defaults on next read. Secrets stored under /data/secrets/ are NOT touched — operators delete those separately.",
+        "reset plugin settings",
+        "clear plugin config",
+        Route = "/w/:slug/settings/plugins",
+        RequiresRole = Roles.Admin,
+        Mutates = true
+    )]
+    private static async Task<Results<Ok<ApiResult<bool>>, ProblemHttpResult>> DeletePluginSettings(
+        string slug,
+        string pluginId,
+        IWorkspaceStore store,
+        IPluginRegistry registry,
+        IPluginSettingsStore settings
+    )
+    {
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+        if (registry.Find(pluginId) is null)
+            return Problems.NotFound($"Plugin '{pluginId}' is not loaded.");
+        await settings.DeleteAsync(existing.Id, pluginId);
+        return TypedResults.Ok(new ApiResult<bool>(true));
+    }
+
+    public sealed record SetPluginSettingsRequest(JsonElement Settings);
+
+    public sealed record WorkspacePluginSettingsResult(string PluginId, string SettingsJson);
 
     /// <summary>
     /// Sync the workspace's content. For git: clone (first time) or fetch +

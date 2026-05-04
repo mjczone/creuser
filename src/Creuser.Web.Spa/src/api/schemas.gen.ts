@@ -591,6 +591,23 @@ export const ApiResultOfWorkspacePluginInfoSchema = {
   },
 } as const;
 
+export const ApiResultOfWorkspacePluginSettingsResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/WorkspacePluginSettingsResult',
+        },
+      ],
+    },
+  },
+} as const;
+
 export const ApiResultOfWorkspacePluginsResultSchema = {
   required: ['result'],
   type: 'object',
@@ -1469,6 +1486,8 @@ export const JobScriptResultSchema = {
   },
 } as const;
 
+export const JsonElementSchema = {} as const;
+
 export const LocalProviderConfigSchema = {
   type: 'object',
   properties: {
@@ -1825,6 +1844,16 @@ export const SetPluginEnabledRequestSchema = {
   },
 } as const;
 
+export const SetPluginSettingsRequestSchema = {
+  required: ['settings'],
+  type: 'object',
+  properties: {
+    settings: {
+      $ref: '#/components/schemas/JsonElement',
+    },
+  },
+} as const;
+
 export const SetSecretRequestSchema = {
   required: ['value'],
   type: 'object',
@@ -2121,6 +2150,19 @@ export const WorkspacePluginInfoSchema = {
     loadedAt: {
       type: ['null', 'string'],
       format: 'date-time',
+    },
+  },
+} as const;
+
+export const WorkspacePluginSettingsResultSchema = {
+  required: ['pluginId', 'settingsJson'],
+  type: 'object',
+  properties: {
+    pluginId: {
+      type: 'string',
+    },
+    settingsJson: {
+      type: 'string',
     },
   },
 } as const;

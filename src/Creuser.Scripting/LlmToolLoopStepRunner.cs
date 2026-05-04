@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Creuser.Agents;
 using Creuser.Core.Execution;
+using Creuser.Core.Repositories;
 using Creuser.Scripting.ToolLoop;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -41,6 +42,8 @@ public sealed class LlmToolLoopStepRunner : IStepRunner
     private readonly IEnumerable<IToolLoopToolRegistry> _registries;
     private readonly TimeProvider _time;
     private readonly ILogger<LlmToolLoopStepRunner> _logger;
+    private readonly IPluginContributions? _contributions;
+    private readonly IWorkspacePluginStore? _workspacePlugins;
 
     private const int DefaultMaxSteps = 10;
     private const long DefaultMaxTokens = 50_000;
@@ -55,13 +58,17 @@ public sealed class LlmToolLoopStepRunner : IStepRunner
         IChatClientResolver resolver,
         IEnumerable<IToolLoopToolRegistry> registries,
         TimeProvider time,
-        ILogger<LlmToolLoopStepRunner> logger
+        ILogger<LlmToolLoopStepRunner> logger,
+        IPluginContributions? contributions = null,
+        IWorkspacePluginStore? workspacePlugins = null
     )
     {
         _resolver = resolver;
         _registries = registries;
         _time = time;
         _logger = logger;
+        _contributions = contributions;
+        _workspacePlugins = workspacePlugins;
     }
 
     public async Task<StepResult> ExecuteAsync(
@@ -117,9 +124,35 @@ public sealed class LlmToolLoopStepRunner : IStepRunner
         var provider = resolution.Provider ?? "unknown";
         var model = resolution.Model ?? "unknown";
 
-        // Compose registries. Validate that every requested tool exists in
-        // the union; map each tool name to the registry that owns it.
-        var registries = _registries.ToList();
+        // Compose registries. Filter out plugin-contributed registries when
+        // the contributing plugin isn't enabled for this workspace — that
+        // way an agent can't pick up a tool from a plugin the workspace
+        // hasn't opted into. Built-in registries (no contribution recorded)
+        // pass through unconditionally.
+        var allRegistries = _registries.ToList();
+        var registries = new List<IToolLoopToolRegistry>(allRegistries.Count);
+        var disabledByPlugin = new List<string>();
+        foreach (var reg in allRegistries)
+        {
+            if (
+                _contributions is not null
+                && _workspacePlugins is not null
+                && _contributions.TryGetToolRegistryPlugin(reg.GetType(), out var ownerPluginId)
+            )
+            {
+                var enabled = await _workspacePlugins.IsEnabledAsync(
+                    ctx.WorkspaceId,
+                    ownerPluginId,
+                    ct
+                );
+                if (!enabled)
+                {
+                    disabledByPlugin.Add(ownerPluginId);
+                    continue;
+                }
+            }
+            registries.Add(reg);
+        }
         if (registries.Count == 0)
         {
             sw.Stop();
@@ -155,9 +188,13 @@ public sealed class LlmToolLoopStepRunner : IStepRunner
                 ", ",
                 registries.SelectMany(r => r.AvailableTools).Distinct().OrderBy(s => s)
             );
+            var disabledNote =
+                disabledByPlugin.Count == 0
+                    ? string.Empty
+                    : $" (Tools from disabled plugins are skipped: {string.Join(", ", disabledByPlugin.Distinct())}. Enable the plugin in workspace settings.)";
             sw.Stop();
             return StepResult.Failure(
-                $"Unknown tool(s): {string.Join(", ", unknown)}. Available tools: {available}.",
+                $"Unknown tool(s): {string.Join(", ", unknown)}. Available tools: {available}.{disabledNote}",
                 sw.ElapsedMilliseconds
             );
         }

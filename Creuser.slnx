@@ -20,7 +20,11 @@
     <Project Path="src/Creuser.Scripting/Creuser.Scripting.csproj" />
   </Folder>
   <Folder Name="/src/plugins/">
+    <Project Path="src/plugins/Creuser.Plugins.Examples.GitHubTools/Creuser.Plugins.Examples.GitHubTools.csproj" />
     <Project Path="src/plugins/Creuser.Plugins.Examples.Hello/Creuser.Plugins.Examples.Hello.csproj" />
+    <Project Path="src/plugins/Creuser.Plugins.Examples.Slack/Creuser.Plugins.Examples.Slack.csproj" />
+  </Folder>
+  <Folder Name="/src/web/">
     <Project Path="src/Creuser.Web/Creuser.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">

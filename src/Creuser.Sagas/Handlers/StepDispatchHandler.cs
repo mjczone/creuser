@@ -38,6 +38,8 @@ public sealed class StepDispatchHandler
         IJobRunStore runs,
         IWorkspaceStore workspaces,
         IWorkspaceWorkingTree workingTree,
+        IPluginContributions contributions,
+        IWorkspacePluginStore workspacePlugins,
         ILogger<StepDispatchHandler> logger,
         TimeProvider time,
         CancellationToken ct
@@ -85,6 +87,30 @@ public sealed class StepDispatchHandler
             };
             await runs.SaveStepAsync(failed, ct);
             return new StepFailed(cmd.RunId, cmd.StepId, cmd.StepDeclId, errorMessage, 0);
+        }
+
+        // Per-workspace plugin enablement gate. If this step type was
+        // contributed by a plugin and the plugin isn't enabled for this
+        // workspace, fail the step with a clear error before invoking
+        // the runner. Built-in step types aren't in the contributions
+        // map and pass through unconditionally.
+        if (contributions.TryGetStepRunnerPlugin(cmd.StepType, out var pluginId))
+        {
+            var enabled = await workspacePlugins.IsEnabledAsync(cmd.WorkspaceId, pluginId, ct);
+            if (!enabled)
+            {
+                var errorMessage =
+                    $"Step type '{cmd.StepType}' is contributed by plugin '{pluginId}', which is not enabled for this workspace. "
+                    + $"Enable the plugin at /w/{cmd.WorkspaceSlug}/settings/plugins.";
+                var failed = stepRecord with
+                {
+                    Status = StepStatus.Failed,
+                    ErrorMessage = errorMessage,
+                    CompletedAt = time.GetUtcNow().UtcDateTime,
+                };
+                await runs.SaveStepAsync(failed, ct);
+                return new StepFailed(cmd.RunId, cmd.StepId, cmd.StepDeclId, errorMessage, 0);
+            }
         }
 
         var workspace = await workspaces.FindByIdAsync(cmd.WorkspaceId, ct);

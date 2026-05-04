@@ -28,14 +28,21 @@ A plugin can contribute any of:
 
 | Extension point | Contract | Example |
 | --- | --- | --- |
-| **Step runners** | Implementations of `Creuser.Core.Execution.IStepRunner` registered as keyed services on their step type | `Examples.Hello` contributes `hello-world`; future `Examples.Slack` will contribute `slack-post` |
+| **Step runners** | Implementations of `Creuser.Core.Execution.IStepRunner` registered via `AddPluginStepRunner<T>(stepType, context)` | `Examples.Hello` contributes `hello-world`; `Examples.Slack` contributes `slack-post` |
+| **Tool registries (agentic)** | Implementations of `Creuser.Scripting.ToolLoop.IToolLoopToolRegistry` registered via `AddPluginToolRegistry<T>(context)` | `Examples.GitHubTools` contributes `read_pr`, `list_issues`, `comment_on_issue` to the `llm-tool-loop` agent |
 | **Capability providers** | Implementations of `Creuser.Web.Agents.Capabilities.ICapabilityProvider` so the in-app assistant learns about plugin-supplied features | A plugin shipping settings pages registers them so users can ask "where do I configure X?" |
-| **Tool registries (agentic)** | Implementations of `Creuser.Scripting.ToolLoop.IToolLoopToolRegistry` so `llm-tool-loop` agents get new tools | Future `Examples.GitHubTools` will contribute `read_pr`, `list_issues`, `comment_on_issue` |
 | **Convention types (post-v1)** | Custom convention loaders for the projection layer | Parse atlas SQL, GitHub workflow files, Linear issue templates into entity-graph rows |
 
-Plugins use the standard `Microsoft.Extensions.DependencyInjection`
-patterns to register their contributions. Anything the host's DI can
-construct is fair game.
+**Always use the `AddPluginStepRunner` / `AddPluginToolRegistry` helpers
+from `Creuser.Plugins.Abstractions`** rather than calling the underlying
+`AddKeyedScoped` / `AddScoped` directly. The helpers do two things in
+one call: (1) register the contribution into the host's DI, and (2)
+record `(step type → plugin id)` or `(registry type → plugin id)` in
+`IPluginContributions`. The host uses (2) to gate dispatch on
+per-workspace enablement — a step type whose contributing plugin isn't
+enabled for the workspace fails fast with a clear error before the
+runner is invoked. Bypassing the helpers makes your contribution look
+like a built-in platform service and silently bypasses the gate.
 
 ## The contract
 
@@ -149,7 +156,10 @@ public sealed class HelloPlugin : IPluginRegistration
 
     public void Configure(IServiceCollection services, IPluginContext context)
     {
-        services.AddKeyedScoped<IStepRunner, HelloWorldStepRunner>("hello-world");
+        // AddPluginStepRunner does both DI registration AND records the
+        // contribution so the per-workspace enablement gate fires for
+        // plugin-contributed step types.
+        services.AddPluginStepRunner<HelloWorldStepRunner>("hello-world", context);
         context.Logger.LogInformation(
             "Hello plugin registered hello-world step runner from {Dir}",
             context.PluginDirectory);
@@ -195,6 +205,169 @@ inputs:
 …in any job script and the `hello-world` step runner runs against the
 saga-driven executor like any built-in runner.
 
+## Walk-through: the Slack plugin
+
+`Creuser.Plugins.Examples.Slack` ships the canonical pattern for a step
+runner that talks to an external service. It demonstrates four things
+the Hello plugin doesn't:
+
+1. **Per-workspace plugin settings** — what the operator configures once.
+2. **Secret resolution** — values that must never live in the database.
+3. **`IHttpClientFactory` for outbound HTTP** — testable, named clients.
+4. **Multi-input step runner** — required + optional inputs with defaults.
+
+`SlackPlugin.cs` registers a named `slack-plugin` HttpClient and the
+`slack-post` step runner via `AddPluginStepRunner`:
+
+```csharp
+public void Configure(IServiceCollection services, IPluginContext context)
+{
+    services.AddHttpClient("slack-plugin", c =>
+    {
+        c.Timeout = TimeSpan.FromSeconds(15);
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("Creuser-Slack-Plugin/0.1");
+    });
+    services.AddPluginStepRunner<SlackPostStepRunner>("slack-post", context);
+}
+```
+
+`SlackSettings` is a per-workspace record stored as JSON in
+`cr.workspace_plugin_settings`. The plugin author defines its own shape;
+the host stores the JSON verbatim:
+
+```csharp
+public sealed record SlackSettings(
+    string? WebhookSecretName = null,  // filename in /data/secrets/
+    string? DefaultChannel = null,
+    string? DefaultUsername = null
+);
+```
+
+Note what's NOT in the settings: the webhook URL itself. Settings hold
+the *filename* of a secret; the value lives in `/data/secrets/<name>`
+and is read via `ISecretsReader` at runtime. This keeps the URL out of
+the queryable database — settings are JSON in Postgres, but secret
+values stay on the local disk.
+
+`SlackPostStepRunner` resolves credentials at execute time:
+
+```csharp
+public async Task<StepResult> ExecuteAsync(
+    StepContext ctx,
+    IReadOnlyDictionary<string, object?> inputs,
+    CancellationToken ct)
+{
+    var settingsJson = await _settings.GetAsync(ctx.WorkspaceId, SlackPlugin.PluginId, ct);
+    var settings = JsonSerializer.Deserialize<SlackSettings>(
+        settingsJson ?? "{}",
+        new JsonSerializerOptions(JsonSerializerDefaults.Web)
+    ) ?? new SlackSettings();
+
+    var secretName = GetString(inputs, "webhook_url_secret") ?? settings.WebhookSecretName;
+    var webhookUrl = await _secrets.ReadAsync(secretName, ct);  // reads /data/secrets/<name>
+
+    var client = _http.CreateClient("slack-plugin");
+    var response = await client.PostAsJsonAsync(webhookUrl, payload, ct);
+    // ...returns StepResult.Success/Failure based on the HTTP outcome
+}
+```
+
+**Use `JsonSerializerDefaults.Web` when deserializing settings.** The
+host's settings endpoints write JSON in camelCase (web defaults). If
+you deserialize with the .NET default serializer settings (PascalCase),
+your settings record's properties will be `null` and your runner will
+fail with a confusing "no webhook URL configured" error.
+
+The Setup workflow once the plugin is staged:
+
+1. Drop the plugin under `<dataDir>/plugins/creuser.examples.slack/` and restart.
+2. Admin enables the plugin for the workspace via the Plugins page.
+3. Operator stores the webhook URL as a secret: `creuser secrets set slack-prod.url 'https://hooks.slack.com/...'` (or via the Environment page).
+4. Admin saves the plugin settings: `PUT /api/workspaces/{slug}/plugins/creuser.examples.slack/settings` with body `{ "settings": { "webhookSecretName": "slack-prod.url", "defaultChannel": "#alerts" } }`.
+5. Job authors include `type: slack-post` steps.
+
+```yaml
+type: slack-post
+inputs:
+  text: "Build succeeded for {{ workspace.slug }}"
+  channel: "#deploys"   # optional — overrides settings default
+```
+
+## Walk-through: the GitHub Tools plugin
+
+`Creuser.Plugins.Examples.GitHubTools` ships the canonical pattern for
+contributing tools to the **agentic** `llm-tool-loop` runner. The
+agent doesn't see credentials directly — the registry resolves them
+once per `BuildTools` call from workspace settings + secrets, then
+bakes them into closures that get exposed as `AIFunction`s.
+
+`GitHubToolsPlugin.cs` registers a named HttpClient and the registry
+via `AddPluginToolRegistry`. Because the registry's CLR type is what
+the host's enablement gate matches against, it must also be registered
+as `IToolLoopToolRegistry` so the runner enumerates it:
+
+```csharp
+public void Configure(IServiceCollection services, IPluginContext context)
+{
+    services.AddHttpClient("github-plugin", c =>
+    {
+        c.Timeout = TimeSpan.FromSeconds(30);
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("Creuser-GitHub-Plugin/0.1");
+        c.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        c.BaseAddress = new Uri("https://api.github.com/");
+    });
+    services.AddPluginToolRegistry<GitHubToolRegistry>(context);
+    // The host's tool-loop runner resolves IEnumerable<IToolLoopToolRegistry>
+    // from DI; the AddPluginToolRegistry helper records the contribution but
+    // doesn't bind it to the interface — that's the plugin's job.
+    services.AddScoped<IToolLoopToolRegistry, GitHubToolRegistry>();
+}
+```
+
+Inside `GitHubToolRegistry.BuildTools`, credentials are resolved once
+per loop step *before* the agent sees the tool list:
+
+```csharp
+public IReadOnlyList<AIFunction> BuildTools(
+    IReadOnlyList<string> names,
+    StepContext ctx,
+    ToolLogSink sink)
+{
+    var settingsJson = _settings.GetAsync(ctx.WorkspaceId, GitHubToolsPlugin.PluginId).GetAwaiter().GetResult();
+    var settings = JsonSerializer.Deserialize<GitHubSettings>(settingsJson ?? "{}", SettingsJsonOptions);
+    var pat = _secrets.ReadAsync(settings.PatSecretName).GetAwaiter().GetResult();
+    var defaultRepo = settings.DefaultRepo;
+
+    return names.Select(name => name switch
+    {
+        "read_pr" => BuildReadPr(pat, baseUrl, defaultRepo, sink),  // closes over pat
+        // ...
+    }).ToList();
+}
+```
+
+The agent's tool-call args carry only task-specific values (`number`,
+`body`); credentials are ambient. **Optional parameters in the lambda
+must have explicit `= null` defaults** — `AIFunctionFactory` infers
+"required" from the absence of a default value, even when the type is
+nullable:
+
+```csharp
+AIFunctionFactory.Create(
+    async (
+        [Description("Repo as owner/name (overrides workspace default).")]
+            string? repo = null,                // explicit default
+        [Description("Pull request number.")] int number = 0,
+        CancellationToken ct = default
+    ) => { /* ... */ },
+    name: "read_pr",
+    description: "...");
+```
+
+Without the `= null`, the agent gets back an `ArgumentException` saying
+the parameter is required and the tool call fails before your closure
+runs.
+
 ## Build + deploy
 
 The build is standard `dotnet publish`:
@@ -239,13 +412,24 @@ enable the plugin from the Plugins page; operators can also do this via
 `PUT /api/workspaces/{slug}/plugins/{pluginId}` with body
 `{ "enabled": true }`.
 
-> **v1 note**: enablement is a UI signal — runtime enforcement (gating
-> step-runner resolution and capability listings on the workspace
-> enablement flag) is a v0.2 follow-up. v1 plugins-page state determines
-> what shows up in pickers but doesn't yet block direct invocation
-> (e.g. typing `type: hello-world` in a job script works regardless of
-> the toggle). Workspaces aren't a security boundary in single-tenant
-> on-prem; the toggle is a curation aid.
+The runtime enablement gate is enforced at two seams:
+
+1. **Step dispatch** — `StepDispatchHandler` looks up the contributing
+   plugin for a step type via `IPluginContributions.TryGetStepRunnerPlugin`.
+   If the plugin isn't enabled for the workspace, the step fails before
+   the runner is invoked with a message naming the plugin id and a link
+   to the workspace's plugins page.
+2. **Tool-loop registry composition** — `LlmToolLoopStepRunner` filters
+   plugin-contributed tool registries (`IToolLoopToolRegistry`
+   implementations recorded via `AddPluginToolRegistry`) out of the
+   union when the contributing plugin isn't enabled. The agent never
+   sees the disabled plugin's tools and the runner reports any
+   requested-but-unavailable tools by listing the plugins responsible.
+
+Built-in step types and registries (`shell`, `python`,
+`WorkspaceToolLoopRegistry`, etc.) aren't recorded in the contributions
+map and pass through unconditionally — the gate only fires for
+plugin-contributed extension points.
 
 ## Docker patterns
 
@@ -332,22 +516,69 @@ manifest fields, new `IPluginContext` properties, new helpers — so
 plugins written today continue to work against future hosts. Major
 version bumps are rare and well-flagged in CHANGELOG.
 
+## Per-workspace plugin settings
+
+A plugin that needs configuration (webhook URLs, default repos, tuning
+knobs) stores it in `cr.workspace_plugin_settings` keyed on
+`(workspace_id, plugin_id)`. The shape is JSON; the plugin author owns
+the schema.
+
+**Read settings** in your runner via `IPluginSettingsStore`:
+
+```csharp
+public sealed class MyStepRunner : IStepRunner
+{
+    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+    private readonly IPluginSettingsStore _settings;
+
+    public async Task<StepResult> ExecuteAsync(StepContext ctx, IReadOnlyDictionary<string, object?> inputs, CancellationToken ct)
+    {
+        var json = await _settings.GetAsync(ctx.WorkspaceId, MyPlugin.PluginId, ct);
+        var s = JsonSerializer.Deserialize<MySettings>(json ?? "{}", Web) ?? new MySettings();
+        // use s.MyOption, etc.
+    }
+}
+```
+
+**Write settings** via the workspaces API. Admin-only:
+
+```http
+PUT  /api/workspaces/{slug}/plugins/{pluginId}/settings
+GET  /api/workspaces/{slug}/plugins/{pluginId}/settings
+DELETE /api/workspaces/{slug}/plugins/{pluginId}/settings   # reset to defaults
+```
+
+`PUT` body shape: `{ "settings": <object> }`. The host validates the
+payload parses as JSON; the plugin's settings record validates the
+shape on read.
+
+**Secrets do not belong in settings JSON.** Settings store the
+*filename* of a secret (e.g. `"webhookSecretName": "slack-prod.url"`);
+the value lives in `<dataDir>/secrets/<name>` and is read via
+`ISecretsReader.ReadAsync(name, ct)`. This keeps secret values out of
+the queryable database entirely. The convention scales: a single plugin
+can reference multiple secrets by adding more `*SecretName` properties
+to its settings record.
+
 ## Examples
 
 The repo ships canonical examples under `src/plugins/`:
 
 - **`Creuser.Plugins.Examples.Hello`** — smallest possible plugin. One
-  step runner, no external dependencies. Read this first.
+  step runner, no external dependencies, no settings. Read this first
+  to learn the registration shape.
+- **`Creuser.Plugins.Examples.Slack`** — step runner that talks to an
+  external service: contributes `slack-post` using a webhook stored as
+  a secret. Demonstrates `AddPluginStepRunner`, per-workspace settings,
+  `ISecretsReader`, and `IHttpClientFactory` — the canonical recipe
+  when integrating with anything outside the host process.
+- **`Creuser.Plugins.Examples.GitHubTools`** — registry that contributes
+  three tools to the agentic `llm-tool-loop`: `read_pr`, `list_issues`,
+  `comment_on_issue`. Demonstrates `AddPluginToolRegistry`, the
+  ambient-credential pattern (the LLM never sees the PAT), and
+  `AIFunctionFactory` parameter discipline (explicit `= null` defaults
+  on optional args).
 
-Future examples (separate slices, Q3 2026):
-
-- **`Creuser.Plugins.Examples.Slack`** — step runner with external
-  service integration: contributes `slack-post` step using a
-  per-workspace webhook. Demonstrates secret handling.
-- **`Creuser.Plugins.Examples.GitHubTools`** — `IToolLoopToolRegistry`
-  contribution: adds `read_pr` / `list_issues` / `comment_on_issue`
-  tools agents can use in `llm-tool-loop` steps.
-
-When those land, this guide will gain walk-throughs covering the
-additional patterns (settings, secrets, external HTTP calls, agent
-tooling).
+The integration tests under `tests/Creuser.Integration.Tests/` exercise
+each example end-to-end with stub HTTP handlers — a useful starting
+point when writing tests for your own plugins.

@@ -51,7 +51,7 @@ The architecture below describes both the v1 destination and the current state. 
 **In flight (next up for v0.1.x):**
 
 - ~~Marten + Wolverine — durable saga executor.~~ Shipped. `IStepRunner` unchanged; `JobExecutor` deleted; saga handlers in `Creuser.Sagas` orchestrate the three execution patterns. `mt` schema active for events + saga state + outbox; `cr.*` tables remain the operational read model. Synchronous `POST /run` preserved via `RunCompletionWaiter` (single-instance; multi-instance needs Redis backplane).
-- ~~Plugin loader (stage 3 of capabilities) — Phase 1 (loader + Hello example) shipped.~~ `Creuser.Plugins.Abstractions` is the stable contract plugin authors reference; `Creuser.Plugins.Loader` discovers + activates plugins from `<dataDir>/plugins/<plugin-id>/` with per-plugin `AssemblyLoadContext` + crash isolation. `cr.plugins` + `cr.workspace_plugins` tables; `Settings → Plugins` page lists discovered plugins with enable/disable toggles. Phase 2 follow-on adds Slack + GitHub example plugins demonstrating external-service integration + agent tool registries. Developer guide: `docs/plugin-development.md`.
+- ~~Plugin loader (stage 3 of capabilities) — Phases 1 + 2 shipped.~~ `Creuser.Plugins.Abstractions` is the stable contract plugin authors reference; `Creuser.Plugins.Loader` discovers + activates plugins from `<dataDir>/plugins/<plugin-id>/` with per-plugin `AssemblyLoadContext` + crash isolation. `cr.plugins` + `cr.workspace_plugins` + `cr.workspace_plugin_settings` tables. **Runtime enablement gate** is enforced at two seams: `StepDispatchHandler` blocks plugin-contributed step types when the plugin isn't enabled for the workspace, and `LlmToolLoopStepRunner` filters disabled-plugin tool registries out of the agent's tool union. `IPluginContributions` tracks contributions; the `AddPluginStepRunner` / `AddPluginToolRegistry` helpers in the abstractions package register the contribution AND record it in one call. Per-workspace plugin settings stored as JSON keyed on `(workspace_id, plugin_id)`; settings hold *secret filenames*, never values (values stay in `/data/secrets/`, read via `ISecretsReader`). Three example plugins shipped: `Examples.Hello` (smallest possible), `Examples.Slack` (external service + secret + named HttpClient), `Examples.GitHubTools` (`IToolLoopToolRegistry` with three GitHub tools, ambient credentials). Developer guide: `docs/plugin-development.md`.
 - Matrix views + KPI APIs (post-v0.1) — declarative slicings of the entity projection, bring-your-own charting via workspace `<head>` script registration. Lands before the dashboard composer because the data layer composes with anything; the composer host gets meaningfully more compelling once analytical widgets exist. Design captured in this doc's "Matrix views and KPI dashboards" section + `docs/wip/projections-design.md` "Forward-looking".
 - Dashboard composer — `dockview-vue` widget host, Monaco-based job editor. Hosts matrix-view widgets and workspace-authored JS widgets registered against the head-script-loaded libs.
 
@@ -1399,7 +1399,26 @@ CREATE TABLE cr.workspace_plugins (
 );
 ```
 
-Lands when the plugin loader exists; designed now so the plugin loader can ship with the per-workspace gate already wired.
+Shipped as `cr.workspace_plugins` (loader Phase 1) + the runtime enablement gate (loader Phase 2). The gate fires at two seams: `StepDispatchHandler` blocks dispatch of plugin-contributed step types when the workspace hasn't enabled the contributing plugin, and `LlmToolLoopStepRunner` filters disabled plugins' tool registries out of the agent's tool union. Both seams trust `IPluginContributions` (in-memory map populated by the `AddPluginStepRunner` / `AddPluginToolRegistry` helpers in `Creuser.Plugins.Abstractions`); built-in step types and registries aren't recorded and pass through unconditionally.
+
+### Per-workspace plugin settings
+
+Plugins that need configuration (webhook URLs, default repos, tuning knobs) store JSON per workspace + plugin pair in `cr.workspace_plugin_settings`:
+
+```sql
+CREATE TABLE cr.workspace_plugin_settings (
+  workspace_id  uuid NOT NULL REFERENCES cr.workspaces(id) ON DELETE CASCADE,
+  plugin_id     text NOT NULL,
+  settings      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  updated_at    timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_by    uuid REFERENCES cr.users(id),
+  PRIMARY KEY (workspace_id, plugin_id)
+);
+```
+
+The host stores the JSON verbatim; plugin authors define the schema and deserialize at runtime. `IPluginSettingsStore` is the read/write seam (registered as `workspacePluginSettingsRepository`); `GET` / `PUT` / `DELETE /api/workspaces/{slug}/plugins/{pluginId}/settings` are the operator surface.
+
+**Secrets stay out of settings JSON.** Settings store the *filename* of a secret; the value lives in `<dataDir>/secrets/<name>` and is read via `ISecretsReader` (the abstraction `SecretsService` implements). This keeps secret values out of the queryable database entirely. The convention scales: a single plugin can reference multiple secrets via multiple `*SecretName` properties on its settings record.
 
 ### Vocabulary: plugins vs scripts vs jobs
 

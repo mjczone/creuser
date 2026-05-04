@@ -162,6 +162,10 @@ export type ApiResultOfWorkspacePluginInfo = {
   result: null | WorkspacePluginInfo;
 };
 
+export type ApiResultOfWorkspacePluginSettingsResult = {
+  result: null | WorkspacePluginSettingsResult;
+};
+
 export type ApiResultOfWorkspacePluginsResult = {
   result: null | WorkspacePluginsResult;
 };
@@ -421,6 +425,8 @@ export type JobScriptResult = {
   updatedAt: string;
 };
 
+export type JsonElement = unknown;
+
 export type LocalProviderConfig = {
   baseUrl?: null | string;
   defaultModel?: null | string;
@@ -525,6 +531,10 @@ export type SetPluginEnabledRequest = {
   enabled: boolean;
 };
 
+export type SetPluginSettingsRequest = {
+  settings: JsonElement;
+};
+
 export type SetSecretRequest = {
   value: string;
 };
@@ -611,6 +621,11 @@ export type WorkspacePluginInfo = {
   provides: Array<string>;
   requiredTools: Array<string>;
   loadedAt: null | string;
+};
+
+export type WorkspacePluginSettingsResult = {
+  pluginId: string;
+  settingsJson: string;
 };
 
 export type WorkspacePluginsResult = {
@@ -1155,6 +1170,66 @@ export type SetWorkspacePluginEnabledResponses = {
 
 export type SetWorkspacePluginEnabledResponse =
   SetWorkspacePluginEnabledResponses[keyof SetWorkspacePluginEnabledResponses];
+
+export type DeleteWorkspacePluginSettingsData = {
+  body?: never;
+  path: {
+    slug: string;
+    pluginId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/plugins/{pluginId}/settings';
+};
+
+export type DeleteWorkspacePluginSettingsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfboolean;
+};
+
+export type DeleteWorkspacePluginSettingsResponse =
+  DeleteWorkspacePluginSettingsResponses[keyof DeleteWorkspacePluginSettingsResponses];
+
+export type GetWorkspacePluginSettingsData = {
+  body?: never;
+  path: {
+    slug: string;
+    pluginId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/plugins/{pluginId}/settings';
+};
+
+export type GetWorkspacePluginSettingsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspacePluginSettingsResult;
+};
+
+export type GetWorkspacePluginSettingsResponse =
+  GetWorkspacePluginSettingsResponses[keyof GetWorkspacePluginSettingsResponses];
+
+export type SetWorkspacePluginSettingsData = {
+  body: SetPluginSettingsRequest;
+  path: {
+    slug: string;
+    pluginId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/plugins/{pluginId}/settings';
+};
+
+export type SetWorkspacePluginSettingsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspacePluginSettingsResult;
+};
+
+export type SetWorkspacePluginSettingsResponse =
+  SetWorkspacePluginSettingsResponses[keyof SetWorkspacePluginSettingsResponses];
 
 export type ListJobsData = {
   body?: never;
