@@ -20,3 +20,11 @@ appsettings.*.local.json
 # checked-out workspaces, plugin DLLs, etc. Mirrors the production /data
 # volume at <repo>/.data/ when running outside the container.
 /.data/
+
+# Claude Code ephemeral session state — scheduled-task locks, agent caches,
+# subagent output. Project-level config (CLAUDE.md, agents/, skills/) can be
+# committed selectively if you want them shared; the lock + tasks dirs stay
+# local-only.
+/.claude/scheduled_tasks.lock
+/.claude/tasks/
+/.claude/.cache/

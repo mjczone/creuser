@@ -45,17 +45,34 @@ public static class WorkspacesEndpoints
 
     public static IEndpointRouteBuilder MapWorkspacesEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/workspaces")
-            .WithTags("Workspaces")
-            .RequireAuthorization(p => p.RequireRole(Roles.Admin));
+        // Group requires authentication; per-route auth narrows to admin
+        // for mutations + admin-only endpoints (Create / Test / plugin
+        // mgmt). Read endpoints (List, Get) gate on workspace membership
+        // via WorkspaceAccess inside the handler.
+        var group = app.MapGroup("/api/workspaces").WithTags("Workspaces").RequireAuthorization();
 
         group.MapGet("/", (Delegate)List).WithName("ListWorkspaces");
         group.MapGet("/{slug}", (Delegate)GetBySlug).WithName("GetWorkspace");
-        group.MapPost("/", (Delegate)Create).WithName("CreateWorkspace");
-        group.MapPut("/{slug}", (Delegate)Update).WithName("UpdateWorkspace");
-        group.MapDelete("/{slug}", (Delegate)Delete).WithName("DeleteWorkspace");
-        group.MapPost("/test", (Delegate)TestConnection).WithName("TestWorkspaceConnection");
-        group.MapPost("/{slug}/sync", (Delegate)Sync).WithName("SyncWorkspace");
+        group
+            .MapPost("/", (Delegate)Create)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("CreateWorkspace");
+        group
+            .MapPut("/{slug}", (Delegate)Update)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("UpdateWorkspace");
+        group
+            .MapDelete("/{slug}", (Delegate)Delete)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("DeleteWorkspace");
+        group
+            .MapPost("/test", (Delegate)TestConnection)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("TestWorkspaceConnection");
+        group
+            .MapPost("/{slug}/sync", (Delegate)Sync)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("SyncWorkspace");
         group.MapGet("/{slug}/plugins", (Delegate)ListPlugins).WithName("ListWorkspacePlugins");
         group
             .MapPut("/{slug}/plugins/{pluginId}", (Delegate)SetPluginEnabled)
@@ -63,6 +80,7 @@ public static class WorkspacesEndpoints
             .WithName("SetWorkspacePluginEnabled");
         group
             .MapGet("/{slug}/plugins/{pluginId}/settings", (Delegate)GetPluginSettings)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
             .WithName("GetWorkspacePluginSettings");
         group
             .MapPut("/{slug}/plugins/{pluginId}/settings", (Delegate)SetPluginSettings)
@@ -91,12 +109,22 @@ public static class WorkspacesEndpoints
     )]
     private static async Task<Ok<ApiResult<IReadOnlyList<WorkspaceResult>>>> List(
         IWorkspaceStore store,
+        IWorkspaceMemberStore members,
         SecretsService secrets,
+        HttpContext http,
         int? skip,
-        int? take
+        int? take,
+        CancellationToken ct
     )
     {
-        var rows = await store.ListAsync(Math.Max(0, skip ?? 0), Math.Clamp(take ?? 50, 1, 200));
+        var rows = await WorkspaceAccess.ListAccessibleAsync(
+            http,
+            store,
+            members,
+            Math.Max(0, skip ?? 0),
+            Math.Clamp(take ?? 50, 1, 200),
+            ct
+        );
         IReadOnlyList<WorkspaceResult> result = rows.Select(w => ToResult(w, secrets)).ToList();
         return TypedResults.Ok(new ApiResult<IReadOnlyList<WorkspaceResult>>(result));
     }
@@ -104,13 +132,16 @@ public static class WorkspacesEndpoints
     private static async Task<Results<Ok<ApiResult<WorkspaceResult>>, ProblemHttpResult>> GetBySlug(
         string slug,
         IWorkspaceStore store,
-        SecretsService secrets
+        IWorkspaceMemberStore members,
+        SecretsService secrets,
+        HttpContext http,
+        CancellationToken ct
     )
     {
-        var ws = await store.FindBySlugAsync(slug);
-        return ws is null
-            ? Problems.WorkspaceNotFound(slug)
-            : TypedResults.Ok(new ApiResult<WorkspaceResult>(ToResult(ws, secrets)));
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, store, members, ct);
+        if (access is null)
+            return Problems.WorkspaceNotFound(slug);
+        return TypedResults.Ok(new ApiResult<WorkspaceResult>(ToResult(access.Workspace, secrets)));
     }
 
     [AiCapability(

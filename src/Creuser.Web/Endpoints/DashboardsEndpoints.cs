@@ -4,6 +4,7 @@ using Creuser.Auth.Core;
 using Creuser.Core.Repositories;
 using Creuser.Web.Agents.Capabilities;
 using Creuser.Web.Contracts;
+using Creuser.Web.Workspaces;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Creuser.Web.Endpoints;
@@ -75,12 +76,19 @@ public static class DashboardsEndpoints
     )]
     private static async Task<
         Results<Ok<ApiResult<DashboardNavTree>>, ProblemHttpResult>
-    > ListNavTree(string slug, IWorkspaceStore workspaces, IDashboardStore dashboards)
+    > ListNavTree(
+        string slug,
+        IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
+        IDashboardStore dashboards,
+        HttpContext http,
+        CancellationToken ct
+    )
     {
-        var ws = await workspaces.FindBySlugAsync(slug);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
-        var tree = await dashboards.GetNavTreeAsync(ws.Id);
+        var tree = await dashboards.GetNavTreeAsync(access.Workspace.Id, ct);
         return TypedResults.Ok(new ApiResult<DashboardNavTree>(tree));
     }
 
@@ -88,13 +96,16 @@ public static class DashboardsEndpoints
         string slug,
         string dashSlug,
         IWorkspaceStore workspaces,
-        IDashboardStore dashboards
+        IWorkspaceMemberStore members,
+        IDashboardStore dashboards,
+        HttpContext http,
+        CancellationToken ct
     )
     {
-        var ws = await workspaces.FindBySlugAsync(slug);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
-        var dash = await dashboards.FindBySlugAsync(ws.Id, dashSlug);
+        var dash = await dashboards.FindBySlugAsync(access.Workspace.Id, dashSlug, ct);
         if (dash is null)
             return Problems.NotFound($"Dashboard '{dashSlug}' not found.");
         return TypedResults.Ok(new ApiResult<DashboardResult>(ToResult(dash)));
@@ -247,12 +258,19 @@ public static class DashboardsEndpoints
 
     private static async Task<
         Results<Ok<ApiResult<IReadOnlyList<DashboardGroupResult>>>, ProblemHttpResult>
-    > ListGroups(string slug, IWorkspaceStore workspaces, IDashboardStore dashboards)
+    > ListGroups(
+        string slug,
+        IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
+        IDashboardStore dashboards,
+        HttpContext http,
+        CancellationToken ct
+    )
     {
-        var ws = await workspaces.FindBySlugAsync(slug);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
-        var groups = await dashboards.ListGroupsAsync(ws.Id);
+        var groups = await dashboards.ListGroupsAsync(access.Workspace.Id, ct);
         return TypedResults.Ok(
             new ApiResult<IReadOnlyList<DashboardGroupResult>>(
                 groups.Select(ToGroupResult).ToList()

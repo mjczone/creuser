@@ -8,6 +8,7 @@ using Creuser.Web.Agents.Capabilities;
 using Creuser.Web.Contracts;
 using Creuser.Web.Contracts.Requests;
 using Creuser.Web.Contracts.Responses;
+using Creuser.Web.Workspaces;
 using FluentValidation;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -23,21 +24,36 @@ public static class JobsEndpoints
 {
     public static IEndpointRouteBuilder MapJobsEndpoints(this IEndpointRouteBuilder app)
     {
+        // Group requires authentication only; per-route auth gates mutations
+        // to admin. Read endpoints gate on workspace membership inside the
+        // handler via `WorkspaceAccess.RequireAccessAsync`.
         var group = app.MapGroup("/api/workspaces/{slug}/jobs")
             .WithTags("Jobs")
-            .RequireAuthorization(p => p.RequireRole(Roles.Admin));
+            .RequireAuthorization();
 
         group.MapGet("/", (Delegate)List).WithName("ListJobs");
         group.MapGet("/{jobId:guid}", (Delegate)Get).WithName("GetJob");
-        group.MapPost("/", (Delegate)Create).WithName("CreateJob");
-        group.MapPut("/{jobId:guid}", (Delegate)Update).WithName("UpdateJob");
-        group.MapDelete("/{jobId:guid}", (Delegate)Delete).WithName("DeleteJob");
-        group.MapPost("/{jobId:guid}/run", (Delegate)Run).WithName("RunJob");
+        group
+            .MapPost("/", (Delegate)Create)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("CreateJob");
+        group
+            .MapPut("/{jobId:guid}", (Delegate)Update)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("UpdateJob");
+        group
+            .MapDelete("/{jobId:guid}", (Delegate)Delete)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("DeleteJob");
+        group
+            .MapPost("/{jobId:guid}/run", (Delegate)Run)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("RunJob");
         group.MapGet("/{jobId:guid}/runs", (Delegate)ListRunsByJob).WithName("ListJobRuns");
 
         var runs = app.MapGroup("/api/workspaces/{slug}/runs")
             .WithTags("Jobs")
-            .RequireAuthorization(p => p.RequireRole(Roles.Admin));
+            .RequireAuthorization();
         runs.MapGet("/", (Delegate)ListRunsByWorkspace).WithName("ListWorkspaceRuns");
         runs.MapGet("/{runId:guid}", (Delegate)GetRun).WithName("GetRun");
 
@@ -59,12 +75,19 @@ public static class JobsEndpoints
     )]
     private static async Task<
         Results<Ok<ApiResult<IReadOnlyList<JobScriptResult>>>, ProblemHttpResult>
-    > List(string slug, IWorkspaceStore workspaces, IJobScriptStore scripts)
+    > List(
+        string slug,
+        IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
+        IJobScriptStore scripts,
+        HttpContext http,
+        CancellationToken ct
+    )
     {
-        var ws = await workspaces.FindBySlugAsync(slug);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
-        var rows = await scripts.ListByWorkspaceAsync(ws.Id, skip: 0, take: 200);
+        var rows = await scripts.ListByWorkspaceAsync(access.Workspace.Id, skip: 0, take: 200);
         IReadOnlyList<JobScriptResult> result = rows.Select(ToResult).ToList();
         return TypedResults.Ok(new ApiResult<IReadOnlyList<JobScriptResult>>(result));
     }
@@ -73,14 +96,17 @@ public static class JobsEndpoints
         string slug,
         Guid jobId,
         IWorkspaceStore workspaces,
-        IJobScriptStore scripts
+        IWorkspaceMemberStore members,
+        IJobScriptStore scripts,
+        HttpContext http,
+        CancellationToken ct
     )
     {
-        var ws = await workspaces.FindBySlugAsync(slug);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
         var script = await scripts.FindByIdAsync(jobId);
-        if (script is null || script.WorkspaceId != ws.Id)
+        if (script is null || script.WorkspaceId != access.Workspace.Id)
             return Problems.JobScriptNotFound(jobId.ToString());
         return TypedResults.Ok(new ApiResult<JobScriptResult>(ToResult(script)));
     }
@@ -274,15 +300,18 @@ public static class JobsEndpoints
         string slug,
         Guid jobId,
         IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
         IJobScriptStore scripts,
-        IJobRunStore runs
+        IJobRunStore runs,
+        HttpContext http,
+        CancellationToken ct
     )
     {
-        var ws = await workspaces.FindBySlugAsync(slug);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
         var script = await scripts.FindByIdAsync(jobId);
-        if (script is null || script.WorkspaceId != ws.Id)
+        if (script is null || script.WorkspaceId != access.Workspace.Id)
             return Problems.JobScriptNotFound(jobId.ToString());
         var rows = await runs.ListByScriptAsync(script.Id, skip: 0, take: 100);
         IReadOnlyList<JobRunResult> result = rows.Select(ToRunResult).ToList();
@@ -291,12 +320,19 @@ public static class JobsEndpoints
 
     private static async Task<
         Results<Ok<ApiResult<IReadOnlyList<JobRunResult>>>, ProblemHttpResult>
-    > ListRunsByWorkspace(string slug, IWorkspaceStore workspaces, IJobRunStore runs)
+    > ListRunsByWorkspace(
+        string slug,
+        IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
+        IJobRunStore runs,
+        HttpContext http,
+        CancellationToken ct
+    )
     {
-        var ws = await workspaces.FindBySlugAsync(slug);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
-        var rows = await runs.ListByWorkspaceAsync(ws.Id, skip: 0, take: 100);
+        var rows = await runs.ListByWorkspaceAsync(access.Workspace.Id, skip: 0, take: 100);
         IReadOnlyList<JobRunResult> result = rows.Select(ToRunResult).ToList();
         return TypedResults.Ok(new ApiResult<IReadOnlyList<JobRunResult>>(result));
     }
@@ -305,14 +341,17 @@ public static class JobsEndpoints
         string slug,
         Guid runId,
         IWorkspaceStore workspaces,
-        IJobRunStore runs
+        IWorkspaceMemberStore members,
+        IJobRunStore runs,
+        HttpContext http,
+        CancellationToken ct
     )
     {
-        var ws = await workspaces.FindBySlugAsync(slug);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
         var run = await runs.FindByIdAsync(runId);
-        if (run is null || run.WorkspaceId != ws.Id)
+        if (run is null || run.WorkspaceId != access.Workspace.Id)
             return Problems.JobRunNotFound(runId);
         var steps = await runs.ListStepsAsync(runId);
         return TypedResults.Ok(

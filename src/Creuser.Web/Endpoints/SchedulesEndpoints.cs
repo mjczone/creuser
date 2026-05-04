@@ -7,6 +7,7 @@ using Creuser.Web.Contracts;
 using Creuser.Web.Contracts.Requests;
 using Creuser.Web.Contracts.Responses;
 using Creuser.Web.Schedules;
+using Creuser.Web.Workspaces;
 using FluentValidation;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -25,13 +26,25 @@ public static class SchedulesEndpoints
     {
         var group = app.MapGroup("/api/workspaces/{slug}/schedules")
             .WithTags("Schedules")
-            .RequireAuthorization(p => p.RequireRole(Roles.Admin));
+            .RequireAuthorization();
 
         group.MapGet("/", (Delegate)List).WithName("ListSchedules");
-        group.MapPost("/", (Delegate)Create).WithName("CreateSchedule");
-        group.MapPut("/{scheduleId:guid}", (Delegate)Update).WithName("UpdateSchedule");
-        group.MapDelete("/{scheduleId:guid}", (Delegate)Delete).WithName("DeleteSchedule");
-        group.MapPost("/{scheduleId:guid}/fire", (Delegate)Fire).WithName("FireSchedule");
+        group
+            .MapPost("/", (Delegate)Create)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("CreateSchedule");
+        group
+            .MapPut("/{scheduleId:guid}", (Delegate)Update)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("UpdateSchedule");
+        group
+            .MapDelete("/{scheduleId:guid}", (Delegate)Delete)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("DeleteSchedule");
+        group
+            .MapPost("/{scheduleId:guid}/fire", (Delegate)Fire)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("FireSchedule");
 
         return app;
     }
@@ -54,15 +67,18 @@ public static class SchedulesEndpoints
     > List(
         string slug,
         IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
         IScheduleStore schedules,
-        IJobScriptStore scripts
+        IJobScriptStore scripts,
+        HttpContext http,
+        CancellationToken ct
     )
     {
-        var ws = await workspaces.FindBySlugAsync(slug);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
 
-        var rows = await schedules.ListByWorkspaceAsync(ws.Id);
+        var rows = await schedules.ListByWorkspaceAsync(access.Workspace.Id);
         // Look up job names so the UI can render "[job name] runs at [cron]"
         // without N+1 round-trips. Single in-process join.
         var byScript = new Dictionary<Guid, string>();

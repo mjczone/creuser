@@ -209,9 +209,12 @@ public sealed class JobsApiTests : IClassFixture<PostgresFixture>, IAsyncLifetim
     }
 
     [Fact]
-    public async Task NonAdmin_CannotAccessJobsEndpoints()
+    public async Task NonAdmin_WithoutMembership_GetsNotFoundOnRead_403OnMutate()
     {
-        // Create + login as a regular user.
+        // Non-admins without a workspace_members row should be answered as if
+        // the workspace doesn't exist — exposing membership existence to
+        // non-members is the architecture's stance. Mutations stay admin-only
+        // and surface 403 from the auth middleware before the handler runs.
         var create = await _client.PostAsJsonAsync(
             "/api/admin/users",
             new
@@ -227,7 +230,22 @@ public sealed class JobsApiTests : IClassFixture<PostgresFixture>, IAsyncLifetim
         await Login("user@jobs.example.com", "TempPass99");
 
         var listAttempt = await _client.GetAsync($"/api/workspaces/{_workspaceSlug}/jobs/");
-        Assert.Equal(HttpStatusCode.Forbidden, listAttempt.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, listAttempt.StatusCode);
+
+        var createAttempt = await _client.PostAsJsonAsync(
+            $"/api/workspaces/{_workspaceSlug}/jobs/",
+            new
+            {
+                slug = "blocked",
+                name = "blocked",
+                description = (string?)null,
+                pattern = "deterministic",
+                frontmatter = "type: shell\n",
+                body = "echo hi",
+                status = "active",
+            }
+        );
+        Assert.Equal(HttpStatusCode.Forbidden, createAttempt.StatusCode);
     }
 
     [Fact]

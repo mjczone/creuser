@@ -6,6 +6,7 @@ using Creuser.Core.Repositories;
 using Creuser.Projections.Conventions;
 using Creuser.Web.Agents.Capabilities;
 using Creuser.Web.Contracts;
+using Creuser.Web.Workspaces;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Creuser.Web.Endpoints;
@@ -112,14 +113,17 @@ public static class ProjectionsEndpoints
     > ListConventions(
         string slug,
         IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
         IConventionLoader loader,
         IWorkspaceWorkingTree tree,
+        HttpContext http,
         CancellationToken ct
     )
     {
-        var ws = await workspaces.FindBySlugAsync(slug, ct);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
+        var ws = access.Workspace;
 
         var path = await tree.ResolvePathAsync(ws, ct) ?? string.Empty;
         var loadResult = string.IsNullOrEmpty(path)
@@ -170,7 +174,9 @@ public static class ProjectionsEndpoints
     > QueryEntities(
         string slug,
         IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
         IEntityStore store,
+        HttpContext http,
         string? kind,
         string? entitySlug,
         string? pathGlob,
@@ -178,8 +184,8 @@ public static class ProjectionsEndpoints
         CancellationToken ct
     )
     {
-        var ws = await workspaces.FindBySlugAsync(slug, ct);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
 
         var query = new EntityQuery(
@@ -188,7 +194,7 @@ public static class ProjectionsEndpoints
             PathGlob: pathGlob,
             Limit: limit ?? 100
         );
-        var entities = await store.QueryAsync(ws.Id, query, ct);
+        var entities = await store.QueryAsync(access.Workspace.Id, query, ct);
         var summaries = entities
             .Select(e => new EntitySummary(
                 e.Id,
@@ -209,16 +215,18 @@ public static class ProjectionsEndpoints
         string kind,
         string entitySlug,
         IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
         IEntityStore store,
         IEntityRefStore refs,
+        HttpContext http,
         CancellationToken ct
     )
     {
-        var ws = await workspaces.FindBySlugAsync(slug, ct);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
 
-        var entity = await store.FindAsync(ws.Id, kind, entitySlug, ct);
+        var entity = await store.FindAsync(access.Workspace.Id, kind, entitySlug, ct);
         if (entity is null)
             return Problems.NotFound($"No entity {kind}/{entitySlug} in workspace {slug}.");
 

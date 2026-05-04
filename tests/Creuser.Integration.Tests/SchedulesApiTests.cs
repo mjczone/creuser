@@ -242,8 +242,10 @@ public sealed class SchedulesApiTests : IClassFixture<PostgresFixture>, IAsyncLi
     }
 
     [Fact]
-    public async Task NonAdmin_CannotAccessSchedules()
+    public async Task NonAdmin_WithoutMembership_GetsNotFoundOnRead_403OnMutate()
     {
+        // Read endpoints answer 404 (membership-existence not exposed); mutations
+        // stay admin-only and surface 403 from the auth middleware.
         var create = await _client.PostAsJsonAsync(
             "/api/admin/users",
             new
@@ -258,8 +260,20 @@ public sealed class SchedulesApiTests : IClassFixture<PostgresFixture>, IAsyncLi
         await _client.PostAsync("/api/auth/logout", null);
         await Login("u@s.example.com", "TempPass99");
 
-        var resp = await _client.GetAsync($"/api/workspaces/{_workspaceSlug}/schedules/");
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        var listResp = await _client.GetAsync($"/api/workspaces/{_workspaceSlug}/schedules/");
+        Assert.Equal(HttpStatusCode.NotFound, listResp.StatusCode);
+
+        var createResp = await _client.PostAsJsonAsync(
+            $"/api/workspaces/{_workspaceSlug}/schedules/",
+            new
+            {
+                jobScriptId = Guid.NewGuid(),
+                kind = "cron",
+                cronExpression = "* * * * *",
+                enabled = true,
+            }
+        );
+        Assert.Equal(HttpStatusCode.Forbidden, createResp.StatusCode);
     }
 
     private async Task<Guid> CreateCronSchedule(string expression)

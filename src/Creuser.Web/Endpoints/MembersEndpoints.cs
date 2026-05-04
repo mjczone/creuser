@@ -3,6 +3,7 @@ using Creuser.Auth.Core;
 using Creuser.Core.Repositories;
 using Creuser.Web.Agents.Capabilities;
 using Creuser.Web.Contracts;
+using Creuser.Web.Workspaces;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Creuser.Web.Endpoints;
@@ -25,14 +26,26 @@ public static class MembersEndpoints
 {
     public static IEndpointRouteBuilder MapMembersEndpoints(this IEndpointRouteBuilder app)
     {
+        // Group requires authentication; the read endpoint gates on
+        // workspace membership inside the handler. Mutations stay
+        // admin-only.
         var group = app.MapGroup("/api/workspaces/{slug}/members")
             .WithTags("Members")
-            .RequireAuthorization(p => p.RequireRole(Roles.Admin));
+            .RequireAuthorization();
 
         group.MapGet("/", (Delegate)List).WithName("ListWorkspaceMembers");
-        group.MapPost("/", (Delegate)Add).WithName("AddWorkspaceMember");
-        group.MapPut("/{userId:guid}", (Delegate)UpdateRole).WithName("UpdateWorkspaceMember");
-        group.MapDelete("/{userId:guid}", (Delegate)Remove).WithName("RemoveWorkspaceMember");
+        group
+            .MapPost("/", (Delegate)Add)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("AddWorkspaceMember");
+        group
+            .MapPut("/{userId:guid}", (Delegate)UpdateRole)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("UpdateWorkspaceMember");
+        group
+            .MapDelete("/{userId:guid}", (Delegate)Remove)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("RemoveWorkspaceMember");
 
         return app;
     }
@@ -55,13 +68,14 @@ public static class MembersEndpoints
         string slug,
         IWorkspaceStore workspaces,
         IWorkspaceMemberStore members,
+        HttpContext http,
         CancellationToken ct
     )
     {
-        var ws = await workspaces.FindBySlugAsync(slug);
-        if (ws is null)
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
             return Problems.WorkspaceNotFound(slug);
-        var rows = await members.ListByWorkspaceAsync(ws.Id, ct);
+        var rows = await members.ListByWorkspaceAsync(access.Workspace.Id, ct);
         IReadOnlyList<MemberResult> result = rows.Select(ToResult).ToList();
         return TypedResults.Ok(new ApiResult<IReadOnlyList<MemberResult>>(result));
     }
