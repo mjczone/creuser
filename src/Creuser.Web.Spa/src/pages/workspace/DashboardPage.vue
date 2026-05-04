@@ -10,9 +10,29 @@
         />
         <h1 class="cr-dash-header-title">{{ dashboard.name }}</h1>
         <span v-if="dashboard.isDefault" class="cr-dash-default-chip">default</span>
+        <span v-if="editMode" class="cr-dash-edit-chip">editing</span>
       </div>
       <div v-if="auth.isAdmin" class="cr-dash-header-actions">
-        <span class="cr-dash-coming-soon">Composer designer arrives next pass.</span>
+        <q-btn
+          v-if="editMode"
+          flat
+          dense
+          icon="add"
+          label="Add widget"
+          size="sm"
+          @click="openAddWidget"
+        />
+        <q-btn
+          v-if="editMode"
+          unelevated
+          color="primary"
+          icon="check"
+          label="Done"
+          size="sm"
+          :loading="saving"
+          @click="exitEditMode"
+        />
+        <q-btn v-else flat dense icon="edit" label="Edit" size="sm" @click="enterEditMode" />
       </div>
     </header>
 
@@ -26,10 +46,10 @@
       <p>Dashboard "{{ dashboardSlug }}" not found.</p>
     </div>
 
-    <div v-else class="cr-dash-canvas dockview-theme-dark">
-      <DockviewVue @ready="onReady">
+    <div v-else class="cr-dash-canvas dockview-theme-dark" :class="{ 'is-edit': editMode }">
+      <DockviewVue :disableDnd="!editMode" :singleTabMode="'fullwidth'" @ready="onReady">
         <template #WidgetHost="{ params }">
-          <WidgetHost :params="(params as { instanceId: string })" />
+          <WidgetHost :params="params as { instanceId: string }" />
         </template>
       </DockviewVue>
     </div>
@@ -38,13 +58,15 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, provide, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { useQuasar } from 'quasar';
 import { DockviewVue } from 'dockview-vue';
 import type { DockviewApi, DockviewReadyEvent, SerializedDockview } from 'dockview-core';
 import 'dockview-core/dist/styles/dockview.css';
 import { useDashboardsStore } from 'src/stores/dashboards';
 import { useAuthStore } from 'src/stores/auth';
 import WidgetHost from 'src/widgets/WidgetHost.vue';
+import AddWidgetDialog from 'src/components/AddWidgetDialog.vue';
 
 interface WidgetInstance {
   id: string;
@@ -52,7 +74,15 @@ interface WidgetInstance {
   props: Record<string, unknown>;
 }
 
+interface AddWidgetPayload {
+  widgetType: string;
+  props: Record<string, unknown>;
+  defaultDockview?: { preferredPosition?: 'right' | 'below' | 'tab' };
+}
+
 const route = useRoute();
+const router = useRouter();
+const $q = useQuasar();
 const dashboardsStore = useDashboardsStore();
 const auth = useAuthStore();
 
@@ -64,8 +94,13 @@ const dashboardSlug = computed<string>(() => {
   const v = route.params.dashboardSlug;
   return typeof v === 'string' ? v : 'home';
 });
+// Edit mode is route-driven so deep-links and browser back/forward toggle
+// it cleanly. /w/:slug/d/:dashSlug → view mode; /w/:slug/d/:dashSlug/edit
+// → edit mode.
+const editMode = computed<boolean>(() => route.path.endsWith('/edit'));
 
 const loading = ref(false);
+const saving = ref(false);
 const dashboard = ref<ReturnType<typeof dashboardsStore.getDashboard>>(null);
 const widgetInstances = ref<WidgetInstance[]>([]);
 let dockviewApi: DockviewApi | null = null;
@@ -80,8 +115,6 @@ async function loadDashboard() {
     const d = await dashboardsStore.ensureDashboard(workspaceSlug.value, dashboardSlug.value);
     dashboard.value = d;
     widgetInstances.value = parseWidgets(d?.widgetsJson ?? '[]');
-    // If dockview is already mounted, re-apply the layout. Otherwise the
-    // onReady handler runs next and picks it up.
     if (dockviewApi) applyLayout(dockviewApi, d?.layoutJson ?? '{}', widgetInstances.value);
   } finally {
     loading.value = false;
@@ -113,8 +146,6 @@ function parseWidgets(json: string): WidgetInstance[] {
  * the JSON to gibberish" recovery case.
  */
 function applyLayout(api: DockviewApi, layoutJson: string, instances: WidgetInstance[]) {
-  // Always clear before applying — re-entry from a route change leaves
-  // panels behind otherwise.
   api.clear();
 
   let layout: SerializedDockview | null = null;
@@ -124,7 +155,7 @@ function applyLayout(api: DockviewApi, layoutJson: string, instances: WidgetInst
       layout = parsed as SerializedDockview;
     }
   } catch {
-    /* fall through to fallback */
+    /* fall through */
   }
 
   if (layout) {
@@ -132,11 +163,10 @@ function applyLayout(api: DockviewApi, layoutJson: string, instances: WidgetInst
       api.fromJSON(layout);
       return;
     } catch {
-      /* layout incompatible; fall through to fallback */
+      /* layout incompatible; fall through */
     }
   }
 
-  // Fallback: spawn one panel per widget instance.
   for (const instance of instances) {
     api.addPanel({
       id: instance.id,
@@ -149,6 +179,68 @@ function applyLayout(api: DockviewApi, layoutJson: string, instances: WidgetInst
 
 function prettyTitleFor(widgetType: string): string {
   return widgetType.replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+function enterEditMode() {
+  void router.push(`/w/${workspaceSlug.value}/d/${dashboardSlug.value}/edit`);
+}
+
+async function exitEditMode() {
+  await saveLayout();
+  await router.push(`/w/${workspaceSlug.value}/d/${dashboardSlug.value}`);
+}
+
+async function saveLayout() {
+  if (!dockviewApi || !workspaceSlug.value) return;
+  saving.value = true;
+  try {
+    const layoutJson = JSON.stringify(dockviewApi.toJSON());
+    const widgetsJson = JSON.stringify(widgetInstances.value);
+    const updated = await dashboardsStore.saveLayout(
+      workspaceSlug.value,
+      dashboardSlug.value,
+      layoutJson,
+      widgetsJson,
+    );
+    if (updated) dashboard.value = updated;
+  } catch (ex: unknown) {
+    $q.notify({
+      type: 'negative',
+      message: ex instanceof Error ? ex.message : 'Failed to save dashboard.',
+    });
+  } finally {
+    saving.value = false;
+  }
+}
+
+function openAddWidget() {
+  $q.dialog({
+    component: AddWidgetDialog,
+  }).onOk((payload: AddWidgetPayload) => {
+    addWidgetInstance(payload);
+  });
+}
+
+function addWidgetInstance(payload: AddWidgetPayload) {
+  if (!dockviewApi) return;
+  const instance: WidgetInstance = {
+    id:
+      'w-' +
+      (globalThis.crypto?.randomUUID().slice(0, 8) ?? Math.random().toString(36).slice(2, 10)),
+    widgetType: payload.widgetType,
+    props: payload.props,
+  };
+  widgetInstances.value = [...widgetInstances.value, instance];
+
+  // Default placement: tab into the active group, mirroring the design
+  // doc's note that v1 ships the simplest case. The user drags from
+  // there if they want a split.
+  dockviewApi.addPanel({
+    id: instance.id,
+    component: 'WidgetHost',
+    title: prettyTitleFor(instance.widgetType),
+    params: { instanceId: instance.id },
+  });
 }
 
 watch(
@@ -209,13 +301,21 @@ onBeforeUnmount(() => {
   border-radius: 3px;
 }
 
-.cr-dash-header-actions {
-  font-size: 12px;
-  color: var(--cr-fg-tertiary, #888);
+.cr-dash-edit-chip {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(96, 165, 250, 0.16);
+  color: rgb(147, 197, 253);
+  padding: 2px 6px;
+  border-radius: 3px;
 }
 
-.cr-dash-coming-soon {
-  font-style: italic;
+.cr-dash-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
 }
 
 .cr-dash-state {
@@ -231,5 +331,10 @@ onBeforeUnmount(() => {
 .cr-dash-canvas {
   flex: 1;
   min-height: 0;
+  position: relative;
+
+  &.is-edit {
+    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.2);
+  }
 }
 </style>

@@ -55,9 +55,8 @@
         @click="runSync"
       />
       <span v-if="lastReport" class="cr-w-pr-last">
-        Last run: {{ lastReport.entitiesByKindCount }} kinds,
-        {{ lastReport.refsResolved }} refs resolved,
-        {{ lastReport.refsUnresolved }} unresolved.
+        Last run: {{ lastReport.entitiesByKindCount }} kinds, {{ lastReport.refsResolved }} refs
+        resolved, {{ lastReport.refsUnresolved }} unresolved.
       </span>
     </footer>
   </div>
@@ -191,7 +190,9 @@ watch(
   font-size: 12px;
 }
 
-.cr-w-pr-error { color: var(--cr-fg-secondary, #ccc); }
+.cr-w-pr-error {
+  color: var(--cr-fg-secondary, #ccc);
+}
 
 .cr-w-pr-body {
   flex: 1;

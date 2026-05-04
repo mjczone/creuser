@@ -12,15 +12,7 @@
         toggle-color="primary"
         text-color="grey-6"
       />
-      <q-btn
-        flat
-        dense
-        round
-        icon="refresh"
-        size="sm"
-        :loading="loading"
-        @click="refresh"
-      >
+      <q-btn flat dense round icon="refresh" size="sm" :loading="loading" @click="refresh">
         <q-tooltip>Reload</q-tooltip>
       </q-btn>
     </div>
@@ -37,25 +29,10 @@
       <q-icon name="inbox" size="24px" />
       <span>No runs match the current filter.</span>
     </div>
-    <q-virtual-scroll
-      v-else
-      class="cr-w-runs-list"
-      :items="filtered"
-      separator
-      v-slot="{ item }"
-    >
-      <q-item
-        :key="item.runId"
-        clickable
-        class="cr-w-runs-row"
-        @click="openRun(item)"
-      >
+    <q-virtual-scroll v-else class="cr-w-runs-list" :items="filtered" separator v-slot="{ item }">
+      <q-item :key="item.runId" clickable class="cr-w-runs-row" @click="openRun(item)">
         <q-item-section avatar>
-          <q-icon
-            :name="iconFor(item.status)"
-            :color="colorFor(item.status)"
-            size="20px"
-          />
+          <q-icon :name="iconFor(item.status)" :color="colorFor(item.status)" size="20px" />
         </q-item-section>
         <q-item-section>
           <q-item-label class="cr-w-runs-row-id">

@@ -35,9 +35,7 @@
           <span>trigger: {{ detail.run.triggerKind }}</span>
           <span v-if="detail.run.startedAt">started: {{ fmtDate(detail.run.startedAt) }}</span>
           <span>duration: {{ fmtDuration(detail.run.durationMs) }}</span>
-          <span v-if="detail.run.totalTokensUsed">
-            tokens: {{ detail.run.totalTokensUsed }}
-          </span>
+          <span v-if="detail.run.totalTokensUsed"> tokens: {{ detail.run.totalTokensUsed }} </span>
         </div>
         <p v-if="detail.run.failureMessage" class="cr-w-run-failure">
           {{ detail.run.failureMessage }}
@@ -48,11 +46,7 @@
         <h3 class="cr-w-run-steps-title">Steps ({{ detail.steps.length }})</h3>
         <div v-for="step in detail.steps" :key="step.stepId" class="cr-w-run-step">
           <div class="cr-w-run-step-header">
-            <q-icon
-              :name="iconFor(step.status)"
-              :color="colorFor(step.status)"
-              size="16px"
-            />
+            <q-icon :name="iconFor(step.status)" :color="colorFor(step.status)" size="16px" />
             <span class="cr-w-run-step-name">{{ step.name }}</span>
             <span class="cr-w-run-step-type">{{ step.stepType }}</span>
             <q-space />
@@ -121,21 +115,31 @@ async function refresh() {
 
 function iconFor(status: string): string {
   switch (status) {
-    case 'succeeded': return 'check_circle';
-    case 'failed': return 'error';
-    case 'cancelled': return 'cancel';
-    case 'running': return 'play_circle';
-    default: return 'help';
+    case 'succeeded':
+      return 'check_circle';
+    case 'failed':
+      return 'error';
+    case 'cancelled':
+      return 'cancel';
+    case 'running':
+      return 'play_circle';
+    default:
+      return 'help';
   }
 }
 
 function colorFor(status: string): string {
   switch (status) {
-    case 'succeeded': return 'positive';
-    case 'failed': return 'negative';
-    case 'cancelled': return 'grey-6';
-    case 'running': return 'primary';
-    default: return 'grey-7';
+    case 'succeeded':
+      return 'positive';
+    case 'failed':
+      return 'negative';
+    case 'cancelled':
+      return 'grey-6';
+    case 'running':
+      return 'primary';
+    default:
+      return 'grey-7';
   }
 }
 
@@ -185,7 +189,9 @@ watch(
   text-align: center;
 }
 
-.cr-w-run-error { color: var(--cr-fg-secondary, #ccc); }
+.cr-w-run-error {
+  color: var(--cr-fg-secondary, #ccc);
+}
 
 .cr-w-run-header {
   padding: 12px 16px;
@@ -219,9 +225,18 @@ watch(
   background: var(--cr-bg-subtle, #1f1f22);
   color: var(--cr-fg-secondary, #ccc);
 }
-.cr-w-run-status-succeeded { background: rgba(34, 197, 94, 0.12); color: rgb(74, 222, 128); }
-.cr-w-run-status-failed    { background: rgba(239, 68, 68, 0.12); color: rgb(248, 113, 113); }
-.cr-w-run-status-running   { background: rgba(59, 130, 246, 0.12); color: rgb(96, 165, 250); }
+.cr-w-run-status-succeeded {
+  background: rgba(34, 197, 94, 0.12);
+  color: rgb(74, 222, 128);
+}
+.cr-w-run-status-failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: rgb(248, 113, 113);
+}
+.cr-w-run-status-running {
+  background: rgba(59, 130, 246, 0.12);
+  color: rgb(96, 165, 250);
+}
 
 .cr-w-run-meta {
   display: flex;
@@ -258,7 +273,9 @@ watch(
   padding: 6px 0;
   border-bottom: 1px dashed var(--cr-border-subtle, rgba(255, 255, 255, 0.06));
 
-  &:last-child { border-bottom: none; }
+  &:last-child {
+    border-bottom: none;
+  }
 }
 
 .cr-w-run-step-header {

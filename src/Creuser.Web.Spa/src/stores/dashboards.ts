@@ -52,10 +52,7 @@ export const useDashboardsStore = defineStore('dashboards', () => {
     }
   }
 
-  function getDashboard(
-    workspaceSlug: string,
-    dashboardSlug: string,
-  ): DashboardResult | null {
+  function getDashboard(workspaceSlug: string, dashboardSlug: string): DashboardResult | null {
     return dashboardCache.value.get(workspaceSlug)?.get(dashboardSlug) ?? null;
   }
 

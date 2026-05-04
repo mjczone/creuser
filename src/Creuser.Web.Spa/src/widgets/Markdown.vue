@@ -56,10 +56,18 @@ const rendered = computed<string>(() => {
     color: var(--cr-fg-primary, #f0f0f0);
     margin: 1em 0 0.5em;
   }
-  :deep(h1) { font-size: 1.5em; }
-  :deep(h2) { font-size: 1.25em; }
-  :deep(h3) { font-size: 1.1em; }
-  :deep(p) { margin: 0.5em 0; }
+  :deep(h1) {
+    font-size: 1.5em;
+  }
+  :deep(h2) {
+    font-size: 1.25em;
+  }
+  :deep(h3) {
+    font-size: 1.1em;
+  }
+  :deep(p) {
+    margin: 0.5em 0;
+  }
   :deep(code) {
     background: var(--cr-bg-subtle, #1f1f22);
     padding: 1px 5px;
@@ -81,9 +89,13 @@ const rendered = computed<string>(() => {
     color: var(--cr-link, #60a5fa);
     text-decoration: none;
   }
-  :deep(a:hover) { text-decoration: underline; }
+  :deep(a:hover) {
+    text-decoration: underline;
+  }
   :deep(ul),
-  :deep(ol) { padding-left: 1.5em; }
+  :deep(ol) {
+    padding-left: 1.5em;
+  }
   :deep(blockquote) {
     border-left: 3px solid var(--cr-border-subtle, rgba(255, 255, 255, 0.12));
     padding-left: 12px;

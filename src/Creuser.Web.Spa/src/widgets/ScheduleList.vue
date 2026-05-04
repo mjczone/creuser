@@ -12,15 +12,7 @@
         toggle-color="primary"
         text-color="grey-6"
       />
-      <q-btn
-        flat
-        dense
-        round
-        icon="refresh"
-        size="sm"
-        :loading="loading"
-        @click="refresh"
-      >
+      <q-btn flat dense round icon="refresh" size="sm" :loading="loading" @click="refresh">
         <q-tooltip>Reload</q-tooltip>
       </q-btn>
     </div>
@@ -37,13 +29,7 @@
       <q-icon name="schedule" size="24px" />
       <span>No schedules configured.</span>
     </div>
-    <q-virtual-scroll
-      v-else
-      class="cr-w-list-list"
-      :items="filtered"
-      separator
-      v-slot="{ item }"
-    >
+    <q-virtual-scroll v-else class="cr-w-list-list" :items="filtered" separator v-slot="{ item }">
       <q-item :key="item.scheduleId" class="cr-w-list-row">
         <q-item-section avatar>
           <q-icon

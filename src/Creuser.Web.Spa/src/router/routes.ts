@@ -43,6 +43,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Dashboard', workspaceScoped: true },
       },
       {
+        path: 'w/:workspaceSlug/d/:dashboardSlug/edit',
+        name: 'workspace-dashboard-edit',
+        component: () => import('pages/workspace/DashboardPage.vue'),
+        meta: {
+          title: 'Edit dashboard',
+          workspaceScoped: true,
+          requiresWorkspaceEditor: true,
+        },
+      },
+      {
         path: 'w/:workspaceSlug/settings',
         component: () => import('pages/workspace/WorkspaceSettingsPage.vue'),
         meta: {

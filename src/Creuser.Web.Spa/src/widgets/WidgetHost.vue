@@ -14,9 +14,7 @@
     </div>
     <div v-else class="cr-widget-error">
       <q-icon name="extension_off" size="32px" class="cr-widget-error-icon" />
-      <p class="cr-widget-error-text">
-        No widget registered for type "{{ instance.widgetType }}".
-      </p>
+      <p class="cr-widget-error-text">No widget registered for type "{{ instance.widgetType }}".</p>
     </div>
   </div>
 </template>
@@ -52,14 +50,11 @@ const widgetInstances = inject<Ref<WidgetInstance[]>>(
   'cr-widget-instances',
   null as unknown as Ref<WidgetInstance[]>,
 );
-const workspaceSlug = inject<Ref<string>>(
-  'cr-workspace-slug',
-  null as unknown as Ref<string>,
-);
+const workspaceSlug = inject<Ref<string>>('cr-workspace-slug', null as unknown as Ref<string>);
 
 const instanceId = computed(() => props.params?.instanceId ?? '');
-const instance = computed(() =>
-  widgetInstances?.value?.find((w) => w.id === instanceId.value) ?? null,
+const instance = computed(
+  () => widgetInstances?.value?.find((w) => w.id === instanceId.value) ?? null,
 );
 const widget = computed(() => (instance.value ? getWidget(instance.value.widgetType) : null));
 </script>

@@ -51,9 +51,7 @@ export interface WidgetDefinition<TProps = Record<string, unknown>> {
 
 const registry = new Map<string, WidgetDefinition>();
 
-export function registerWidget<T = Record<string, unknown>>(
-  def: WidgetDefinition<T>,
-): void {
+export function registerWidget<T = Record<string, unknown>>(def: WidgetDefinition<T>): void {
   if (registry.has(def.type)) {
     throw new Error(
       `Widget already registered: ${def.type}. Each widgetType must be unique across the registry.`,

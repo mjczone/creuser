@@ -7,8 +7,8 @@
       <code>{{ widgetType }}</code>
     </p>
     <p class="cr-widget-placeholder-text">
-      The real {{ title.toLowerCase() }} widget arrives in a follow-up commit. This stub proves
-      the dockview-vue → WidgetHost → registry loop is wired correctly.
+      The real {{ title.toLowerCase() }} widget arrives in a follow-up commit. This stub proves the
+      dockview-vue → WidgetHost → registry loop is wired correctly.
     </p>
     <p v-if="propsSummary" class="cr-widget-placeholder-props">{{ propsSummary }}</p>
   </div>
