@@ -18,5 +18,7 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Creuser.Scripting.Tests" />
+    <InternalsVisibleTo Include="Creuser.Sagas" />
+    <InternalsVisibleTo Include="Creuser.Sagas.Tests" />
   </ItemGroup>
 </Project>

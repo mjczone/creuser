@@ -27,6 +27,7 @@
     <ProjectReference Include="..\Creuser.Auth.Providers.Google\Creuser.Auth.Providers.Google.csproj" />
     <ProjectReference Include="..\Creuser.Persistence\Creuser.Persistence.csproj" />
     <ProjectReference Include="..\Creuser.Projections\Creuser.Projections.csproj" />
+    <ProjectReference Include="..\Creuser.Sagas\Creuser.Sagas.csproj" />
     <ProjectReference Include="..\Creuser.Scripting\Creuser.Scripting.csproj" />
   </ItemGroup>
 </Project>

@@ -105,8 +105,10 @@ public sealed class jobRunsRepository : IJobRunStore
                    @total_cost_usd, @duration_ms)
                 ON CONFLICT (id) DO UPDATE SET
                   status              = EXCLUDED.status,
+                  start_commit_sha    = EXCLUDED.start_commit_sha,
                   end_commit_sha      = EXCLUDED.end_commit_sha,
                   completed_at        = EXCLUDED.completed_at,
+                  plan_id             = EXCLUDED.plan_id,
                   failure_message     = EXCLUDED.failure_message,
                   total_tokens_used   = EXCLUDED.total_tokens_used,
                   total_cost_usd      = EXCLUDED.total_cost_usd,

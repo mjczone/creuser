@@ -215,7 +215,8 @@ public static class JobsEndpoints
         RunJobScriptRequest? request,
         IWorkspaceStore workspaces,
         IJobScriptStore scripts,
-        JobExecutor executor,
+        IJobRunStore runs,
+        IServiceProvider services,
         HttpContext http,
         CancellationToken ct
     )
@@ -228,14 +229,42 @@ public static class JobsEndpoints
             return Problems.JobScriptNotFound(jobId.ToString());
 
         var parameters = request?.Parameters ?? new Dictionary<string, object?>();
-        var run = await executor.ExecuteAsync(
-            script.Id,
+        var paramDict =
             parameters as IReadOnlyDictionary<string, object?>
-                ?? new Dictionary<string, object?>(parameters),
-            triggeredBy: CookieAuthHelpers.GetUserId(http),
-            triggerKind: "manual",
-            ct: ct
+            ?? new Dictionary<string, object?>(parameters);
+
+        // Resolve at request time so the endpoint signature doesn't bind
+        // against Wolverine's IMessageBus at startup — keeps build-time
+        // OpenAPI generation working without a Postgres connection.
+        var bus = services.GetRequiredService<Wolverine.IMessageBus>();
+        var waiter = services.GetRequiredService<Creuser.Sagas.RunCompletionWaiter>();
+
+        var runId = Guid.NewGuid();
+        // Register the waiter BEFORE publishing so a saga that finishes
+        // very fast can't signal completion before we're listening.
+        var completion = waiter.RegisterAndWait(runId, ct);
+        await bus.PublishAsync(
+            new Creuser.Sagas.Commands.StartJobRun(
+                runId,
+                script.Id,
+                paramDict,
+                CookieAuthHelpers.GetUserId(http),
+                "manual"
+            )
         );
+
+        try
+        {
+            await completion;
+        }
+        catch (OperationCanceledException)
+        {
+            // Caller aborted; saga keeps running. Surface the in-progress run.
+        }
+
+        var run = await runs.FindByIdAsync(runId, ct);
+        if (run is null)
+            return Problems.InternalError($"Run {runId} not persisted.");
         return TypedResults.Ok(new ApiResult<JobRunResult>(ToRunResult(run)));
     }
 

@@ -14,6 +14,7 @@
     <Project Path="src/Creuser.Git/Creuser.Git.csproj" />
     <Project Path="src/Creuser.Persistence/Creuser.Persistence.csproj" />
     <Project Path="src/Creuser.Projections/Creuser.Projections.csproj" />
+    <Project Path="src/Creuser.Sagas/Creuser.Sagas.csproj" />
     <Project Path="src/Creuser.Scripting/Creuser.Scripting.csproj" />
     <Project Path="src/Creuser.Web/Creuser.Web.csproj" />
   </Folder>

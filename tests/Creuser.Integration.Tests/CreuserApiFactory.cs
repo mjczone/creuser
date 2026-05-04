@@ -32,22 +32,23 @@ public sealed class CreuserApiFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Production"); // skip Scalar, dev-only branches
+        // "Test" environment opts out of durable local queues — Wolverine's
+        // outbox + Testcontainers teardown race causes flake on Postgres
+        // shutdown. Tests don't need durability; in-memory queueing
+        // (Wolverine's default when durable queues are disabled) is fine.
+        builder.UseEnvironment("Test");
         builder.ConfigureAppConfiguration(
             (_, cfg) =>
             {
                 var settings = new Dictionary<string, string?>
                 {
                     ["ConnectionStrings:Postgres"] = ConnectionString,
-                    ["ConnectionStrings:Redis"] = "", // fall back to in-memory IDistributedCache
-                    // Predictable bootstrap creds for tests.
+                    ["ConnectionStrings:Redis"] = "",
                     ["CREUSER_BOOTSTRAP_EMAIL"] = "admin@creuser.test",
                     ["CREUSER_BOOTSTRAP_PASSWORD"] = "ChangeMe!",
                 };
                 if (SchedulerIntervalMs is int ms)
-                {
                     settings["CREUSER_SCHEDULER_INTERVAL_MS"] = ms.ToString();
-                }
                 cfg.AddInMemoryCollection(settings);
             }
         );

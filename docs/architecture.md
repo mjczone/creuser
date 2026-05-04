@@ -50,7 +50,7 @@ The architecture below describes both the v1 destination and the current state. 
 
 **In flight (next up for v0.1.x):**
 
-- Marten + Wolverine — durable saga executor replacing the in-process `JobExecutor`. `IStepRunner` doesn't change; only the executor does.
+- ~~Marten + Wolverine — durable saga executor.~~ Shipped. `IStepRunner` unchanged; `JobExecutor` deleted; saga handlers in `Creuser.Sagas` orchestrate the three execution patterns. `mt` schema active for events + saga state + outbox; `cr.*` tables remain the operational read model. Synchronous `POST /run` preserved via `RunCompletionWaiter` (single-instance; multi-instance needs Redis backplane).
 - Plugin loader (stage 3 of capabilities) — `/data/plugins/*.dll` discovery, per-workspace enablement, plugins contribute step runners + capability providers + tool registries.
 - Matrix views + KPI APIs (post-v0.1) — declarative slicings of the entity projection, bring-your-own charting via workspace `<head>` script registration. Lands before the dashboard composer because the data layer composes with anything; the composer host gets meaningfully more compelling once analytical widgets exist. Design captured in this doc's "Matrix views and KPI dashboards" section + `docs/wip/projections-design.md` "Forward-looking".
 - Dashboard composer — `dockview-vue` widget host, Monaco-based job editor. Hosts matrix-view widgets and workspace-authored JS widgets registered against the head-script-loaded libs.

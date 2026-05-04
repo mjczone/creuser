@@ -1,5 +1,7 @@
 using Creuser.Core.Execution;
-using Creuser.Scripting;
+using Creuser.Sagas;
+using Creuser.Sagas.Commands;
+using Wolverine;
 
 namespace Creuser.Web.Schedules;
 
@@ -33,20 +35,35 @@ public sealed class JobScheduleDispatcher : IJobScheduleDispatcher
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var executor = scope.ServiceProvider.GetRequiredService<JobExecutor>();
+        var bus = scope.ServiceProvider.GetRequiredService<IMessageBus>();
+        var waiter = scope.ServiceProvider.GetRequiredService<RunCompletionWaiter>();
         var scheduleStore = scope.ServiceProvider.GetRequiredService<IScheduleStore>();
 
-        Guid? runId = null;
+        var runId = Guid.NewGuid();
         try
         {
-            var run = await executor.ExecuteAsync(
-                schedule.JobScriptId,
-                new Dictionary<string, object?>(),
-                triggeredBy: null,
-                triggerKind: triggerKind,
-                ct: ct
+            // Register the waiter before publishing so a fast-completing
+            // saga doesn't signal before we're listening. Cron + sync hooks
+            // wait for the run to complete so they can record `last_run_id`
+            // accurately on the schedule row.
+            var completion = waiter.RegisterAndWait(runId, ct);
+            await bus.PublishAsync(
+                new StartJobRun(
+                    runId,
+                    schedule.JobScriptId,
+                    new Dictionary<string, object?>(),
+                    TriggeredBy: null,
+                    TriggerKind: triggerKind
+                )
             );
-            runId = run.Id;
+            try
+            {
+                await completion;
+            }
+            catch (OperationCanceledException)
+            {
+                // Caller aborted; saga continues. We still record the run id.
+            }
         }
         catch (Exception ex)
         {
@@ -57,6 +74,7 @@ public sealed class JobScheduleDispatcher : IJobScheduleDispatcher
                 triggerKind,
                 schedule.JobScriptId
             );
+            runId = Guid.Empty;
         }
 
         // Bookkeeping update happens whether the run succeeded or failed.
@@ -69,7 +87,13 @@ public sealed class JobScheduleDispatcher : IJobScheduleDispatcher
                 : null;
         try
         {
-            await scheduleStore.MarkFiredAsync(schedule.Id, firedAt, nextDue, runId, ct);
+            await scheduleStore.MarkFiredAsync(
+                schedule.Id,
+                firedAt,
+                nextDue,
+                runId == Guid.Empty ? null : (Guid?)runId,
+                ct
+            );
         }
         catch (Exception ex)
         {
@@ -80,6 +104,6 @@ public sealed class JobScheduleDispatcher : IJobScheduleDispatcher
             );
         }
 
-        return runId;
+        return runId == Guid.Empty ? null : (Guid?)runId;
     }
 }

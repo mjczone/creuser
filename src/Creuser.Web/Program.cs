@@ -9,6 +9,8 @@ using Creuser.Persistence.Repositories;
 using Creuser.Projections.Conventions;
 using Creuser.Projections.Scanner;
 using Creuser.Projections.Sync;
+using Creuser.Sagas;
+using Creuser.Sagas.Handlers;
 using Creuser.Scripting;
 using Creuser.Scripting.ToolLoop;
 using Creuser.Web.Agents;
@@ -20,11 +22,15 @@ using Creuser.Web.Hubs;
 using Creuser.Web.Schedules;
 using Creuser.Web.Workspaces;
 using FluentValidation;
+using JasperFx.Resources;
+using Marten;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
 using Scalar.AspNetCore;
+using Wolverine;
+using Wolverine.Marten;
 
 DapperSetup.Initialize();
 
@@ -158,7 +164,86 @@ builder
 
 builder.Services.AddScoped<IWorkspaceWorkingTree, WorkspaceWorkingTree>();
 builder.Services.AddSingleton<IToolCatalog, BaselineToolCatalog>();
-builder.Services.AddScoped<JobExecutor>();
+
+// Marten event store + Wolverine durable saga executor.
+// `mt` schema holds the run event stream + saga state document.
+// `cr.job_runs` and `cr.job_run_steps` stay populated via the existing
+// IJobRunStore (imperative writes alongside event appends) — see
+// docs/wip/wolverine-marten-design.md "Persistence and projections".
+//
+// Connection: shares the same Postgres database the rest of the app uses;
+// Marten manages its own connection pool internally. Auto-create
+// schema/tables on first startup is gated behind the same build-time
+// OpenAPI guard the DbInitializer uses — the build-time tool spins up the
+// host without Postgres available, and Marten's startup tries to connect.
+var isBuildTimeOpenApi = IsBuildTimeOpenApiGeneration();
+if (!isBuildTimeOpenApi)
+{
+    // Marten + Wolverine wiring. Connection string is bound late via
+    // MartenConnectionConfigurer (IConfigureMarten) so test fixtures
+    // (WebApplicationFactory + AddInMemoryCollection) can override it
+    // before Marten initializes. Reading builder.Configuration directly
+    // here would miss the WAF override (which is added during host build,
+    // after the eager string-typed StoreOptions.Connection registers).
+    builder
+        .Services.AddMarten(opts =>
+        {
+            opts.DatabaseSchemaName = "mt";
+            opts.Events.DatabaseSchemaName = "mt";
+            opts.UseNewtonsoftForSerialization();
+        })
+        .IntegrateWithWolverine()
+        .ApplyAllDatabaseChangesOnStartup();
+    builder.Services.ConfigureMarten(
+        (sp, opts) =>
+        {
+            var conn =
+                sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>()
+                    .GetConnectionString("Postgres")
+                ?? string.Empty;
+            opts.Connection(conn);
+        }
+    );
+
+    var isTestEnvironment = string.Equals(
+        builder.Environment.EnvironmentName,
+        "Test",
+        StringComparison.OrdinalIgnoreCase
+    );
+    builder.Host.UseWolverine(opts =>
+    {
+        opts.Discovery.IncludeAssembly(typeof(JobRunSagaHandler).Assembly);
+        // Single-tenant on-prem deployment shape — no multi-node ownership
+        // coordination needed. Solo mode skips the cross-node "release
+        // ownership on stop" cleanup and matches our deployment principle
+        // of one Creuser instance per organization.
+        opts.Durability.Mode = DurabilityMode.Solo;
+        if (!isTestEnvironment)
+            opts.Policies.UseDurableLocalQueues();
+    });
+}
+
+// Skip mirrors the DbInitializer guard so build-time OpenAPI generation
+// doesn't try to connect to Postgres.
+static bool IsBuildTimeOpenApiGeneration()
+{
+    var entryName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
+    if (
+        entryName is not null
+        && entryName.Contains("getdocument", StringComparison.OrdinalIgnoreCase)
+    )
+        return true;
+    return Environment.CommandLine.Contains(
+        "dotnet-getdocument",
+        StringComparison.OrdinalIgnoreCase
+    );
+}
+
+// Synchronous-endpoint waiter — singleton task-completion-source registry
+// keyed on RunId. Single-instance only; multi-instance deployments need a
+// Redis pub/sub backplane to relay JobRunFinished cross-host. See the
+// design doc for the v0.2 path.
+builder.Services.AddSingleton<RunCompletionWaiter>();
 
 // Schedules. The dispatcher fires a job in a fresh DI scope so neither
 // the cron tick nor the sync hook pin the executor's lifetime. The
