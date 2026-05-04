@@ -26,6 +26,12 @@ permissions:
 env:
   GHCR_IMAGE: ghcr.io/${{ github.repository }}
   DOCKERHUB_IMAGE: docker.io/mjczone/creuser
+  # Opt the JS-based GitHub Actions (checkout, docker/*) onto Node 24
+  # ahead of the June 2026 default flip. The action versions we use
+  # (checkout@v4, docker/*@v3+v5+v6) still ship a Node 20 entry point;
+  # this runner-level switch forces them onto Node 24 without bumping
+  # the action versions independently.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   publish:

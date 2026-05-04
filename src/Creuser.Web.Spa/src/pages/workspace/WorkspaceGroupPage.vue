@@ -16,9 +16,7 @@
     <div v-else class="cr-group-empty">
       <q-icon :name="group.icon" size="48px" class="cr-group-empty-icon" />
       <h1 class="cr-group-empty-title">{{ group.name }}</h1>
-      <p class="cr-group-empty-sub">
-        This group has no dashboards yet. Add one to populate it.
-      </p>
+      <p class="cr-group-empty-sub">This group has no dashboards yet. Add one to populate it.</p>
       <q-btn
         v-if="auth.isAdmin"
         unelevated
@@ -93,9 +91,10 @@ async function load() {
 
 function openCreate() {
   if (!workspaceSlug.value || !group.value) return;
-  const groups = dashboardsStore
-    .getNavTree(workspaceSlug.value)
-    ?.groups.map((g) => ({ slug: g.slug, name: g.name })) ?? [];
+  const groups =
+    dashboardsStore
+      .getNavTree(workspaceSlug.value)
+      ?.groups.map((g) => ({ slug: g.slug, name: g.name })) ?? [];
   $q.dialog({
     component: CreateDashboardDialog,
     componentProps: {

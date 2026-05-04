@@ -32,7 +32,7 @@ export const defaultBranding: BrandingConfig = {
   supportEmail: null,
 };
 
-const PALETTE_KEYS = [
+export const PALETTE_KEYS = [
   'primary',
   'secondary',
   'accent',
@@ -62,13 +62,15 @@ export type ChromeKey = (typeof CHROME_KEYS)[number];
 
 const STYLE_TAG_ID = 'cr-branding-overrides';
 
-// Quasar's setCssVar uses kebab-case keys for `dark-page` etc.
-function quasarKey(k: string): string {
+// Quasar's setCssVar uses kebab-case keys for `dark-page` etc. Exported so
+// the BrandingPage's "insert baseline tokens" button can format `--q-*`
+// names the same way the runtime applier does.
+export function quasarKey(k: string): string {
   return k === 'darkPage' ? 'dark-page' : k;
 }
 
 // Chrome keys are camelCase on the wire, kebab-case as `--cr-*` CSS vars.
-function chromeCssName(k: string): string {
+export function chromeCssName(k: string): string {
   return `--cr-${k.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())}`;
 }
 

@@ -1,38 +1,52 @@
+import {
+  themeAbyss,
+  themeCatppuccinMocha,
+  themeDark,
+  themeDracula,
+  themeGithubDark,
+  themeGithubLight,
+  themeLight,
+  themeMonokai,
+  themeNord,
+  themeSolarizedLight,
+  themeVisualStudio,
+} from 'dockview-core';
+import type { DockviewTheme } from 'dockview-core';
 import type { BrandingConfig } from 'src/api';
 
 /**
- * Curated palette presets. Each entry is a complete `palette + chrome
- * (dark) + chromeLight` snippet — applying a preset overwrites those
- * three fields on the BrandingConfig draft. Identity (productName, logo,
- * favicon, fonts, customCss) and the admin's default-mode preference are
- * preserved.
+ * Curated palette presets — each pairs 1:1 with a dockview-bundled theme so
+ * the dock area (`.dv-shell`), the surrounding shell (sidebar, header,
+ * page), and the Quasar palette all read as one piece. Applying a preset
+ * overwrites palette + chrome (both modes) on the BrandingConfig draft and
+ * its `dockviewTheme` is passed to `DockviewVue` at render time. Identity
+ * (productName, logo, favicon, fonts, customCss) is preserved.
  *
- * Why hand-curated rather than something like nice-color-palettes:
- *   1. UI palettes need explicit slot assignments (primary / secondary /
- *      accent / positive / negative / info / warning) that 5-color art
- *      palettes don't model.
- *   2. Chrome tokens (page < surface < header/sidebar < elevated) need
- *      careful relative-lightness tuning that doesn't emerge from random
- *      pretty colors.
- *   3. Recognizable named themes ("GitHub", "Solarized Dark", etc.) are
- *      a stronger UX than abstract "Palette #47".
+ * Two kinds of preset:
+ *
+ *   1. **Creuser Dark / Creuser Light** — house brand. Pairs with
+ *      `dockview-theme-dark` / `dockview-theme-light` as the structural
+ *      base, then overrides dockview's `--dv-*` via the `--cr-*` → `--dv-*`
+ *      mapping in `theme.scss` (gated by `cr-dock-creuser` on the canvas)
+ *      so the dock takes the same sage-on-teal-forest values as the
+ *      surrounding chrome. Set `useCreuserDockMapping: true`.
+ *
+ *   2. **Named themes** (Standard Dark/Light, VS Dark, Abyss, Dracula,
+ *      Nord, Catppuccin Mocha, Monokai, GitHub Dark/Light, Solarized
+ *      Light) — pairs with the dockview theme of the same name. The dock
+ *      shows dockview's bundled colors verbatim; chrome values are tuned
+ *      to match those colors so sidebar/header/page-bg blend in.
  */
 
 type Palette = NonNullable<BrandingConfig['palette']>;
 type Chrome = NonNullable<BrandingConfig['chrome']>;
 
-export type PresetMode = 'dark' | 'light' | 'both';
+export type PresetMode = 'dark' | 'light';
 
 export interface PalettePreset {
   id: string;
   label: string;
   description: string;
-  /**
-   * Which mode the preset is *designed for*. The picker groups by this so
-   * admins can tell at a glance whether a preset will look right in their
-   * current mode. `both` means the preset specifies palette + dark chrome +
-   * light chrome that read coherently in either mode.
-   */
   mode: PresetMode;
   /** Small set of representative colors for the picker swatch row. */
   swatches: string[];
@@ -41,179 +55,134 @@ export interface PalettePreset {
   chrome: Chrome;
   /** Chrome applied in light mode. Empty preserves the bundled neutral defaults. */
   chromeLight: Chrome;
+  /** dockview-core theme object passed to DockviewVue's `theme` prop. */
+  dockviewTheme: DockviewTheme;
+  /**
+   * If true, DashboardPage adds the `cr-dock-creuser` marker class to the
+   * canvas, activating the `--cr-*` → `--dv-*` mapping in `theme.scss`.
+   * Used by the Creuser house presets to make the dock chrome follow our
+   * brand colors instead of dockview-theme-dark/light's bundled grays.
+   */
+  useCreuserDockMapping?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Both-mode presets — designed to work in dark or light
+// Dark presets
 // ─────────────────────────────────────────────────────────────────────────
 
-const DEFAULT: PalettePreset = {
-  id: 'creuser-default',
-  label: 'Creuser Default',
-  description: 'Sage green on dark teal-forest. Matches the Creuser logo.',
-  mode: 'both',
+const CREUSER_DARK: PalettePreset = {
+  id: 'creuser-dark',
+  label: 'Creuser Dark',
+  description: 'Sage green on dark teal-forest. The Creuser house dark theme.',
+  mode: 'dark',
   swatches: ['#5c7e62', '#7c9a82', '#d7a06b', '#143734', '#0c2422'],
   palette: {},
   chrome: {},
   chromeLight: {},
+  dockviewTheme: themeDark,
+  useCreuserDockMapping: true,
 };
 
-const GITHUB: PalettePreset = {
-  id: 'github',
-  label: 'GitHub',
-  description: 'Neutral gray with a clean blue accent.',
-  mode: 'both',
-  swatches: ['#0969da', '#bf3989', '#1f883d', '#0d1117', '#21262d'],
-  palette: {
-    primary: '#0969da',
-    secondary: '#6e7781',
-    accent: '#bf3989',
-    positive: '#1f883d',
-    negative: '#cf222e',
-    info: '#0969da',
-    warning: '#bf8700',
-  },
-  chrome: {
-    bgPage: '#0d1117',
-    bgSurface: '#161b22',
-    bgHeader: '#161b22',
-    bgSidebar: '#161b22',
-    bgElevated: '#21262d',
-    fgPrimary: 'rgba(230, 237, 243, 0.95)',
-    fgSecondary: 'rgba(173, 186, 199, 0.85)',
-    fgTertiary: 'rgba(125, 133, 144, 0.85)',
-    borderSubtle: 'rgba(48, 54, 61, 0.5)',
-    borderDefault: '#30363d',
-    borderStrong: '#484f58',
-  },
-  chromeLight: {
-    bgPage: '#ffffff',
-    bgSurface: '#ffffff',
-    bgHeader: '#f6f8fa',
-    bgSidebar: '#f6f8fa',
-    bgElevated: '#eaeef2',
-    fgPrimary: 'rgba(31, 35, 40, 0.95)',
-    fgSecondary: 'rgba(101, 109, 118, 0.95)',
-    fgTertiary: 'rgba(101, 109, 118, 0.7)',
-    borderSubtle: 'rgba(208, 215, 222, 0.5)',
-    borderDefault: '#d0d7de',
-    borderStrong: '#afb8c1',
-  },
-};
-
-const NORD: PalettePreset = {
-  id: 'nord',
-  label: 'Nord',
-  description: 'Cool, frosty blues on muted polar night.',
-  mode: 'both',
-  swatches: ['#88c0d0', '#5e81ac', '#a3be8c', '#2e3440', '#3b4252'],
-  palette: {
-    primary: '#88c0d0',
-    secondary: '#5e81ac',
-    accent: '#b48ead',
-    positive: '#a3be8c',
-    negative: '#bf616a',
-    info: '#81a1c1',
-    warning: '#ebcb8b',
-  },
-  chrome: {
-    bgPage: '#2e3440',
-    bgSurface: '#3b4252',
-    bgHeader: '#3b4252',
-    bgSidebar: '#3b4252',
-    bgElevated: '#434c5e',
-    fgPrimary: 'rgba(236, 239, 244, 0.95)',
-    fgSecondary: 'rgba(216, 222, 233, 0.8)',
-    fgTertiary: 'rgba(216, 222, 233, 0.55)',
-    borderSubtle: 'rgba(67, 76, 94, 0.6)',
-    borderDefault: '#434c5e',
-    borderStrong: '#4c566a',
-  },
-  chromeLight: {
-    bgPage: '#eceff4',
-    bgSurface: '#e5e9f0',
-    bgHeader: '#e5e9f0',
-    bgSidebar: '#e5e9f0',
-    bgElevated: '#d8dee9',
-    fgPrimary: 'rgba(46, 52, 64, 0.95)',
-    fgSecondary: 'rgba(59, 66, 82, 0.8)',
-    fgTertiary: 'rgba(59, 66, 82, 0.55)',
-    borderSubtle: 'rgba(216, 222, 233, 0.6)',
-    borderDefault: '#d8dee9',
-    borderStrong: '#c0c5cf',
-  },
-};
-
-// ─────────────────────────────────────────────────────────────────────────
-// Dark-mode presets
-// ─────────────────────────────────────────────────────────────────────────
-
-const SOLARIZED_DARK: PalettePreset = {
-  id: 'solarized-dark',
-  label: 'Solarized Dark',
-  description: "Ethan Schoonover's classic — muted accents on warm teal.",
+const STANDARD_DARK: PalettePreset = {
+  id: 'standard-dark',
+  label: 'Standard Dark',
+  description: "Dockview's stock dark theme — VS Code-flavored grays.",
   mode: 'dark',
-  swatches: ['#268bd2', '#859900', '#dc322f', '#073642', '#002b36'],
+  swatches: ['#007acc', '#1e1e1e', '#252526', '#2d2d30', '#444444'],
   palette: {
-    primary: '#268bd2',
-    secondary: '#2aa198',
-    accent: '#d33682',
-    positive: '#859900',
-    negative: '#dc322f',
-    info: '#268bd2',
-    warning: '#b58900',
+    primary: '#007acc',
+    secondary: '#3794ff',
+    accent: '#cca700',
+    positive: '#4ec9b0',
+    negative: '#f48771',
+    info: '#75beff',
+    warning: '#cca700',
   },
   chrome: {
-    bgPage: '#002b36',
-    bgSurface: '#073642',
-    bgHeader: '#073642',
-    bgSidebar: '#073642',
-    bgElevated: '#0d4453',
-    fgPrimary: 'rgba(238, 232, 213, 0.95)',
-    fgSecondary: 'rgba(147, 161, 161, 0.95)',
-    fgTertiary: 'rgba(101, 123, 131, 0.95)',
-    borderSubtle: 'rgba(7, 54, 66, 0.6)',
-    borderDefault: '#0d4453',
-    borderStrong: '#134659',
+    bgPage: '#1e1e1e',
+    bgSurface: '#252526',
+    bgHeader: '#252526',
+    bgSidebar: '#252526',
+    bgElevated: '#2d2d30',
+    fgPrimary: 'rgba(255, 255, 255, 0.95)',
+    fgSecondary: 'rgba(255, 255, 255, 0.7)',
+    fgTertiary: 'rgba(255, 255, 255, 0.5)',
+    borderSubtle: 'rgba(204, 204, 204, 0.1)',
+    borderDefault: '#444444',
+    borderStrong: '#5a5a5a',
   },
   chromeLight: {},
+  dockviewTheme: themeDark,
 };
 
-const ONE_DARK: PalettePreset = {
-  id: 'one-dark',
-  label: 'One Dark',
-  description: "Atom's default — soft lavender + amber on slate.",
+const VISUAL_STUDIO_DARK: PalettePreset = {
+  id: 'visual-studio-dark',
+  label: 'Visual Studio Dark',
+  description: "Dockview's VS theme — high-contrast tabs with a blue accent strip.",
   mode: 'dark',
-  swatches: ['#61afef', '#c678dd', '#98c379', '#282c34', '#3e4451'],
+  swatches: ['#007acc', '#1e1e1e', '#3f3f46', '#252526', '#cccccc'],
   palette: {
-    primary: '#61afef',
-    secondary: '#c678dd',
-    accent: '#d19a66',
-    positive: '#98c379',
-    negative: '#e06c75',
-    info: '#56b6c2',
-    warning: '#e5c07b',
+    primary: '#007acc',
+    secondary: '#3794ff',
+    accent: '#cca700',
+    positive: '#4ec9b0',
+    negative: '#f48771',
+    info: '#75beff',
+    warning: '#cca700',
   },
   chrome: {
-    bgPage: '#282c34',
-    bgSurface: '#21252b',
-    bgHeader: '#21252b',
-    bgSidebar: '#21252b',
-    bgElevated: '#3e4451',
-    fgPrimary: 'rgba(220, 223, 228, 0.95)',
-    fgSecondary: 'rgba(171, 178, 191, 0.85)',
-    fgTertiary: 'rgba(125, 133, 144, 0.85)',
-    borderSubtle: 'rgba(62, 68, 81, 0.6)',
-    borderDefault: '#3e4451',
-    borderStrong: '#5c6370',
+    bgPage: '#1e1e1e',
+    bgSurface: '#252526',
+    bgHeader: '#3f3f46',
+    bgSidebar: '#252526',
+    bgElevated: '#3f3f46',
+    fgPrimary: 'rgba(255, 255, 255, 0.95)',
+    fgSecondary: 'rgba(204, 204, 204, 0.85)',
+    fgTertiary: 'rgba(204, 204, 204, 0.55)',
+    borderSubtle: 'rgba(204, 204, 204, 0.08)',
+    borderDefault: '#3f3f46',
+    borderStrong: '#5a5a5a',
   },
   chromeLight: {},
+  dockviewTheme: themeVisualStudio,
+};
+
+const ABYSS: PalettePreset = {
+  id: 'abyss',
+  label: 'Abyss',
+  description: 'Deep midnight blues with a violet accent. Dockview-flagship.',
+  mode: 'dark',
+  swatches: ['#5b1ecf', '#10192c', '#000c18', '#1c1c2a', '#2b2b4a'],
+  palette: {
+    primary: '#5b1ecf',
+    secondary: '#9479d8',
+    accent: '#bd93f9',
+    positive: '#5ac8a8',
+    negative: '#f06868',
+    info: '#5b9bd1',
+    warning: '#e2b341',
+  },
+  chrome: {
+    bgPage: '#000c18',
+    bgSurface: '#10192c',
+    bgHeader: '#10192c',
+    bgSidebar: '#10192c',
+    bgElevated: '#1c1c2a',
+    fgPrimary: '#ffffff',
+    fgSecondary: 'rgb(148, 151, 169)',
+    fgTertiary: 'rgba(148, 151, 169, 0.65)',
+    borderSubtle: 'rgba(43, 43, 74, 0.5)',
+    borderDefault: '#2b2b4a',
+    borderStrong: '#3a3a66',
+  },
+  chromeLight: {},
+  dockviewTheme: themeAbyss,
 };
 
 const DRACULA: PalettePreset = {
   id: 'dracula',
   label: 'Dracula',
-  description: 'Vivid purple + pink on deep slate.',
+  description: 'Vivid purple + pink on deep slate. The dockview-theme-dracula bundle.',
   mode: 'dark',
   swatches: ['#bd93f9', '#ff79c6', '#50fa7b', '#282a36', '#44475a'],
   palette: {
@@ -239,47 +208,190 @@ const DRACULA: PalettePreset = {
     borderStrong: '#6272a4',
   },
   chromeLight: {},
+  dockviewTheme: themeDracula,
 };
 
-const TOKYO_NIGHT: PalettePreset = {
-  id: 'tokyo-night',
-  label: 'Tokyo Night',
-  description: 'Cool blues + violets on midnight indigo.',
+const NORD: PalettePreset = {
+  id: 'nord',
+  label: 'Nord',
+  description: 'Cool, frosty blues on muted polar night. Dockview-flagship.',
   mode: 'dark',
-  swatches: ['#7aa2f7', '#bb9af7', '#9ece6a', '#1a1b26', '#24283b'],
+  swatches: ['#88c0d0', '#5e81ac', '#a3be8c', '#2e3440', '#3b4252'],
   palette: {
-    primary: '#7aa2f7',
-    secondary: '#bb9af7',
-    accent: '#7dcfff',
-    positive: '#9ece6a',
-    negative: '#f7768e',
-    info: '#7dcfff',
-    warning: '#e0af68',
+    primary: '#88c0d0',
+    secondary: '#5e81ac',
+    accent: '#b48ead',
+    positive: '#a3be8c',
+    negative: '#bf616a',
+    info: '#81a1c1',
+    warning: '#ebcb8b',
   },
   chrome: {
-    bgPage: '#1a1b26',
-    bgSurface: '#24283b',
-    bgHeader: '#24283b',
-    bgSidebar: '#24283b',
-    bgElevated: '#2f334d',
-    fgPrimary: 'rgba(192, 202, 245, 0.95)',
-    fgSecondary: 'rgba(154, 165, 206, 0.85)',
-    fgTertiary: 'rgba(86, 95, 137, 0.95)',
-    borderSubtle: 'rgba(47, 51, 77, 0.6)',
-    borderDefault: '#2f334d',
-    borderStrong: '#414868',
+    bgPage: '#2e3440',
+    bgSurface: '#3b4252',
+    bgHeader: '#3b4252',
+    bgSidebar: '#3b4252',
+    bgElevated: '#434c5e',
+    fgPrimary: '#eceff4',
+    fgSecondary: '#d8dee9',
+    fgTertiary: 'rgba(216, 222, 233, 0.6)',
+    borderSubtle: 'rgba(67, 76, 94, 0.6)',
+    borderDefault: '#434c5e',
+    borderStrong: '#4c566a',
   },
   chromeLight: {},
+  dockviewTheme: themeNord,
+};
+
+const CATPPUCCIN_MOCHA: PalettePreset = {
+  id: 'catppuccin-mocha',
+  label: 'Catppuccin Mocha',
+  description: 'Pastel mauve + lavender on Mocha indigo. Dockview-flagship.',
+  mode: 'dark',
+  swatches: ['#cba6f7', '#b4befe', '#a6e3a1', '#1e1e2e', '#181825'],
+  palette: {
+    primary: '#cba6f7',
+    secondary: '#b4befe',
+    accent: '#f5c2e7',
+    positive: '#a6e3a1',
+    negative: '#f38ba8',
+    info: '#89b4fa',
+    warning: '#f9e2af',
+  },
+  chrome: {
+    bgPage: '#1e1e2e',
+    bgSurface: '#181825',
+    bgHeader: '#181825',
+    bgSidebar: '#181825',
+    bgElevated: '#313244',
+    fgPrimary: '#cdd6f4',
+    fgSecondary: '#bac2de',
+    fgTertiary: '#a6adc8',
+    borderSubtle: 'rgba(49, 50, 68, 0.5)',
+    borderDefault: '#313244',
+    borderStrong: '#45475a',
+  },
+  chromeLight: {},
+  dockviewTheme: themeCatppuccinMocha,
+};
+
+const MONOKAI: PalettePreset = {
+  id: 'monokai',
+  label: 'Monokai',
+  description: 'The classic high-contrast scheme — pink + green on charcoal.',
+  mode: 'dark',
+  swatches: ['#f92672', '#a6e22e', '#66d9ef', '#272822', '#3e3d32'],
+  palette: {
+    primary: '#66d9ef',
+    secondary: '#ae81ff',
+    accent: '#f92672',
+    positive: '#a6e22e',
+    negative: '#f92672',
+    info: '#66d9ef',
+    warning: '#fd971f',
+  },
+  chrome: {
+    bgPage: '#272822',
+    bgSurface: '#1f1f1c',
+    bgHeader: '#1f1f1c',
+    bgSidebar: '#1f1f1c',
+    bgElevated: '#3e3d32',
+    fgPrimary: '#f8f8f2',
+    fgSecondary: 'rgba(248, 248, 242, 0.75)',
+    fgTertiary: '#75715e',
+    borderSubtle: 'rgba(62, 61, 50, 0.5)',
+    borderDefault: '#3e3d32',
+    borderStrong: '#49483e',
+  },
+  chromeLight: {},
+  dockviewTheme: themeMonokai,
+};
+
+const GITHUB_DARK: PalettePreset = {
+  id: 'github-dark',
+  label: 'GitHub Dark',
+  description: 'Neutral grays with GitHub blue accents.',
+  mode: 'dark',
+  swatches: ['#58a6ff', '#0d1117', '#161b22', '#21262d', '#30363d'],
+  palette: {
+    primary: '#58a6ff',
+    secondary: '#79c0ff',
+    accent: '#bc8cff',
+    positive: '#3fb950',
+    negative: '#f85149',
+    info: '#58a6ff',
+    warning: '#d29922',
+  },
+  chrome: {
+    bgPage: '#0d1117',
+    bgSurface: '#161b22',
+    bgHeader: '#161b22',
+    bgSidebar: '#161b22',
+    bgElevated: '#21262d',
+    fgPrimary: '#e6edf3',
+    fgSecondary: '#8b949e',
+    fgTertiary: '#6e7681',
+    borderSubtle: 'rgba(48, 54, 61, 0.5)',
+    borderDefault: '#30363d',
+    borderStrong: '#484f58',
+  },
+  chromeLight: {},
+  dockviewTheme: themeGithubDark,
 };
 
 // ─────────────────────────────────────────────────────────────────────────
-// Light-mode presets
+// Light presets
 // ─────────────────────────────────────────────────────────────────────────
+
+const CREUSER_LIGHT: PalettePreset = {
+  id: 'creuser-light',
+  label: 'Creuser Light',
+  description: 'Sage green on warm parchment. The Creuser house light theme.',
+  mode: 'light',
+  swatches: ['#5c7e62', '#7c9a82', '#d7a06b', '#fafafa', '#f6f6f7'],
+  palette: {},
+  chrome: {},
+  chromeLight: {},
+  dockviewTheme: themeLight,
+  useCreuserDockMapping: true,
+};
+
+const STANDARD_LIGHT: PalettePreset = {
+  id: 'standard-light',
+  label: 'Standard Light',
+  description: "Dockview's stock light theme — neutral grays with a blue accent.",
+  mode: 'light',
+  swatches: ['#0078d4', '#ffffff', '#f3f3f3', '#ececec', '#cccccc'],
+  palette: {
+    primary: '#0078d4',
+    secondary: '#005a9e',
+    accent: '#bf5af2',
+    positive: '#0e7c50',
+    negative: '#a4262c',
+    info: '#0078d4',
+    warning: '#9d5d00',
+  },
+  chrome: {},
+  chromeLight: {
+    bgPage: '#ffffff',
+    bgSurface: '#f3f3f3',
+    bgHeader: '#f3f3f3',
+    bgSidebar: '#f3f3f3',
+    bgElevated: '#ececec',
+    fgPrimary: 'rgba(51, 51, 51, 0.95)',
+    fgSecondary: 'rgba(51, 51, 51, 0.7)',
+    fgTertiary: 'rgba(51, 51, 51, 0.45)',
+    borderSubtle: 'rgba(204, 204, 204, 0.5)',
+    borderDefault: '#cccccc',
+    borderStrong: '#9c9c9c',
+  },
+  dockviewTheme: themeLight,
+};
 
 const SOLARIZED_LIGHT: PalettePreset = {
   id: 'solarized-light',
   label: 'Solarized Light',
-  description: 'The light counterpart — same accents, parchment backgrounds.',
+  description: "Schoonover's parchment classic — muted accents on warm cream.",
   mode: 'light',
   swatches: ['#268bd2', '#859900', '#cb4b16', '#fdf6e3', '#eee8d5'],
   palette: {
@@ -298,97 +410,69 @@ const SOLARIZED_LIGHT: PalettePreset = {
     bgHeader: '#eee8d5',
     bgSidebar: '#eee8d5',
     bgElevated: '#f5efdc',
-    fgPrimary: 'rgba(7, 54, 66, 0.95)',
-    fgSecondary: 'rgba(88, 110, 117, 0.95)',
-    fgTertiary: 'rgba(147, 161, 161, 0.95)',
+    fgPrimary: '#586e75',
+    fgSecondary: '#657b83',
+    fgTertiary: '#93a1a1',
     borderSubtle: 'rgba(238, 232, 213, 0.8)',
     borderDefault: '#e0dac0',
     borderStrong: '#cdc69c',
   },
+  dockviewTheme: themeSolarizedLight,
 };
 
-const ONE_LIGHT: PalettePreset = {
-  id: 'one-light',
-  label: 'One Light',
-  description: "Atom's light counterpart — clean sky-blue on warm white.",
+const GITHUB_LIGHT: PalettePreset = {
+  id: 'github-light',
+  label: 'GitHub Light',
+  description: 'Clean white surfaces with GitHub blue accents.',
   mode: 'light',
-  swatches: ['#4078f2', '#a626a4', '#50a14f', '#fafafa', '#ffffff'],
+  swatches: ['#0969da', '#bf3989', '#1f883d', '#ffffff', '#f6f8fa'],
   palette: {
-    primary: '#4078f2',
-    secondary: '#a626a4',
-    accent: '#c18401',
-    positive: '#50a14f',
-    negative: '#e45649',
-    info: '#0184bc',
-    warning: '#c18401',
+    primary: '#0969da',
+    secondary: '#6e7781',
+    accent: '#bf3989',
+    positive: '#1f883d',
+    negative: '#cf222e',
+    info: '#0969da',
+    warning: '#bf8700',
   },
   chrome: {},
   chromeLight: {
-    bgPage: '#fafafa',
-    bgSurface: '#ffffff',
-    bgHeader: '#ffffff',
-    bgSidebar: '#f3f3f3',
-    bgElevated: '#ececec',
-    fgPrimary: 'rgba(56, 58, 66, 0.95)',
-    fgSecondary: 'rgba(112, 117, 125, 0.95)',
-    fgTertiary: 'rgba(160, 161, 167, 0.95)',
-    borderSubtle: 'rgba(229, 229, 230, 0.7)',
-    borderDefault: '#e5e5e6',
-    borderStrong: '#bfbfc2',
+    bgPage: '#ffffff',
+    bgSurface: '#f6f8fa',
+    bgHeader: '#f6f8fa',
+    bgSidebar: '#f6f8fa',
+    bgElevated: '#eaeef2',
+    fgPrimary: '#1f2328',
+    fgSecondary: '#656d76',
+    fgTertiary: '#6e7781',
+    borderSubtle: 'rgba(208, 215, 222, 0.5)',
+    borderDefault: '#d0d7de',
+    borderStrong: '#afb8c1',
   },
-};
-
-const CATPPUCCIN_LATTE: PalettePreset = {
-  id: 'catppuccin-latte',
-  label: 'Catppuccin Latte',
-  description: 'Pastel-soft palette on a cream-paper background.',
-  mode: 'light',
-  swatches: ['#1e66f5', '#dd7878', '#40a02b', '#eff1f5', '#dce0e8'],
-  palette: {
-    primary: '#1e66f5',
-    secondary: '#179299',
-    accent: '#dd7878',
-    positive: '#40a02b',
-    negative: '#d20f39',
-    info: '#04a5e5',
-    warning: '#df8e1d',
-  },
-  chrome: {},
-  chromeLight: {
-    bgPage: '#eff1f5',
-    bgSurface: '#e6e9ef',
-    bgHeader: '#e6e9ef',
-    bgSidebar: '#dce0e8',
-    bgElevated: '#ccd0da',
-    fgPrimary: 'rgba(76, 79, 105, 0.95)',
-    fgSecondary: 'rgba(108, 111, 133, 0.95)',
-    fgTertiary: 'rgba(140, 143, 161, 0.95)',
-    borderSubtle: 'rgba(204, 208, 218, 0.6)',
-    borderDefault: '#bcc0cc',
-    borderStrong: '#9ca0b0',
-  },
+  dockviewTheme: themeGithubLight,
 };
 
 export const PALETTE_PRESETS: PalettePreset[] = [
-  // Both-mode (universally applicable) — surface first
-  DEFAULT,
-  GITHUB,
-  NORD,
-  // Dark-only
-  SOLARIZED_DARK,
-  ONE_DARK,
+  // Dark presets — Creuser first, then dockview-flagships
+  CREUSER_DARK,
+  STANDARD_DARK,
+  VISUAL_STUDIO_DARK,
+  ABYSS,
   DRACULA,
-  TOKYO_NIGHT,
-  // Light-only
+  NORD,
+  CATPPUCCIN_MOCHA,
+  MONOKAI,
+  GITHUB_DARK,
+  // Light presets — Creuser first, then dockview-flagships
+  CREUSER_LIGHT,
+  STANDARD_LIGHT,
   SOLARIZED_LIGHT,
-  ONE_LIGHT,
-  CATPPUCCIN_LATTE,
+  GITHUB_LIGHT,
 ];
 
 /** Group presets by mode for the picker UI. */
 export function groupPresetsByMode(): Record<PresetMode, PalettePreset[]> {
   return {
-    both: PALETTE_PRESETS.filter((p) => p.mode === 'both'),
     dark: PALETTE_PRESETS.filter((p) => p.mode === 'dark'),
     light: PALETTE_PRESETS.filter((p) => p.mode === 'light'),
   };
@@ -397,21 +481,43 @@ export function groupPresetsByMode(): Record<PresetMode, PalettePreset[]> {
 /**
  * Detect which preset (if any) the current config matches by exact equality
  * of its palette + chrome fields. Used by the picker to highlight the
- * active preset. Returns null when the user has manually tweaked colors
- * (no preset matches), which the picker shows as "Custom".
+ * active preset and by DashboardPage to look up the preset's dockview
+ * theme. Returns null when the user has manually tweaked colors away from
+ * any preset (the picker shows "Custom" then; DashboardPage falls back to
+ * Creuser-mapped chrome on `themeAbyss`).
+ *
+ * Normalizes both sides — strips null/undefined entries before comparing
+ * — because the persisted config (`cr.app_settings` row) materializes
+ * every key with a null default, while presets use sparse `{}` for "use
+ * the bundled values." Without normalization, every config would always
+ * read as "Custom" even when it exactly matches a preset.
  */
 export function detectActivePreset(
   palette: Palette | null | undefined,
   chrome: Chrome | null | undefined,
   chromeLight: Chrome | null | undefined,
+  mode?: PresetMode | null,
 ): PalettePreset | null {
-  const a = JSON.stringify({
-    palette: palette ?? {},
-    chrome: chrome ?? {},
-    chromeLight: chromeLight ?? {},
-  });
+  const a = canonical({ palette, chrome, chromeLight });
+  // Two-pass match — prefer presets whose `mode` matches first, then fall
+  // back to mode-agnostic match. The Creuser Dark / Creuser Light presets
+  // are identical except for `mode` (both ship empty palette/chrome and
+  // rely on the bundled defaults that flip via `.body--light`), so without
+  // mode-based disambiguation Creuser Light would always match Creuser
+  // Dark (the first entry).
+  if (mode) {
+    for (const preset of PALETTE_PRESETS) {
+      if (preset.mode !== mode) continue;
+      const b = canonical({
+        palette: preset.palette,
+        chrome: preset.chrome,
+        chromeLight: preset.chromeLight,
+      });
+      if (a === b) return preset;
+    }
+  }
   for (const preset of PALETTE_PRESETS) {
-    const b = JSON.stringify({
+    const b = canonical({
       palette: preset.palette,
       chrome: preset.chrome,
       chromeLight: preset.chromeLight,
@@ -419,4 +525,29 @@ export function detectActivePreset(
     if (a === b) return preset;
   }
   return null;
+}
+
+function canonical(input: {
+  palette: Palette | null | undefined;
+  chrome: Chrome | null | undefined;
+  chromeLight: Chrome | null | undefined;
+}): string {
+  return JSON.stringify({
+    palette: stripNulls(input.palette),
+    chrome: stripNulls(input.chrome),
+    chromeLight: stripNulls(input.chromeLight),
+  });
+}
+
+function stripNulls(obj: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  if (!obj) return {};
+  const out: Record<string, unknown> = {};
+  // Sort keys so JSON.stringify produces a deterministic string regardless
+  // of property insertion order (the API and the preset registry could
+  // disagree on order without this).
+  for (const key of Object.keys(obj).sort()) {
+    const v = obj[key];
+    if (v !== null && v !== undefined) out[key] = v;
+  }
+  return out;
 }

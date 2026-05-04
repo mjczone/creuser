@@ -18,6 +18,12 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Force JS-based actions (checkout, setup-dotnet, setup-node, upload-artifact)
+  # onto Node 24 ahead of the June 2026 default flip. Avoids the deprecation
+  # warnings about Node 20 without bumping each action version separately.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   lint:
     name: Lint (.NET + SPA)
@@ -58,8 +64,16 @@ jobs:
       # SPA codegen needs the OpenAPI doc that Web emits at build time —
       # restore + build .NET first, then codegen + build the SPA, then run
       # the test suite end-to-end.
-      - name: Restore .NET
-        run: dotnet restore Creuser.slnx
+      #
+      # `dotnet nuget locals all --clear` defends against poisoned cache
+      # entries surviving across CI runs (the runner persists ~/.nuget
+      # between jobs); together with the repo-root `nuget.config` (which
+      # `<clear/>`s any inherited package sources), this ensures every
+      # run resolves packages from a known-good state.
+      - name: Clear NuGet cache + restore .NET
+        run: |
+          dotnet nuget locals all --clear
+          dotnet restore Creuser.slnx --verbosity normal
       - name: Install SPA deps
         run: npm --prefix src/Creuser.Web.Spa ci --no-audit --no-fund
       - name: Build .NET (Release)

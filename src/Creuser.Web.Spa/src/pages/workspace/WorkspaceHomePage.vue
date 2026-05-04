@@ -59,7 +59,6 @@
         </div>
       </section>
     </div>
-
   </q-page>
 </template>
 
@@ -201,5 +200,4 @@ function formatRelative(when: string | null | undefined): string {
   border-radius: 3px;
   color: var(--cr-fg-secondary);
 }
-
 </style>

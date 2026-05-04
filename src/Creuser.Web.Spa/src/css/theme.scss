@@ -74,6 +74,18 @@
   --cr-header-height: 40px;
   --cr-icon-bar-width: 60px;
   --cr-drawer-width: 200px;
+
+  // Aliases — multiple widgets reference these slightly-different names
+  // (`--cr-bg-subtle`, `--cr-font-mono`) with hardcoded dark fallbacks
+  // that would silently win in light mode (and on any palette preset that
+  // doesn't happen to match). Define proper aliases here so widget code
+  // reads off the live tokens. The `--cr-bg-subtle` alias is re-declared
+  // under `.body--light` below — `var()` inside a custom-property value
+  // resolves against the cascaded value at the *declaration* scope, not
+  // the consumer's scope, so a single alias on `:root` would always
+  // resolve to the dark `--cr-bg-surface` even on light pages.
+  --cr-bg-subtle: var(--cr-bg-surface);
+  --cr-font-mono: var(--cr-font-family-mono);
 }
 
 // Wire the brand font into the document body so every Quasar component
@@ -142,4 +154,87 @@ body {
   // pop against white surfaces.
   --cr-link: color-mix(in srgb, var(--q-primary), black 25%);
   --cr-link-hover: color-mix(in srgb, var(--q-primary), black 40%);
+
+  // Re-declare the alias here so its inner `var(--cr-bg-surface)`
+  // resolves against the light-mode surface value. See the comment on
+  // the `:root` declaration for why this can't live in one place.
+  --cr-bg-subtle: var(--cr-bg-surface);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Dockview chrome — remap dockview's `--dv-*` variables onto our `--cr-*`
+// and `--q-*` tokens so the dock area (tab strip, panes, separators, drag
+// previews, focus rings, context menu, floating windows) inherits whatever
+// palette preset is active. Both light and dark modes "just work" because
+// the underlying `--cr-*` tokens flip via `.body--light`.
+//
+// GATED on `.cr-dock-creuser` — set by DashboardPage when the active
+// branding preset is one of the "Creuser" house themes (Creuser Dark /
+// Creuser Light) or a custom config that hasn't picked a named dockview
+// theme. Named-theme presets (Abyss, Dracula, Nord, Monokai, etc.) instead
+// pass dockview's own theme object via the `theme` prop on DockviewVue,
+// which sets a `dockview-theme-X` class on `.dv-shell` and uses dockview's
+// bundled palette verbatim — so the dock area looks like its official
+// theme while the surrounding sidebar/header/page chrome matches via the
+// preset's chrome tokens.
+//
+// We target `.dv-shell` (not the canvas) because dockview-vue applies its
+// theme class to `.dv-shell`. Two-class specificity beats abyss's bare
+// class on the same element, so our overrides win when active.
+// ─────────────────────────────────────────────────────────────────────────
+.cr-dash-canvas.cr-dock-creuser .dv-shell {
+  // Tab strip background (the bar that holds the tabs above the panes).
+  --dv-tabs-and-actions-container-background-color: var(--cr-bg-surface);
+
+  // Active group: the group whose tabs the user is interacting with. The
+  // visible (selected) tab matches the pane content surface so it visually
+  // continues into the pane; hidden tabs sit on the strip color.
+  --dv-activegroup-visiblepanel-tab-background-color: var(--cr-bg-page);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--cr-bg-surface);
+  --dv-activegroup-visiblepanel-tab-color: var(--cr-fg-primary);
+  --dv-activegroup-hiddenpanel-tab-color: var(--cr-fg-tertiary);
+
+  // Inactive group: everything sits on the strip color, with text dimmer
+  // so the active group reads as foregrounded.
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--cr-bg-surface);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--cr-bg-surface);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--cr-fg-secondary);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--cr-fg-tertiary);
+
+  // Pane content area (where the widget renders).
+  --dv-group-view-background-color: var(--cr-bg-page);
+
+  // Separators / borders.
+  --dv-separator-border: var(--cr-border-default);
+  --dv-tab-divider-color: var(--cr-border-subtle);
+  --dv-paneview-header-border-color: var(--cr-border-default);
+
+  // Sashes — the draggable splitters between panes. Keep idle sashes
+  // invisible (they show on hover via dockview's structural CSS) and
+  // colour the active-drag state with the brand primary.
+  --dv-sash-color: transparent;
+  --dv-active-sash-color: var(--q-primary);
+
+  // Focus / outline accents.
+  --dv-paneview-active-outline-color: var(--q-primary);
+
+  // Hover affordances.
+  --dv-icon-hover-background-color: var(--cr-bg-hover);
+
+  // Drag-and-drop preview overlay — a translucent wash of the brand
+  // primary so a dropped panel "lights up" its target.
+  --dv-drag-over-background-color: color-mix(in srgb, var(--q-primary), transparent 80%);
+  --dv-drag-over-border-color: var(--q-primary);
+
+  // Floating windows (panels torn out into their own draggable card).
+  --dv-floating-border: 1px solid var(--cr-border-default);
+  --dv-floating-group-border: 1px solid var(--cr-border-default);
+
+  // Right-click context menu inside the dock area.
+  --dv-context-menu-background-color: var(--cr-bg-elevated);
+  --dv-context-menu-color: var(--cr-fg-primary);
+
+  // Scrollbars (the tab strip can overflow when many widgets are open).
+  --dv-scrollbar-background-color: transparent;
+  --dv-tabs-container-scrollbar-color: var(--cr-fg-tertiary);
 }

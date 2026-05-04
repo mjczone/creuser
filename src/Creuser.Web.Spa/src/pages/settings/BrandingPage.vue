@@ -210,6 +210,24 @@
             or target arbitrary selectors.
           </p>
 
+          <div class="cr-branding-css-actions">
+            <q-btn
+              flat
+              dense
+              no-caps
+              icon="content_paste"
+              label="Insert baseline tokens"
+              size="sm"
+              @click="onInsertBaseline"
+            >
+              <q-tooltip>
+                Drop a starter block — current Quasar palette, Creuser chrome (both modes), plus a
+                commented dockview block — into the editor. Useful as a starting point when
+                customizing.
+              </q-tooltip>
+            </q-btn>
+          </div>
+
           <details class="cr-branding-help">
             <summary>Available tokens and mode selectors</summary>
             <div class="cr-branding-help-body">
@@ -301,7 +319,15 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLocalStorage } from '@vueuse/core';
-import { useBrandingStore, defaultBranding, CHROME_KEYS, type ChromeKey } from 'stores/branding';
+import {
+  useBrandingStore,
+  defaultBranding,
+  CHROME_KEYS,
+  PALETTE_KEYS,
+  chromeCssName,
+  quasarKey,
+  type ChromeKey,
+} from 'stores/branding';
 import type { BrandingConfig } from 'stores/branding';
 import { useThemeModeStore } from 'stores/themeMode';
 import ColorField from 'components/branding/ColorField.vue';
@@ -396,20 +422,123 @@ watch(customCssField, (v) => {
   draft.customCss = v === '' ? null : v;
 });
 
+/**
+ * Build a baseline CSS snippet from the current draft — Quasar palette,
+ * Creuser chrome (both modes), plus the dockview variables as a commented
+ * block. Inserted into the Custom CSS editor as a starting point so admins
+ * can tweak individual rules without having to look up token names. The
+ * snippet only emits values the draft actually defines (a preset's empty
+ * keys are skipped) — admins see exactly what they're starting from.
+ */
+function buildBaselineSnippet(d: BrandingConfig, presetLabel: string | null): string {
+  const palette = (d.palette ?? {}) as Record<string, string | null | undefined>;
+  const chrome = (d.chrome ?? {}) as Record<string, string | null | undefined>;
+  const chromeLight = (d.chromeLight ?? {}) as Record<string, string | null | undefined>;
+
+  const palLines = PALETTE_KEYS.map((k) =>
+    palette[k] ? `  --q-${quasarKey(k)}: ${palette[k]};` : null,
+  ).filter((s): s is string => s !== null);
+  const chromeLines = CHROME_KEYS.map((k) =>
+    chrome[k] ? `  ${chromeCssName(k)}: ${chrome[k]};` : null,
+  ).filter((s): s is string => s !== null);
+  const lightLines = CHROME_KEYS.map((k) =>
+    chromeLight[k] ? `  ${chromeCssName(k)}: ${chromeLight[k]};` : null,
+  ).filter((s): s is string => s !== null);
+
+  const out: string[] = [];
+  out.push(
+    presetLabel
+      ? `/* Baseline copied from preset: ${presetLabel}. Edit any line; the Custom CSS block wins over the structured fields above. */`
+      : '/* Baseline copied from current draft. Edit any line; the Custom CSS block wins over the structured fields above. */',
+    '',
+  );
+
+  if (palLines.length || chromeLines.length) {
+    out.push(':root {');
+    if (palLines.length) out.push('  /* Quasar palette */', ...palLines);
+    if (palLines.length && chromeLines.length) out.push('');
+    if (chromeLines.length) out.push('  /* Creuser chrome (dark mode) */', ...chromeLines);
+    out.push('}', '');
+  }
+
+  if (lightLines.length) {
+    out.push('.body--light {', '  /* Creuser chrome (light mode) */', ...lightLines, '}', '');
+  }
+
+  // Dockview variables are auto-derived in theme.scss from --cr-*/--q-*
+  // tokens above. Surfacing them here as a commented block lets admins
+  // override individual aspects (e.g. drag-over highlight) without having
+  // to look up the variable name. Uncomment a line and edit to taste.
+  out.push(
+    '/* Dockview chrome — auto-derived from the tokens above. Uncomment any',
+    '   line to override that specific aspect of the dock area. */',
+    '/*',
+    '.cr-dash-canvas .dv-shell {',
+    '  --dv-tabs-and-actions-container-background-color: var(--cr-bg-surface);',
+    '  --dv-activegroup-visiblepanel-tab-background-color: var(--cr-bg-page);',
+    '  --dv-activegroup-hiddenpanel-tab-background-color: var(--cr-bg-surface);',
+    '  --dv-activegroup-visiblepanel-tab-color: var(--cr-fg-primary);',
+    '  --dv-activegroup-hiddenpanel-tab-color: var(--cr-fg-tertiary);',
+    '  --dv-inactivegroup-visiblepanel-tab-background-color: var(--cr-bg-surface);',
+    '  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--cr-bg-surface);',
+    '  --dv-inactivegroup-visiblepanel-tab-color: var(--cr-fg-secondary);',
+    '  --dv-inactivegroup-hiddenpanel-tab-color: var(--cr-fg-tertiary);',
+    '  --dv-group-view-background-color: var(--cr-bg-page);',
+    '  --dv-separator-border: var(--cr-border-default);',
+    '  --dv-tab-divider-color: var(--cr-border-subtle);',
+    '  --dv-paneview-active-outline-color: var(--q-primary);',
+    '  --dv-active-sash-color: var(--q-primary);',
+    '  --dv-icon-hover-background-color: var(--cr-bg-hover);',
+    '  --dv-drag-over-background-color: color-mix(in srgb, var(--q-primary), transparent 80%);',
+    '  --dv-drag-over-border-color: var(--q-primary);',
+    '  --dv-context-menu-background-color: var(--cr-bg-elevated);',
+    '  --dv-context-menu-color: var(--cr-fg-primary);',
+    '}',
+    '*/',
+  );
+
+  return out.join('\n');
+}
+
+function onInsertBaseline() {
+  const preset = detectActivePreset(
+    draft.palette,
+    draft.chrome,
+    draft.chromeLight,
+    draft.mode === 'light' ? 'light' : 'dark',
+  );
+  const snippet = buildBaselineSnippet(draft, preset?.label ?? null);
+  // If the textarea already has content, keep it and prepend the baseline
+  // with a separator so the admin's prior work isn't clobbered. Otherwise
+  // just drop the baseline in directly.
+  customCssField.value = customCssField.value.trim()
+    ? `${snippet}\n\n/* ── existing custom CSS below ── */\n${customCssField.value}`
+    : snippet;
+}
+
 const isDirty = computed(() => JSON.stringify(draft) !== JSON.stringify(branding.config));
 
 const activePresetId = computed(() => {
-  const match = detectActivePreset(draft.palette, draft.chrome, draft.chromeLight);
+  const match = detectActivePreset(
+    draft.palette,
+    draft.chrome,
+    draft.chromeLight,
+    draft.mode === 'light' ? 'light' : 'dark',
+  );
   return match?.id ?? null;
 });
 
 function onPickPreset(preset: PalettePreset) {
-  // Overwrite palette + both chrome blocks. Identity, mode, fonts, and
-  // custom CSS are intentionally preserved so an admin can pick a preset
-  // without losing their product name, logo, or font choice.
+  // Overwrite palette + both chrome blocks AND `mode` (each preset is now
+  // either dark-only or light-only and pairs 1:1 with a dockview theme,
+  // so picking "Dracula" should flip the default mode to dark even if the
+  // admin was previewing in light). Identity, fonts, and custom CSS are
+  // preserved so an admin can pick a preset without losing their product
+  // name, logo, or font choice.
   draft.palette = JSON.parse(JSON.stringify(preset.palette)) as typeof draft.palette;
   draft.chrome = JSON.parse(JSON.stringify(preset.chrome)) as typeof draft.chrome;
   draft.chromeLight = JSON.parse(JSON.stringify(preset.chromeLight)) as typeof draft.chromeLight;
+  draft.mode = preset.mode;
   onLiveChange();
 }
 
@@ -614,6 +743,11 @@ onMounted(honorExpandQuery);
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
+}
+
+.cr-branding-css-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .cr-branding-help {

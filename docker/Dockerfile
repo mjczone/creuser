@@ -14,8 +14,22 @@
 ARG VARIANT=fat
 
 # ─── Stage 1: build everything (.NET + SPA) ──────────────────────────────
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# Pin to the same patch as `global.json` so a rolling-tag bump on the
+# upstream image can't break the build without warning. Bump in lockstep
+# with `global.json` when upgrading the SDK.
+FROM mcr.microsoft.com/dotnet/sdk:10.0.102 AS build
 WORKDIR /src
+
+# Quiet down the .NET first-run experience and disable the diagnostic
+# listener. The diagnostic listener spawns a thread that can interact
+# poorly with BuildKit's seccomp profile and surface as opaque
+# signal-derived exit codes (e.g. 155 = 128 + 27 = SIGPROF) during long
+# `dotnet restore` runs.
+ENV DOTNET_NOLOGO=1 \
+    DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+    DOTNET_EnableDiagnostics=0 \
+    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+    NUGET_XMLDOC_MODE=skip
 
 # Node 24 — needed for SPA build + hey-api codegen.
 RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
@@ -23,7 +37,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
  && rm -rf /var/lib/apt/lists/*
 
 # Restore .NET deps first so layer caches survive code-only changes.
-COPY Creuser.slnx global.json dotnet-tools.json ./
+# `nuget.config` pins the package source to nuget.org with `<clear/>` so
+# nothing from the host's NuGet config leaks into the build (matters even
+# in the official SDK image — the OS-level NuGet.Config can ship with
+# additional sources or fallback rules).
+COPY Creuser.slnx global.json dotnet-tools.json nuget.config ./
 COPY src/Creuser.Core/Creuser.Core.csproj                                                src/Creuser.Core/
 COPY src/Creuser.Persistence/Creuser.Persistence.csproj                                  src/Creuser.Persistence/
 COPY src/Creuser.Git/Creuser.Git.csproj                                                  src/Creuser.Git/
@@ -45,7 +63,12 @@ COPY tests/Creuser.Core.Tests/Creuser.Core.Tests.csproj                         
 COPY tests/Creuser.Scripting.Tests/Creuser.Scripting.Tests.csproj                        tests/Creuser.Scripting.Tests/
 COPY tests/Creuser.Projections.Tests/Creuser.Projections.Tests.csproj                    tests/Creuser.Projections.Tests/
 COPY tests/Creuser.Integration.Tests/Creuser.Integration.Tests.csproj                    tests/Creuser.Integration.Tests/
-RUN dotnet restore Creuser.slnx
+# `--verbosity normal` so the actual NuGet error surfaces in the build
+# log when restore fails — `minimal` (default) hides everything but the
+# top-level summary, which makes "exit code 155" investigations painful.
+# `--disable-parallel` reduces the chance of OOM on small CI runners and
+# avoids races in low-memory containers.
+RUN dotnet restore Creuser.slnx --verbosity normal --disable-parallel
 
 # Restore SPA deps separately (same caching reason).
 COPY src/Creuser.Web.Spa/package.json src/Creuser.Web.Spa/package-lock.json src/Creuser.Web.Spa/

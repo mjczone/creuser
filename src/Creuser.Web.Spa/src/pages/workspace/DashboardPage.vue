@@ -46,7 +46,12 @@
       <p>Dashboard "{{ dashboardSlug }}" not found.</p>
     </div>
 
-    <div v-else class="cr-dash-canvas dockview-theme-dark" :class="{ 'is-edit': editMode }">
+    <div
+      v-else
+      ref="canvasEl"
+      class="cr-dash-canvas"
+      :class="{ 'is-edit': editMode, 'cr-dock-creuser': useCreuserDockMapping }"
+    >
       <!--
         WidgetHost is registered globally in `boot/widgets.ts` (via
         `app.component('WidgetHost', WidgetHost)`). dockview-vue's
@@ -63,6 +68,7 @@
         :key="dashboardSlug"
         :disableDnd="!editMode"
         :singleTabMode="'fullwidth'"
+        :theme="dockviewTheme"
         @ready="onReady"
       />
     </div>
@@ -74,10 +80,18 @@ import { computed, onBeforeUnmount, provide, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { DockviewVue } from 'dockview-vue';
-import type { DockviewApi, DockviewReadyEvent, SerializedDockview } from 'dockview-core';
+import { themeAbyss } from 'dockview-core';
+import type {
+  DockviewApi,
+  DockviewReadyEvent,
+  DockviewTheme,
+  SerializedDockview,
+} from 'dockview-core';
 import 'dockview-core/dist/styles/dockview.css';
 import { useDashboardsStore } from 'src/stores/dashboards';
 import { useAuthStore } from 'src/stores/auth';
+import { useBrandingStore } from 'src/stores/branding';
+import { detectActivePreset } from 'src/css/palettes/registry';
 import AddWidgetDialog from 'src/components/AddWidgetDialog.vue';
 
 interface WidgetInstance {
@@ -97,6 +111,36 @@ const router = useRouter();
 const $q = useQuasar();
 const dashboardsStore = useDashboardsStore();
 const auth = useAuthStore();
+const branding = useBrandingStore();
+
+/**
+ * Resolve the dockview theme to apply, plus whether the canvas should
+ * carry the `cr-dock-creuser` marker class that activates our `--cr-*` →
+ * `--dv-*` mapping in `theme.scss`.
+ *
+ * Pairing logic:
+ *   - Named-theme presets (Standard Dark, Abyss, Dracula, …) carry their
+ *     own `dockviewTheme` and the dock takes dockview's bundled colors.
+ *   - Creuser presets (Creuser Dark, Creuser Light) opt into the marker
+ *     class via `useCreuserDockMapping: true`, so the dock chrome follows
+ *     the surrounding `--cr-*` chrome tokens instead.
+ *   - Custom configs (admin tweaked colors away from any preset) fall
+ *     back to the Creuser-mapped path on `themeAbyss`.
+ */
+const activePreset = computed(() =>
+  detectActivePreset(
+    branding.liveConfig.palette,
+    branding.liveConfig.chrome,
+    branding.liveConfig.chromeLight,
+    branding.liveConfig.mode === 'light' ? 'light' : 'dark',
+  ),
+);
+const dockviewTheme = computed<DockviewTheme>(
+  () => activePreset.value?.dockviewTheme ?? themeAbyss,
+);
+const useCreuserDockMapping = computed<boolean>(
+  () => activePreset.value?.useCreuserDockMapping ?? !activePreset.value,
+);
 
 const workspaceSlug = computed<string>(() => {
   const v = route.params.workspaceSlug;
@@ -115,6 +159,7 @@ const loading = ref(false);
 const saving = ref(false);
 const dashboard = ref<ReturnType<typeof dashboardsStore.getDashboard>>(null);
 const widgetInstances = ref<WidgetInstance[]>([]);
+const canvasEl = ref<HTMLElement | null>(null);
 let dockviewApi: DockviewApi | null = null;
 
 provide('cr-widget-instances', widgetInstances);
@@ -181,9 +226,28 @@ function applyLayout(api: DockviewApi, layoutJson: string, instances: WidgetInst
       api.fromJSON(layout);
       // dockview catches deserialization errors internally and reverts —
       // it doesn't always re-throw, so we can't trust a missing exception
-      // to mean success. Verify panels actually landed; if not, fall
-      // through to the spawn-from-instances path.
-      if (api.panels.length > 0) return;
+      // to mean success. And dockview will happily deserialize "hollow"
+      // panels (no contentComponent, or params.instanceId pointing at a
+      // widget we don't know about) — those render as blank panes because
+      // WidgetHost has nothing to look up. Treat those as rejection too,
+      // so the fallback below builds a clean layout from `instances`.
+      const knownIds = new Set(instances.map((i) => i.id));
+      const allPanelsValid =
+        api.panels.length > 0 &&
+        api.panels.every((p) => {
+          const id = (p as unknown as { params?: { instanceId?: string } }).params?.instanceId;
+          return !!id && knownIds.has(id);
+        });
+      if (allPanelsValid) {
+        // dockview persists the gridview's `width`/`height` in the
+        // serialized layout, and `fromJSON` applies them verbatim — so a
+        // dashboard saved while the canvas was briefly small (e.g. before
+        // q-page-container expanded) keeps that small size on every reload,
+        // ignoring its actual container. Force a re-layout against the
+        // real canvas dimensions so panels fill the space.
+        resizeToContainer(api);
+        return;
+      }
       layoutWasRejected = true;
     } catch {
       /* layout incompatible; fall through */
@@ -205,6 +269,7 @@ function applyLayout(api: DockviewApi, layoutJson: string, instances: WidgetInst
       params: { instanceId: instance.id },
     });
   }
+  resizeToContainer(api);
 
   // If the saved layout JSON was non-empty but dockview rejected it,
   // proactively repair the row so subsequent loads don't keep tripping
@@ -214,6 +279,14 @@ function applyLayout(api: DockviewApi, layoutJson: string, instances: WidgetInst
   if (layoutWasRejected && auth.isAdmin && workspaceSlug.value) {
     void repairLayout();
   }
+}
+
+function resizeToContainer(api: DockviewApi) {
+  const el = canvasEl.value;
+  if (!el) return;
+  const w = el.clientWidth;
+  const h = el.clientHeight;
+  if (w > 0 && h > 0) api.layout(w, h);
 }
 
 async function repairLayout() {
@@ -313,9 +386,7 @@ function addWidgetInstance(payload: AddWidgetPayload) {
     $q.notify({
       type: 'negative',
       message:
-        ex instanceof Error
-          ? `Failed to add widget: ${ex.message}`
-          : 'Failed to add widget.',
+        ex instanceof Error ? `Failed to add widget: ${ex.message}` : 'Failed to add widget.',
       timeout: 5000,
     });
   }
@@ -350,7 +421,12 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  // Fixed height (48px = `--cr-row-header`-like) keeps the header aligned
+  // with `.cr-sub-sidebar-header` so their bottom borders read as one
+  // continuous horizontal line. Padding inside the row stays for left/right
+  // breathing room only; vertical centering comes from `align-items`.
+  min-height: 44px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--cr-border-subtle, rgba(255, 255, 255, 0.08));
   background: var(--cr-bg-elevated, #1a1a1d);
 }
@@ -368,7 +444,11 @@ onBeforeUnmount(() => {
 
 .cr-dash-header-title {
   margin: 0;
-  font-size: 16px;
+  // Without this, the h1 inherits a tall line-height from somewhere up
+  // the cascade (turning the dashboard header into a ~120px slab). Force
+  // a tight line-height so the header reads at its intended ~40px.
+  line-height: 1.3;
+  font-size: 14px;
   font-weight: 600;
   color: var(--cr-fg-primary, #f0f0f0);
 }
@@ -414,9 +494,41 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   position: relative;
+  // dockview-vue's mount element does not fill its parent on its own, and
+  // its inner `.dv-shell` uses `style="height:100%"` — which collapses to
+  // 0 if its containing block has only a flex-resolved height (Chrome
+  // treats `flex: 1 1 0%`-derived sizes as indefinite for percentage
+  // children). Position the wrapper absolutely against the canvas so it
+  // gets an unambiguously definite size that `.dv-shell`'s 100% can
+  // resolve against.
+  > * {
+    position: absolute;
+    inset: 0;
+  }
 
   &.is-edit {
     box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.2);
+  }
+
+  // Hide tab close buttons in view mode. Drag-and-drop is already gated
+  // via `:disableDnd="!editMode"` on DockviewVue, so leaving the close
+  // affordance visible is inconsistent — and an accidental click on the X
+  // is destructive (the widget instance disappears from the layout). The
+  // BrandingPage's Edit → Add/Remove flow is the canonical destructive
+  // entry point.
+  &:not(.is-edit) :deep(.dv-default-tab-action) {
+    display: none;
+  }
+
+  // Single-tab fullwidth mode (`:singleTabMode="'fullwidth'"`) — dockview
+  // resets `.dv-tab { padding: 0 }` in this mode, so the title text and
+  // close button get flush against the tab strip's edges. Restore the
+  // same padding the multi-tab base uses (`0.25rem 0.5rem`) so single-
+  // and multi-tab groups have visually consistent breathing room.
+  :deep(
+    .dv-tabs-and-actions-container.dv-single-tab.dv-full-width-single-tab .dv-tabs-container .dv-tab
+  ) {
+    padding: 0.25rem 0.5rem;
   }
 }
 </style>

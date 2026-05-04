@@ -9,6 +9,7 @@
           type="button"
           class="cr-palette-card"
           :class="{ 'cr-palette-card--active': preset.id === activeId }"
+          :data-preset-id="preset.id"
           :title="preset.description"
           @click="onPick(preset.id)"
         >
@@ -62,7 +63,6 @@ interface Group {
 }
 
 const groups = computed<Group[]>(() => [
-  { label: 'Universal', presets: PALETTE_PRESETS.filter((p) => p.mode === 'both') },
   { label: 'Dark mode', presets: PALETTE_PRESETS.filter((p) => p.mode === 'dark') },
   { label: 'Light mode', presets: PALETTE_PRESETS.filter((p) => p.mode === 'light') },
 ]);
