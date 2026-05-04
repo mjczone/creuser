@@ -57,6 +57,10 @@ public static class WorkspacesEndpoints
         group.MapPost("/test", (Delegate)TestConnection).WithName("TestWorkspaceConnection");
         group.MapPost("/{slug}/sync", (Delegate)Sync).WithName("SyncWorkspace");
         group.MapGet("/{slug}/plugins", (Delegate)ListPlugins).WithName("ListWorkspacePlugins");
+        group
+            .MapPut("/{slug}/plugins/{pluginId}", (Delegate)SetPluginEnabled)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("SetWorkspacePluginEnabled");
 
         return app;
     }
@@ -368,31 +372,103 @@ public static class WorkspacesEndpoints
     )]
     private static async Task<
         Results<Ok<ApiResult<WorkspacePluginsResult>>, ProblemHttpResult>
-    > ListPlugins(string slug, IWorkspaceStore store)
+    > ListPlugins(
+        string slug,
+        IWorkspaceStore store,
+        Creuser.Core.Repositories.IPluginRegistry registry,
+        Creuser.Core.Repositories.IWorkspacePluginStore enablement
+    )
     {
-        // Validate the slug resolves so the page can't be hit for a deleted
-        // or unknown workspace. Even though the loader-driven plugin list is
-        // empty today, the URL contract is "this workspace's plugins" — so
-        // the slug guard belongs here.
         var existing = await store.FindBySlugAsync(slug);
         if (existing is null)
             return Problems.WorkspaceNotFound(slug);
 
-        // Plugin loader is deferred (see architecture.md "Plugin model").
-        // Return an empty list with an explainer note the SPA renders
-        // inline. The shape matches the eventual production wire shape so
-        // landing the loader doesn't move the contract.
+        var loaded = registry.All;
+        var perWorkspace = await enablement.ListEnablementAsync(existing.Id);
+        var infos = loaded
+            .Select(p => new WorkspacePluginInfo(
+                PluginId: p.Manifest.Id,
+                Name: p.Manifest.Name,
+                Version: p.Manifest.Version,
+                Author: p.Manifest.Author,
+                Description: p.Manifest.Description,
+                Enabled: perWorkspace.GetValueOrDefault(p.Manifest.Id, false),
+                Status: p.Status,
+                StatusMessage: p.StatusMessage,
+                Provides: p.Manifest.Provides ?? Array.Empty<string>(),
+                RequiredTools: p.Manifest.RequiredTools ?? Array.Empty<string>(),
+                LoadedAt: p.LoadedAt
+            ))
+            .ToList();
+        var note =
+            infos.Count == 0
+                ? "No plugins discovered. Drop a Creuser plugin folder under `<dataDir>/plugins/<plugin-id>/` "
+                    + "and restart the platform. Loaded plugins will appear here for the workspace admin to enable."
+                : null;
         return TypedResults.Ok(
-            new ApiResult<WorkspacePluginsResult>(
-                new WorkspacePluginsResult(
-                    Plugins: Array.Empty<WorkspacePluginInfo>(),
-                    Note: "Plugin loader not yet wired. Drop a Creuser plugin assembly under "
-                        + "`/data/plugins/` and restart the platform. Loaded plugins will appear "
-                        + "here for the workspace admin to enable per workspace."
+            new ApiResult<WorkspacePluginsResult>(new WorkspacePluginsResult(infos, note))
+        );
+    }
+
+    [AiCapability(
+        "workspaces.plugins.toggle",
+        "workspaces",
+        "Enable or disable a plugin for a workspace",
+        "Toggle whether a host-loaded plugin's contributions (step runners, capability providers, tool registries) are visible to this workspace. Plugins are loaded process-wide at host startup; the per-workspace toggle is the gate. Admin-only.",
+        "enable plugin",
+        "disable plugin",
+        "turn off plugin for workspace",
+        Route = "/w/:slug/settings/plugins",
+        RequiresRole = Roles.Admin,
+        Mutates = true
+    )]
+    private static async Task<
+        Results<Ok<ApiResult<WorkspacePluginInfo>>, ProblemHttpResult>
+    > SetPluginEnabled(
+        string slug,
+        string pluginId,
+        SetPluginEnabledRequest request,
+        IWorkspaceStore store,
+        Creuser.Core.Repositories.IPluginRegistry registry,
+        Creuser.Core.Repositories.IWorkspacePluginStore enablement,
+        HttpContext http
+    )
+    {
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+
+        var plugin = registry.Find(pluginId);
+        if (plugin is null)
+            return Problems.NotFound($"Plugin '{pluginId}' is not loaded.");
+
+        await enablement.SetEnabledAsync(
+            existing.Id,
+            pluginId,
+            request.Enabled,
+            CookieAuthHelpers.GetUserId(http)
+        );
+
+        return TypedResults.Ok(
+            new ApiResult<WorkspacePluginInfo>(
+                new WorkspacePluginInfo(
+                    PluginId: plugin.Manifest.Id,
+                    Name: plugin.Manifest.Name,
+                    Version: plugin.Manifest.Version,
+                    Author: plugin.Manifest.Author,
+                    Description: plugin.Manifest.Description,
+                    Enabled: request.Enabled,
+                    Status: plugin.Status,
+                    StatusMessage: plugin.StatusMessage,
+                    Provides: plugin.Manifest.Provides ?? Array.Empty<string>(),
+                    RequiredTools: plugin.Manifest.RequiredTools ?? Array.Empty<string>(),
+                    LoadedAt: plugin.LoadedAt
                 )
             )
         );
     }
+
+    public sealed record SetPluginEnabledRequest(bool Enabled);
 
     /// <summary>
     /// Sync the workspace's content. For git: clone (first time) or fetch +

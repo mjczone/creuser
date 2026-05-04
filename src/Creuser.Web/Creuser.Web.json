@@ -888,6 +888,54 @@
         }
       }
     },
+    "/api/workspaces/{slug}/plugins/{pluginId}": {
+      "put": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "SetWorkspacePluginEnabled",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPluginEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspacePluginInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{slug}/jobs": {
       "get": {
         "tags": [
@@ -2468,6 +2516,24 @@
           }
         }
       },
+      "ApiResultOfWorkspacePluginInfo": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspacePluginInfo"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfWorkspacePluginsResult": {
         "required": [
           "result"
@@ -4033,6 +4099,17 @@
         "type": "object",
         "properties": {
           "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SetPluginEnabledRequest": {
+        "required": [
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "enabled": {
             "type": "boolean"
           }
         }

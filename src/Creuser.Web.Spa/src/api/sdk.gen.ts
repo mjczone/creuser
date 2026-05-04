@@ -92,6 +92,8 @@ import type {
   SetUserActiveResponses,
   SetUserRoleData,
   SetUserRoleResponses,
+  SetWorkspacePluginEnabledData,
+  SetWorkspacePluginEnabledResponses,
   SyncProjectionData,
   SyncProjectionResponses,
   SyncWorkspaceData,
@@ -450,6 +452,23 @@ export class Workspaces {
     return (options.client ?? client).get<ListWorkspacePluginsResponses, unknown, ThrowOnError>({
       url: '/api/workspaces/{slug}/plugins',
       ...options,
+    });
+  }
+
+  public static setWorkspacePluginEnabled<ThrowOnError extends boolean = false>(
+    options: Options<SetWorkspacePluginEnabledData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<
+      SetWorkspacePluginEnabledResponses,
+      unknown,
+      ThrowOnError
+    >({
+      url: '/api/workspaces/{slug}/plugins/{pluginId}',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
     });
   }
 }

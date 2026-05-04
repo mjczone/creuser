@@ -13,6 +13,7 @@
     "build": "run-s build:dotnet codegen:spa build:spa",
     "build:spa": "npm --prefix src/Creuser.Web.Spa run build",
     "build:dotnet": "dotnet build Creuser.slnx -c Release",
+    "build:plugins:examples": "dotnet publish src/plugins/Creuser.Plugins.Examples.Hello/Creuser.Plugins.Examples.Hello.csproj -c Release -o .data/plugins/creuser.examples.hello",
     "codegen": "run-s build:dotnet codegen:spa",
     "codegen:spa": "npm --prefix src/Creuser.Web.Spa run codegen",
     "test": "run-s test:dotnet test:spa",

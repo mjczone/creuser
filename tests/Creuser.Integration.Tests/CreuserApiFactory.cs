@@ -16,6 +16,14 @@ public sealed class CreuserApiFactory : WebApplicationFactory<Program>
     public string ConnectionString { get; init; } = string.Empty;
 
     /// <summary>
+    /// Override <c>CREUSER_DATA_DIR</c> for tests that need to stage
+    /// data-directory contents (most notably plugins under
+    /// <c>&lt;dataDir&gt;/plugins/</c>) before the host boots. Null
+    /// leaves the default repo-relative <c>.data</c> directory in place.
+    /// </summary>
+    public string? DataDir { get; init; }
+
+    /// <summary>
     /// Override <c>CREUSER_SCHEDULER_INTERVAL_MS</c> for tests that need
     /// the scheduler tick to fire inside test wall-time. Null leaves the
     /// 30s production default in place (no tick during a typical test).
@@ -37,6 +45,13 @@ public sealed class CreuserApiFactory : WebApplicationFactory<Program>
         // shutdown. Tests don't need durability; in-memory queueing
         // (Wolverine's default when durable queues are disabled) is fine.
         builder.UseEnvironment("Test");
+        // CREUSER_DATA_DIR is read at the very top of Program.cs (before
+        // builder.Build), so an in-memory config provider added via
+        // ConfigureAppConfiguration runs too late. Setting the env var
+        // before the host builds is the only way to override; safe here
+        // because tests run serial (DisableTestParallelization).
+        if (!string.IsNullOrEmpty(DataDir))
+            Environment.SetEnvironmentVariable("CREUSER_DATA_DIR", DataDir);
         builder.ConfigureAppConfiguration(
             (_, cfg) =>
             {
@@ -49,6 +64,8 @@ public sealed class CreuserApiFactory : WebApplicationFactory<Program>
                 };
                 if (SchedulerIntervalMs is int ms)
                     settings["CREUSER_SCHEDULER_INTERVAL_MS"] = ms.ToString();
+                if (!string.IsNullOrEmpty(DataDir))
+                    settings["CREUSER_DATA_DIR"] = DataDir;
                 cfg.AddInMemoryCollection(settings);
             }
         );

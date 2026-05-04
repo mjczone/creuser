@@ -14,5 +14,6 @@
     <ProjectReference Include="..\Creuser.Auth.Abstractions\Creuser.Auth.Abstractions.csproj" />
     <ProjectReference Include="..\Creuser.Auth.Core\Creuser.Auth.Core.csproj" />
     <ProjectReference Include="..\Creuser.Core\Creuser.Core.csproj" />
+    <ProjectReference Include="..\Creuser.Plugins.Loader\Creuser.Plugins.Loader.csproj" />
   </ItemGroup>
 </Project>

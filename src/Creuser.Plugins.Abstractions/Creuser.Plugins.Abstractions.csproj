@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Plugin authors take a NuGet ref on this package; keep the surface
+         lean. The dependency graph here defines what's safe for plugins
+         to assume the host already has loaded. -->
+    <Description>
+      Stable contracts for Creuser plugins — manifest, registration, context.
+      Plugin authors reference this package and the host's exposed
+      Creuser.Core types only; no dependency on Web/Persistence/Sagas.
+    </Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Creuser.Core\Creuser.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference
+      Include="Microsoft.Extensions.DependencyInjection.Abstractions"
+      Version="10.0.3"
+    />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+  </ItemGroup>
+</Project>

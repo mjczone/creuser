@@ -158,6 +158,10 @@ export type ApiResultOfWorkspaceConnectionTestResult = {
   result: null | WorkspaceConnectionTestResult;
 };
 
+export type ApiResultOfWorkspacePluginInfo = {
+  result: null | WorkspacePluginInfo;
+};
+
 export type ApiResultOfWorkspacePluginsResult = {
   result: null | WorkspacePluginsResult;
 };
@@ -515,6 +519,10 @@ export type ScheduleResult = {
 
 export type SetActiveRequest = {
   isActive: boolean;
+};
+
+export type SetPluginEnabledRequest = {
+  enabled: boolean;
 };
 
 export type SetSecretRequest = {
@@ -1127,6 +1135,26 @@ export type ListWorkspacePluginsResponses = {
 
 export type ListWorkspacePluginsResponse =
   ListWorkspacePluginsResponses[keyof ListWorkspacePluginsResponses];
+
+export type SetWorkspacePluginEnabledData = {
+  body: SetPluginEnabledRequest;
+  path: {
+    slug: string;
+    pluginId: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/plugins/{pluginId}';
+};
+
+export type SetWorkspacePluginEnabledResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspacePluginInfo;
+};
+
+export type SetWorkspacePluginEnabledResponse =
+  SetWorkspacePluginEnabledResponses[keyof SetWorkspacePluginEnabledResponses];
 
 export type ListJobsData = {
   body?: never;

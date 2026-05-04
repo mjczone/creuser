@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Plugin DLL — not packed as nuget; deployed via filesystem copy. -->
+    <IsPackable>false</IsPackable>
+    <!-- Don't copy framework + host assemblies into the plugin's publish
+         output. Plugin loader expects only the plugin's own assembly + any
+         non-host transitive deps. PrivateAssets ensures we don't bundle
+         host framework refs. -->
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Creuser.Core\Creuser.Core.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Creuser.Plugins.Abstractions\Creuser.Plugins.Abstractions.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

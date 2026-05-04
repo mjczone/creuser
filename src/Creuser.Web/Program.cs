@@ -4,8 +4,10 @@ using Creuser.Auth.Core;
 using Creuser.Auth.Providers.Local;
 using Creuser.Core.Execution;
 using Creuser.Core.Projections;
+using Creuser.Core.Repositories;
 using Creuser.Persistence;
 using Creuser.Persistence.Repositories;
+using Creuser.Plugins.Loader;
 using Creuser.Projections.Conventions;
 using Creuser.Projections.Scanner;
 using Creuser.Projections.Sync;
@@ -244,6 +246,25 @@ static bool IsBuildTimeOpenApiGeneration()
 // Redis pub/sub backplane to relay JobRunFinished cross-host. See the
 // design doc for the v0.2 path.
 builder.Services.AddSingleton<RunCompletionWaiter>();
+
+// Plugin loader. Discovery happens BEFORE host build so plugin
+// contributions land in the same DI container as the host's services.
+// `<dataDir>/plugins/*/<plugin>.dll` is the discovery surface; each
+// subdirectory is one plugin. The PluginInitializer hosted service
+// then persists the registry to cr.plugins after host start.
+var pluginsRoot = Path.Combine(dataDir, "plugins");
+Directory.CreateDirectory(pluginsRoot);
+var pluginLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
+var pluginDiscoveryLogger = pluginLoggerFactory.CreateLogger<PluginDiscovery>();
+var discovered = new PluginDiscovery(pluginDiscoveryLogger).Discover(pluginsRoot);
+new PluginActivator().ActivateAll(discovered, builder.Services, pluginLoggerFactory);
+var pluginRegistry = new PluginRegistry();
+builder.Services.AddSingleton(pluginRegistry);
+builder.Services.AddSingleton<IPluginRegistry>(pluginRegistry);
+builder.Services.AddSingleton<IReadOnlyList<DiscoveredPlugin>>(discovered);
+builder.Services.AddScoped<IPluginRecordStore, pluginsRepository>();
+builder.Services.AddScoped<IWorkspacePluginStore, workspacePluginsRepository>();
+builder.Services.AddHostedService<PluginInitializer>();
 
 // Schedules. The dispatcher fires a job in a fresh DI scope so neither
 // the cron tick nor the sync hook pin the executor's lifetime. The

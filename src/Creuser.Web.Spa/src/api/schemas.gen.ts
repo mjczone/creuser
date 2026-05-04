@@ -574,6 +574,23 @@ export const ApiResultOfWorkspaceConnectionTestResultSchema = {
   },
 } as const;
 
+export const ApiResultOfWorkspacePluginInfoSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/WorkspacePluginInfo',
+        },
+      ],
+    },
+  },
+} as const;
+
 export const ApiResultOfWorkspacePluginsResultSchema = {
   required: ['result'],
   type: 'object',
@@ -1793,6 +1810,16 @@ export const SetActiveRequestSchema = {
   type: 'object',
   properties: {
     isActive: {
+      type: 'boolean',
+    },
+  },
+} as const;
+
+export const SetPluginEnabledRequestSchema = {
+  required: ['enabled'],
+  type: 'object',
+  properties: {
+    enabled: {
       type: 'boolean',
     },
   },

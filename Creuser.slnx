@@ -13,9 +13,14 @@
     <Project Path="src/Creuser.Core/Creuser.Core.csproj" />
     <Project Path="src/Creuser.Git/Creuser.Git.csproj" />
     <Project Path="src/Creuser.Persistence/Creuser.Persistence.csproj" />
+    <Project Path="src/Creuser.Plugins.Abstractions/Creuser.Plugins.Abstractions.csproj" />
+    <Project Path="src/Creuser.Plugins.Loader/Creuser.Plugins.Loader.csproj" />
     <Project Path="src/Creuser.Projections/Creuser.Projections.csproj" />
     <Project Path="src/Creuser.Sagas/Creuser.Sagas.csproj" />
     <Project Path="src/Creuser.Scripting/Creuser.Scripting.csproj" />
+  </Folder>
+  <Folder Name="/src/plugins/">
+    <Project Path="src/plugins/Creuser.Plugins.Examples.Hello/Creuser.Plugins.Examples.Hello.csproj" />
     <Project Path="src/Creuser.Web/Creuser.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
