@@ -250,11 +250,20 @@ static bool IsBuildTimeOpenApiGeneration()
 // design doc for the v0.2 path.
 builder.Services.AddSingleton<RunCompletionWaiter>();
 
+// Persistence first — `cr.*` tables are created by the DbInitializer
+// hosted service. Hosted services run in registration order, so
+// AddDatabase() must precede AddHostedService<PluginInitializer> below;
+// otherwise the plugin registry tries to INSERT into cr.plugins before
+// the table exists. The auth + admin/user wiring lives further below;
+// only the data-source + DbInitializer pieces need to run early.
+builder.Services.AddDatabase();
+
 // Plugin loader. Discovery happens BEFORE host build so plugin
 // contributions land in the same DI container as the host's services.
 // `<dataDir>/plugins/*/<plugin>.dll` is the discovery surface; each
 // subdirectory is one plugin. The PluginInitializer hosted service
-// then persists the registry to cr.plugins after host start.
+// then persists the registry to cr.plugins after DbInitializer has
+// created the table.
 var pluginsRoot = Path.Combine(dataDir, "plugins");
 Directory.CreateDirectory(pluginsRoot);
 var pluginLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
@@ -286,6 +295,13 @@ builder.Services.AddHostedService<PluginInitializer>();
 builder.Services.AddScoped<IScheduleStore, schedulesRepository>();
 builder.Services.AddScoped<IJobScheduleDispatcher, JobScheduleDispatcher>();
 builder.Services.AddHostedService<SchedulerService>();
+
+// Dashboards. The store backs CRUD; the seeder runs as a fire-and-forget
+// continuation of WorkspacesEndpoints.Create to populate the default
+// Home + Operations group on workspace creation. Idempotent — re-runs
+// don't clobber user-edited rows.
+builder.Services.AddScoped<IDashboardStore, dashboardsRepository>();
+builder.Services.AddScoped<IDashboardSeeder, DashboardSeeder>();
 
 // Capability registry. Add additional ICapabilityProvider registrations
 // here as new modules / plugins land; CapabilityRegistry composes whatever
@@ -325,8 +341,8 @@ else
     builder.Services.AddDistributedMemoryCache();
 }
 
-// Persistence + auth wiring.
-builder.Services.AddDatabase();
+// Auth wiring (database itself was registered earlier so DbInitializer
+// runs ahead of the plugin/scheduler hosted services).
 builder.Services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
 builder.Services.AddLocalAuth();
 
@@ -409,6 +425,7 @@ app.MapWorkspacesEndpoints();
 app.MapJobsEndpoints();
 app.MapToolsEndpoints();
 app.MapSchedulesEndpoints();
+app.MapDashboardsEndpoints();
 app.MapProjectionsEndpoints();
 app.MapPlansEndpoints();
 app.MapPingEndpoints();

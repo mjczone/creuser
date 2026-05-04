@@ -14,6 +14,10 @@ import type {
   ChangePasswordResponses,
   CheckAgentHealthData,
   CheckAgentHealthResponses,
+  CreateDashboardData,
+  CreateDashboardGroupData,
+  CreateDashboardGroupResponses,
+  CreateDashboardResponses,
   CreateJobData,
   CreateJobResponses,
   CreateScheduleData,
@@ -22,6 +26,10 @@ import type {
   CreateUserResponses,
   CreateWorkspaceData,
   CreateWorkspaceResponses,
+  DeleteDashboardData,
+  DeleteDashboardGroupData,
+  DeleteDashboardGroupResponses,
+  DeleteDashboardResponses,
   DeleteEnvironmentSecretData,
   DeleteEnvironmentSecretResponses,
   DeleteJobData,
@@ -42,6 +50,8 @@ import type {
   GetBrandingResponses,
   GetCurrentUserData,
   GetCurrentUserResponses,
+  GetDashboardData,
+  GetDashboardResponses,
   GetEntityData,
   GetEntityResponses,
   GetEnvironmentData,
@@ -58,6 +68,10 @@ import type {
   GetWorkspaceResponses,
   ListConventionsData,
   ListConventionsResponses,
+  ListDashboardGroupsData,
+  ListDashboardGroupsResponses,
+  ListDashboardsData,
+  ListDashboardsResponses,
   ListEnvironmentSecretsData,
   ListEnvironmentSecretsResponses,
   ListJobRunsData,
@@ -108,6 +122,10 @@ import type {
   TestWorkspaceConnectionResponses,
   UpdateBrandingData,
   UpdateBrandingResponses,
+  UpdateDashboardData,
+  UpdateDashboardGroupData,
+  UpdateDashboardGroupResponses,
+  UpdateDashboardResponses,
   UpdateEnvironmentData,
   UpdateEnvironmentResponses,
   UpdateJobData,
@@ -673,6 +691,107 @@ export class Schedules {
     return (options.client ?? client).post<FireScheduleResponses, unknown, ThrowOnError>({
       url: '/api/workspaces/{slug}/schedules/{scheduleId}/fire',
       ...options,
+    });
+  }
+}
+
+export class Dashboards {
+  public static listDashboards<ThrowOnError extends boolean = false>(
+    options: Options<ListDashboardsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListDashboardsResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/dashboards',
+      ...options,
+    });
+  }
+
+  public static createDashboard<ThrowOnError extends boolean = false>(
+    options: Options<CreateDashboardData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<CreateDashboardResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/dashboards',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static deleteDashboard<ThrowOnError extends boolean = false>(
+    options: Options<DeleteDashboardData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).delete<DeleteDashboardResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/dashboards/{dashSlug}',
+      ...options,
+    });
+  }
+
+  public static getDashboard<ThrowOnError extends boolean = false>(
+    options: Options<GetDashboardData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<GetDashboardResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/dashboards/{dashSlug}',
+      ...options,
+    });
+  }
+
+  public static updateDashboard<ThrowOnError extends boolean = false>(
+    options: Options<UpdateDashboardData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<UpdateDashboardResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/dashboards/{dashSlug}',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+}
+
+export class DashboardGroups {
+  public static listDashboardGroups<ThrowOnError extends boolean = false>(
+    options: Options<ListDashboardGroupsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListDashboardGroupsResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/dashboard-groups',
+      ...options,
+    });
+  }
+
+  public static createDashboardGroup<ThrowOnError extends boolean = false>(
+    options: Options<CreateDashboardGroupData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<CreateDashboardGroupResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/dashboard-groups',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static deleteDashboardGroup<ThrowOnError extends boolean = false>(
+    options: Options<DeleteDashboardGroupData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).delete<DeleteDashboardGroupResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/dashboard-groups/{groupSlug}',
+      ...options,
+    });
+  }
+
+  public static updateDashboardGroup<ThrowOnError extends boolean = false>(
+    options: Options<UpdateDashboardGroupData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<UpdateDashboardGroupResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/dashboard-groups/{groupSlug}',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
     });
   }
 }

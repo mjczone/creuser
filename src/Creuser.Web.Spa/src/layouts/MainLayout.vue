@@ -149,12 +149,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar, useMeta } from 'quasar';
 import { useAssistantStore } from 'stores/assistant';
 import { useAuthStore } from 'stores/auth';
 import { useBrandingStore } from 'stores/branding';
+import { useDashboardsStore } from 'stores/dashboards';
 import AssistantPanel from 'components/AssistantPanel.vue';
 import ThemeModeToggle from 'components/ThemeModeToggle.vue';
 import WorkspacePicker from 'components/WorkspacePicker.vue';
@@ -187,12 +188,52 @@ const activeSlug = computed<string | null>(() =>
   typeof route.params.workspaceSlug === 'string' ? route.params.workspaceSlug : null,
 );
 
+// Pull dashboards on workspace entry so the icon bar reflects per-workspace
+// state. The store caches per slug, so re-entering the same workspace doesn't
+// re-fetch.
+const dashboardsStore = useDashboardsStore();
+watch(
+  activeSlug,
+  (slug) => {
+    if (slug) void dashboardsStore.ensureNavTree(slug);
+  },
+  { immediate: true },
+);
+
+const navTree = computed(() =>
+  activeSlug.value ? dashboardsStore.getNavTree(activeSlug.value) : null,
+);
+
 const topNavItems = computed<NavItem[]>(() => {
   if (isWorkspaceScoped.value && activeSlug.value) {
-    return [
-      { icon: 'home', label: 'Home', route: `/w/${activeSlug.value}` },
-      // Dashboard groups + standalone dashboards land in the next pass.
-    ];
+    const items: NavItem[] = [];
+    // Home is special — always present, always first. The seeder ships it
+    // as a standalone dashboard with slug "home"; if for some reason it's
+    // missing (operator hard-deleted via DB), fall back to a metadata-only
+    // route so the icon doesn't disappear.
+    items.push({ icon: 'home', label: 'Home', route: `/w/${activeSlug.value}` });
+
+    if (navTree.value) {
+      // Standalone dashboards (excluding the Home one we already added).
+      for (const dash of navTree.value.standalones) {
+        if (dash.slug === 'home') continue;
+        items.push({
+          icon: dash.icon ?? 'dashboard',
+          label: dash.name,
+          route: `/w/${activeSlug.value}/d/${dash.slug}`,
+        });
+      }
+      // Group icons — clicking opens the sub-sidebar (sub-sidebar lands in
+      // the next pass; for now click navigates to the group's first child).
+      for (const grp of navTree.value.groups) {
+        const firstChild = grp.children[0];
+        const target = firstChild
+          ? `/w/${activeSlug.value}/d/${firstChild.slug}`
+          : `/w/${activeSlug.value}`;
+        items.push({ icon: grp.icon, label: grp.name, route: target });
+      }
+    }
+    return items;
   }
   return [{ icon: 'home', label: 'Home', route: '/' }];
 });

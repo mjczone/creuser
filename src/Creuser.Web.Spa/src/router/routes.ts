@@ -39,7 +39,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'w/:workspaceSlug/d/:dashboardSlug',
         name: 'workspace-dashboard',
-        component: () => import('pages/workspace/DashboardPlaceholderPage.vue'),
+        component: () => import('pages/workspace/DashboardPage.vue'),
         meta: { title: 'Dashboard', workspaceScoped: true },
       },
       {

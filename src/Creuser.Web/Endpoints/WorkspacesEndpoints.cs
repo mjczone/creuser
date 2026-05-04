@@ -135,6 +135,9 @@ public static class WorkspacesEndpoints
         IValidator<CreateWorkspaceRequest> validator,
         IWorkspaceStore store,
         SecretsService secrets,
+        IDashboardSeeder dashboardSeeder,
+        IServiceScopeFactory scopeFactory,
+        ILoggerFactory loggerFactory,
         TimeProvider time,
         HttpContext http,
         CancellationToken ct
@@ -205,6 +208,36 @@ public static class WorkspacesEndpoints
             CreatedBy: CookieAuthHelpers.GetUserId(http)
         );
         await store.SaveAsync(workspace);
+
+        // Seed default dashboards in a fresh DI scope so this fires-and-forgets
+        // without coupling to the request scope's lifetime. Failures are logged
+        // but don't fail the workspace create — empty-dashboard workspaces
+        // still render cleanly via the manual "Create dashboard" flow.
+        var seedScopeFactory = scopeFactory;
+        var seedLogger = loggerFactory.CreateLogger("DashboardSeed");
+        var workspaceId = workspace.Id;
+        var creatorId = workspace.CreatedBy;
+        _ = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    using var scope = seedScopeFactory.CreateScope();
+                    var seeder = scope.ServiceProvider.GetRequiredService<IDashboardSeeder>();
+                    await seeder.SeedDefaultsAsync(workspaceId, creatorId, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    seedLogger.LogError(
+                        ex,
+                        "Failed to seed default dashboards for workspace {WorkspaceId}",
+                        workspaceId
+                    );
+                }
+            },
+            CancellationToken.None
+        );
+
         return TypedResults.Ok(new ApiResult<WorkspaceResult>(ToResult(workspace, secrets)));
     }
 

@@ -70,6 +70,18 @@ export type ApiResultOfCreateUserResult = {
   result: null | CreateUserResult;
 };
 
+export type ApiResultOfDashboardGroupResult = {
+  result: null | DashboardGroupResult;
+};
+
+export type ApiResultOfDashboardNavTree = {
+  result: null | DashboardNavTree;
+};
+
+export type ApiResultOfDashboardResult = {
+  result: null | DashboardResult;
+};
+
 export type ApiResultOfEchoResponse = {
   result: null | EchoResponse;
 };
@@ -84,6 +96,10 @@ export type ApiResultOfEnvironmentConfigView = {
 
 export type ApiResultOfGuid = {
   result: null | string;
+};
+
+export type ApiResultOfIReadOnlyListOfDashboardGroupResult = {
+  result: null | Array<DashboardGroupResult>;
 };
 
 export type ApiResultOfIReadOnlyListOfEntitySummary = {
@@ -258,6 +274,21 @@ export type ConventionSummary = {
   sourcePath: null | string;
 };
 
+export type CreateDashboardGroupRequest = {
+  slug: string;
+  name: string;
+  icon: string;
+  position: null | number | string;
+};
+
+export type CreateDashboardRequest = {
+  slug: string;
+  name: string;
+  icon: null | string;
+  groupSlug: null | string;
+  position: null | number | string;
+};
+
 export type CreateJobScriptRequest = {
   slug: string;
   name: string;
@@ -297,6 +328,53 @@ export type CreateWorkspaceRequest = {
   type: string;
   gitSettings?: null | GitWorkspaceSettingsDto;
   localSettings?: null | LocalWorkspaceSettingsDto;
+};
+
+export type DashboardGroupResult = {
+  id: string;
+  workspaceId: string;
+  slug: string;
+  name: string;
+  icon: string;
+  position: number | string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DashboardNavGroup = {
+  slug: string;
+  name: string;
+  icon: string;
+  position: number | string;
+  children: Array<DashboardNavItem>;
+};
+
+export type DashboardNavItem = {
+  slug: string;
+  name: string;
+  icon: null | string;
+  position: number | string;
+};
+
+export type DashboardNavTree = {
+  groups: Array<DashboardNavGroup>;
+  standalones: Array<DashboardNavItem>;
+};
+
+export type DashboardResult = {
+  id: string;
+  workspaceId: string;
+  slug: string;
+  name: string;
+  icon: null | string;
+  groupSlug: null | string;
+  layoutJson: string;
+  widgetsJson: string;
+  position: number | string;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type EchoRequest = {
@@ -568,6 +646,21 @@ export type ToolEntry = {
   category: string;
   description: null | string;
   source: string;
+};
+
+export type UpdateDashboardGroupRequest = {
+  name: null | string;
+  icon: null | string;
+  position: null | number | string;
+};
+
+export type UpdateDashboardRequest = {
+  name: null | string;
+  icon: null | string;
+  groupSlug: null | string;
+  position: null | number | string;
+  layoutJson: null | string;
+  widgetsJson: null | string;
 };
 
 export type UpdateJobScriptRequest = {
@@ -1508,6 +1601,177 @@ export type FireScheduleResponses = {
 };
 
 export type FireScheduleResponse = FireScheduleResponses[keyof FireScheduleResponses];
+
+export type ListDashboardsData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/dashboards';
+};
+
+export type ListDashboardsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfDashboardNavTree;
+};
+
+export type ListDashboardsResponse = ListDashboardsResponses[keyof ListDashboardsResponses];
+
+export type CreateDashboardData = {
+  body: CreateDashboardRequest;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/dashboards';
+};
+
+export type CreateDashboardResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfDashboardResult;
+};
+
+export type CreateDashboardResponse = CreateDashboardResponses[keyof CreateDashboardResponses];
+
+export type DeleteDashboardData = {
+  body?: never;
+  path: {
+    slug: string;
+    dashSlug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/dashboards/{dashSlug}';
+};
+
+export type DeleteDashboardResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfboolean;
+};
+
+export type DeleteDashboardResponse = DeleteDashboardResponses[keyof DeleteDashboardResponses];
+
+export type GetDashboardData = {
+  body?: never;
+  path: {
+    slug: string;
+    dashSlug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/dashboards/{dashSlug}';
+};
+
+export type GetDashboardResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfDashboardResult;
+};
+
+export type GetDashboardResponse = GetDashboardResponses[keyof GetDashboardResponses];
+
+export type UpdateDashboardData = {
+  body: UpdateDashboardRequest;
+  path: {
+    slug: string;
+    dashSlug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/dashboards/{dashSlug}';
+};
+
+export type UpdateDashboardResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfDashboardResult;
+};
+
+export type UpdateDashboardResponse = UpdateDashboardResponses[keyof UpdateDashboardResponses];
+
+export type ListDashboardGroupsData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/dashboard-groups';
+};
+
+export type ListDashboardGroupsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfIReadOnlyListOfDashboardGroupResult;
+};
+
+export type ListDashboardGroupsResponse =
+  ListDashboardGroupsResponses[keyof ListDashboardGroupsResponses];
+
+export type CreateDashboardGroupData = {
+  body: CreateDashboardGroupRequest;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/dashboard-groups';
+};
+
+export type CreateDashboardGroupResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfDashboardGroupResult;
+};
+
+export type CreateDashboardGroupResponse =
+  CreateDashboardGroupResponses[keyof CreateDashboardGroupResponses];
+
+export type DeleteDashboardGroupData = {
+  body?: never;
+  path: {
+    slug: string;
+    groupSlug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/dashboard-groups/{groupSlug}';
+};
+
+export type DeleteDashboardGroupResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfboolean;
+};
+
+export type DeleteDashboardGroupResponse =
+  DeleteDashboardGroupResponses[keyof DeleteDashboardGroupResponses];
+
+export type UpdateDashboardGroupData = {
+  body: UpdateDashboardGroupRequest;
+  path: {
+    slug: string;
+    groupSlug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/dashboard-groups/{groupSlug}';
+};
+
+export type UpdateDashboardGroupResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfDashboardGroupResult;
+};
+
+export type UpdateDashboardGroupResponse =
+  UpdateDashboardGroupResponses[keyof UpdateDashboardGroupResponses];
 
 export type ListConventionsData = {
   body?: never;

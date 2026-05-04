@@ -1,4 +1,5 @@
 using Creuser.Core.Repositories;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -23,21 +24,26 @@ namespace Creuser.Plugins.Loader;
 public sealed class PluginInitializer : IHostedService
 {
     private readonly PluginRegistry _registry;
-    private readonly IPluginRecordStore _store;
+
+    // IPluginRecordStore is scoped; this hosted service is a singleton, so we
+    // resolve it through a fresh scope inside StartAsync rather than
+    // injecting it directly. Direct injection would trip Development's
+    // strict scope validator at host build time.
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IReadOnlyList<DiscoveredPlugin> _discovered;
     private readonly TimeProvider _time;
     private readonly ILogger<PluginInitializer> _logger;
 
     public PluginInitializer(
         PluginRegistry registry,
-        IPluginRecordStore store,
+        IServiceScopeFactory scopeFactory,
         IReadOnlyList<DiscoveredPlugin> discovered,
         TimeProvider time,
         ILogger<PluginInitializer> logger
     )
     {
         _registry = registry;
-        _store = store;
+        _scopeFactory = scopeFactory;
         _discovered = discovered;
         _time = time;
         _logger = logger;
@@ -61,7 +67,9 @@ public sealed class PluginInitializer : IHostedService
 
         try
         {
-            await _store.ReplaceAllAsync(registered, cancellationToken);
+            using var scope = _scopeFactory.CreateScope();
+            var store = scope.ServiceProvider.GetRequiredService<IPluginRecordStore>();
+            await store.ReplaceAllAsync(registered, cancellationToken);
         }
         catch (Exception ex)
         {

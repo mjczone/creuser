@@ -242,6 +242,57 @@ export const ApiResultOfCreateUserResultSchema = {
   },
 } as const;
 
+export const ApiResultOfDashboardGroupResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/DashboardGroupResult',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfDashboardNavTreeSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/DashboardNavTree',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfDashboardResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/DashboardResult',
+        },
+      ],
+    },
+  },
+} as const;
+
 export const ApiResultOfEchoResponseSchema = {
   required: ['result'],
   type: 'object',
@@ -300,6 +351,19 @@ export const ApiResultOfGuidSchema = {
     result: {
       type: ['null', 'string'],
       format: 'uuid',
+    },
+  },
+} as const;
+
+export const ApiResultOfIReadOnlyListOfDashboardGroupResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      type: ['null', 'array'],
+      items: {
+        $ref: '#/components/schemas/DashboardGroupResult',
+      },
     },
   },
 } as const;
@@ -904,6 +968,51 @@ export const ConventionSummarySchema = {
   },
 } as const;
 
+export const CreateDashboardGroupRequestSchema = {
+  required: ['slug', 'name', 'icon', 'position'],
+  type: 'object',
+  properties: {
+    slug: {
+      type: 'string',
+    },
+    name: {
+      type: 'string',
+    },
+    icon: {
+      type: 'string',
+    },
+    position: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['null', 'integer', 'string'],
+      format: 'int32',
+    },
+  },
+} as const;
+
+export const CreateDashboardRequestSchema = {
+  required: ['slug', 'name', 'icon', 'groupSlug', 'position'],
+  type: 'object',
+  properties: {
+    slug: {
+      type: 'string',
+    },
+    name: {
+      type: 'string',
+    },
+    icon: {
+      type: ['null', 'string'],
+    },
+    groupSlug: {
+      type: ['null', 'string'],
+    },
+    position: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['null', 'integer', 'string'],
+      format: 'int32',
+    },
+  },
+} as const;
+
 export const CreateJobScriptRequestSchema = {
   required: ['slug', 'name', 'description', 'pattern', 'frontmatter', 'body', 'status'],
   type: 'object',
@@ -1029,6 +1138,185 @@ export const CreateWorkspaceRequestSchema = {
           $ref: '#/components/schemas/LocalWorkspaceSettingsDto',
         },
       ],
+    },
+  },
+} as const;
+
+export const DashboardGroupResultSchema = {
+  required: [
+    'id',
+    'workspaceId',
+    'slug',
+    'name',
+    'icon',
+    'position',
+    'isDefault',
+    'createdAt',
+    'updatedAt',
+  ],
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      format: 'uuid',
+    },
+    workspaceId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    slug: {
+      type: 'string',
+    },
+    name: {
+      type: 'string',
+    },
+    icon: {
+      type: 'string',
+    },
+    position: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    isDefault: {
+      type: 'boolean',
+    },
+    createdAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+    updatedAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+  },
+} as const;
+
+export const DashboardNavGroupSchema = {
+  required: ['slug', 'name', 'icon', 'position', 'children'],
+  type: 'object',
+  properties: {
+    slug: {
+      type: 'string',
+    },
+    name: {
+      type: 'string',
+    },
+    icon: {
+      type: 'string',
+    },
+    position: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    children: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/DashboardNavItem',
+      },
+    },
+  },
+} as const;
+
+export const DashboardNavItemSchema = {
+  required: ['slug', 'name', 'icon', 'position'],
+  type: 'object',
+  properties: {
+    slug: {
+      type: 'string',
+    },
+    name: {
+      type: 'string',
+    },
+    icon: {
+      type: ['null', 'string'],
+    },
+    position: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+  },
+} as const;
+
+export const DashboardNavTreeSchema = {
+  required: ['groups', 'standalones'],
+  type: 'object',
+  properties: {
+    groups: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/DashboardNavGroup',
+      },
+    },
+    standalones: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/DashboardNavItem',
+      },
+    },
+  },
+} as const;
+
+export const DashboardResultSchema = {
+  required: [
+    'id',
+    'workspaceId',
+    'slug',
+    'name',
+    'icon',
+    'groupSlug',
+    'layoutJson',
+    'widgetsJson',
+    'position',
+    'isDefault',
+    'createdAt',
+    'updatedAt',
+  ],
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+      format: 'uuid',
+    },
+    workspaceId: {
+      type: 'string',
+      format: 'uuid',
+    },
+    slug: {
+      type: 'string',
+    },
+    name: {
+      type: 'string',
+    },
+    icon: {
+      type: ['null', 'string'],
+    },
+    groupSlug: {
+      type: ['null', 'string'],
+    },
+    layoutJson: {
+      type: 'string',
+    },
+    widgetsJson: {
+      type: 'string',
+    },
+    position: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    isDefault: {
+      type: 'boolean',
+    },
+    createdAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+    updatedAt: {
+      type: 'string',
+      format: 'date-time',
     },
   },
 } as const;
@@ -1958,6 +2246,51 @@ export const ToolEntrySchema = {
     },
     source: {
       type: 'string',
+    },
+  },
+} as const;
+
+export const UpdateDashboardGroupRequestSchema = {
+  required: ['name', 'icon', 'position'],
+  type: 'object',
+  properties: {
+    name: {
+      type: ['null', 'string'],
+    },
+    icon: {
+      type: ['null', 'string'],
+    },
+    position: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['null', 'integer', 'string'],
+      format: 'int32',
+    },
+  },
+} as const;
+
+export const UpdateDashboardRequestSchema = {
+  required: ['name', 'icon', 'groupSlug', 'position', 'layoutJson', 'widgetsJson'],
+  type: 'object',
+  properties: {
+    name: {
+      type: ['null', 'string'],
+    },
+    icon: {
+      type: ['null', 'string'],
+    },
+    groupSlug: {
+      type: ['null', 'string'],
+    },
+    position: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['null', 'integer', 'string'],
+      format: 'int32',
+    },
+    layoutJson: {
+      type: ['null', 'string'],
+    },
+    widgetsJson: {
+      type: ['null', 'string'],
     },
   },
 } as const;

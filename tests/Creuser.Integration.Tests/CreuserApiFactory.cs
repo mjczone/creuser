@@ -74,4 +74,35 @@ public sealed class CreuserApiFactory : WebApplicationFactory<Program>
             builder.ConfigureTestServices(configure);
         }
     }
+
+    /// <summary>
+    /// Swallow <see cref="OperationCanceledException"/> raised by the
+    /// Wolverine + Marten shutdown path. The race: when Testcontainers'
+    /// Postgres exits while Wolverine's
+    /// <c>MessageStoreCollection.ReleaseAllOwnershipAsync</c> is still
+    /// running, Npgsql cancels the in-flight query and the cancellation
+    /// bubbles up through <c>WebApplicationFactory.DisposeAsync</c>,
+    /// failing the host test. <c>DurabilityMode.Solo</c> + the
+    /// "Test" environment opt-out reduce the surface but don't eliminate
+    /// it (Marten still registers a message store via
+    /// <c>IntegrateWithWolverine()</c>). Since this only happens at host
+    /// shutdown — long after test assertions have run — swallowing the
+    /// cancellation is safe and matches what the test author would do
+    /// manually.
+    /// </summary>
+    public override async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await base.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on Wolverine shutdown vs Testcontainers teardown.
+        }
+        catch (AggregateException ex) when (ex.InnerException is OperationCanceledException)
+        {
+            // Same race surfacing wrapped.
+        }
+    }
 }
