@@ -1,0 +1,96 @@
+// Shared styles for list-shaped widgets (ScheduleList, JobScriptList,
+// WorkspaceMembers) — toolbar at top, virtual-scrolled list filling
+// the rest. Each widget maps its own state classes onto the row markup.
+.cr-w-list {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--cr-bg-elevated, #1a1a1d);
+}
+
+.cr-w-list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--cr-border-subtle, rgba(255, 255, 255, 0.08));
+  background: var(--cr-bg-subtle, #1f1f22);
+}
+
+.cr-w-list-count {
+  font-size: 11px;
+  color: var(--cr-fg-tertiary, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.cr-w-list-list {
+  flex: 1;
+  min-height: 0;
+}
+
+.cr-w-list-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--cr-fg-tertiary, #888);
+  font-size: 12px;
+}
+
+.cr-w-list-error {
+  color: var(--cr-fg-secondary, #ccc);
+}
+
+.cr-w-list-row {
+  padding: 6px 12px;
+}
+
+.cr-w-list-row-name {
+  font-size: 13px;
+  color: var(--cr-fg-primary, #f0f0f0);
+}
+
+.cr-w-list-row-disabled {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--cr-bg-elevated, #262629);
+  color: var(--cr-fg-tertiary, #888);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+}
+
+.cr-w-list-row-meta {
+  font-size: 11px;
+  color: var(--cr-fg-tertiary, #888);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cr-w-list-row-cron {
+  font-family: var(--cr-font-mono, ui-monospace, monospace);
+}
+
+.cr-w-list-row-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--cr-bg-subtle, #262629);
+  color: var(--cr-fg-secondary, #ccc);
+}
+
+.cr-w-list-row-status-active {
+  background: rgba(34, 197, 94, 0.12);
+  color: rgb(74, 222, 128);
+}
+
+.cr-w-list-row-status-paused {
+  background: rgba(234, 179, 8, 0.12);
+  color: rgb(250, 204, 21);
+}

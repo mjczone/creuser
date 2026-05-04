@@ -1,23 +1,27 @@
 import { boot } from 'quasar/wrappers';
 import { registerWidget } from 'src/widgets/registry';
 import PlaceholderWidget from 'src/widgets/PlaceholderWidget.vue';
+import RunsList from 'src/widgets/RunsList.vue';
+import RunInspector from 'src/widgets/RunInspector.vue';
+import ScheduleList from 'src/widgets/ScheduleList.vue';
+import JobScriptList from 'src/widgets/JobScriptList.vue';
+import Markdown from 'src/widgets/Markdown.vue';
+import ProjectionReport from 'src/widgets/ProjectionReport.vue';
 
 /**
  * Registers the v1 widget set against the global widget registry. Each
  * built-in widget self-registers here at boot time so DashboardPage can
  * resolve `widgetType` -> component without per-page imports.
  *
- * Today every type points at `PlaceholderWidget` to prove the dockview-vue
- * + registry loop is wired correctly. Each follow-up commit replaces one
- * `component: PlaceholderWidget` with the real implementation:
- *  - RunsList            (run history table, filterable)
- *  - RunInspector        (single-run detail w/ steps + logs)
- *  - JobScriptList       (workspace's job scripts, run buttons)
- *  - JobScriptEditor     (Monaco YAML+markdown editor)
- *  - ScheduleList        (cron + sync schedules with next-due chips)
- *  - ProjectionReport    (last sync's report)
- *  - Markdown            (workspace-authored markdown tile)
- *  - WorkspaceMembers    (read-only member roster)
+ * Real implementations land per-commit. Status:
+ *  - RunsList            (real)
+ *  - RunInspector        (real)
+ *  - JobScriptList       (real)
+ *  - ScheduleList        (real)
+ *  - Markdown            (real)
+ *  - ProjectionReport    (real)
+ *  - JobScriptEditor     (placeholder — needs Monaco)
+ *  - WorkspaceMembers    (placeholder — member API surface needed first)
  */
 export default boot(() => {
   registerWidget({
@@ -25,7 +29,7 @@ export default boot(() => {
     name: 'Runs',
     description: 'Recent runs across this workspace.',
     icon: 'play_circle',
-    component: PlaceholderWidget,
+    component: RunsList,
     propsSchema: {
       type: 'object',
       properties: {
@@ -46,7 +50,7 @@ export default boot(() => {
     name: 'Run Inspector',
     description: 'Single-run detail with step transitions + logs.',
     icon: 'troubleshoot',
-    component: PlaceholderWidget,
+    component: RunInspector,
     propsSchema: {
       type: 'object',
       properties: {
@@ -62,7 +66,7 @@ export default boot(() => {
     name: 'Scripts',
     description: 'Job scripts in this workspace, with run buttons.',
     icon: 'description',
-    component: PlaceholderWidget,
+    component: JobScriptList,
     propsSchema: {
       type: 'object',
       properties: {
@@ -94,7 +98,7 @@ export default boot(() => {
     name: 'Schedules',
     description: 'Cron + post-sync schedules with next-due chips.',
     icon: 'schedule',
-    component: PlaceholderWidget,
+    component: ScheduleList,
     propsSchema: {
       type: 'object',
       properties: {
@@ -108,9 +112,9 @@ export default boot(() => {
   registerWidget({
     type: 'ProjectionReport',
     name: 'Projection Report',
-    description: 'Last sync\'s entities-by-kind, unresolved refs, schema failures.',
+    description: 'Conventions, load errors, on-demand projection sync results.',
     icon: 'account_tree',
-    component: PlaceholderWidget,
+    component: ProjectionReport,
     propsSchema: { type: 'object', properties: {} },
     defaultProps: {},
     defaultDockview: { minWidth: 320, preferredPosition: 'tab' },
@@ -121,7 +125,7 @@ export default boot(() => {
     name: 'Notes',
     description: 'Workspace-authored markdown tile (READMEs, free-form notes).',
     icon: 'sticky_note_2',
-    component: PlaceholderWidget,
+    component: Markdown,
     propsSchema: {
       type: 'object',
       properties: {
