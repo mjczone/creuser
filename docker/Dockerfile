@@ -71,11 +71,21 @@ COPY tests/Creuser.Integration.Tests/Creuser.Integration.Tests.csproj           
 RUN dotnet restore Creuser.slnx --verbosity normal --disable-parallel
 
 # Restore SPA deps separately (same caching reason).
+# `--ignore-scripts` skips lifecycle hooks — the SPA's `postinstall` runs
+# `quasar prepare`, which needs `quasar.config.ts` and friends that
+# haven't been copied yet at this layer (the full source comes in below
+# via `COPY . .`). We run `quasar prepare` explicitly after that copy so
+# the cached `npm ci` layer survives code-only changes.
 COPY src/Creuser.Web.Spa/package.json src/Creuser.Web.Spa/package-lock.json src/Creuser.Web.Spa/
-RUN cd src/Creuser.Web.Spa && npm ci --no-audit --no-fund
+RUN cd src/Creuser.Web.Spa && npm ci --ignore-scripts --no-audit --no-fund
 
 # Now bring in the rest of the source.
 COPY . .
+
+# Run the postinstall hook now that the Quasar project files exist.
+# (Equivalent to what `npm ci` would have done if --ignore-scripts
+# weren't set above.)
+RUN cd src/Creuser.Web.Spa && npx quasar prepare
 
 # Build .NET first so Microsoft.Extensions.ApiDescription.Server emits
 # Creuser.Web.json (consumed by hey-api codegen below).
