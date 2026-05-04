@@ -101,9 +101,14 @@ RUN dotnet publish src/Creuser.Web/Creuser.Web.csproj \
     -c Release -o /app --no-restore /p:UseAppHost=false
 
 # ─── Stage 2: slim runtime ───────────────────────────────────────────────
-# ASP.NET Core runtime + git only. Used when operators want a small image
-# and curate their own tools in a derivative Dockerfile.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime-slim
+# .NET 10 SDK + git only. Slim still needs the SDK (not just the runtime)
+# because Creuser features like the `csharp` file-based job runner
+# (`dotnet run script.cs`) and AOT plugin compilation invoke the SDK at
+# runtime — see the "Why isn't there a :micro variant" FAQ in
+# docs/docker-variants.md. Operators wanting a smaller no-SDK base
+# should derive their own image from `aspnet:10.0` and accept that those
+# features will be unavailable.
+FROM mcr.microsoft.com/dotnet/sdk:10.0.102 AS runtime-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git openssh-client ca-certificates \
  && rm -rf /var/lib/apt/lists/*
@@ -111,7 +116,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ─── Stage 3: fat runtime ────────────────────────────────────────────────
 # Full .NET SDK (some Creuser features need it at runtime — file-based C#
 # scripts, plugin compilation) + the curated polyglot tool palette.
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime-fat
+FROM mcr.microsoft.com/dotnet/sdk:10.0.102 AS runtime-fat
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git openssh-client ripgrep fd-find jq tree bat ca-certificates \
       python3 python3-pip \
