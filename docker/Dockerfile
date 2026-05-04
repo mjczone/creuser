@@ -63,12 +63,7 @@ COPY tests/Creuser.Core.Tests/Creuser.Core.Tests.csproj                         
 COPY tests/Creuser.Scripting.Tests/Creuser.Scripting.Tests.csproj                        tests/Creuser.Scripting.Tests/
 COPY tests/Creuser.Projections.Tests/Creuser.Projections.Tests.csproj                    tests/Creuser.Projections.Tests/
 COPY tests/Creuser.Integration.Tests/Creuser.Integration.Tests.csproj                    tests/Creuser.Integration.Tests/
-# `--verbosity normal` so the actual NuGet error surfaces in the build
-# log when restore fails — `minimal` (default) hides everything but the
-# top-level summary, which makes "exit code 155" investigations painful.
-# `--disable-parallel` reduces the chance of OOM on small CI runners and
-# avoids races in low-memory containers.
-RUN dotnet restore Creuser.slnx --verbosity normal --disable-parallel
+RUN dotnet restore Creuser.slnx
 
 # Restore SPA deps separately (same caching reason).
 # `--ignore-scripts` skips lifecycle hooks — the SPA's `postinstall` runs

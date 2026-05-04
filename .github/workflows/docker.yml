@@ -114,20 +114,35 @@ jobs:
           # in the metadata action's `images:` list via `enable=` so the
           # Docker Hub manifest entry doesn't even exist on branch pushes).
           # The Docker Hub login step a few above shares the same gate.
-          push: ${{ github.event_name == 'push' }}
+          # Push behavior is set via the `outputs:` directive below
+          # (which replaces `push: true` — same effect, but lets us also
+          # specify zstd compression in one place).
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # linux/amd64 only in v0.1. arm64 added when there's demand —
           # cross-compile via QEMU adds ~2x to build time.
           platforms: linux/amd64
           provenance: false
-          # `mode=min` only caches layers reachable from the final image.
-          # `mode=max` would cache every stage in the Dockerfile, including
-          # unreachable ones — which forces BuildKit to *execute* those
-          # stages too, so the slim job ends up building `runtime-fat`
-          # (apt-installing python, node, etc.) even though none of it
-          # lands in the slim image. Wastes ~10 min per slim build.
-          # Reachable stages for either variant: `build` + the matching
-          # `runtime-{variant}` + `final`.
-          cache-from: type=gha,scope=docker-${{ matrix.variant }}
-          cache-to: type=gha,scope=docker-${{ matrix.variant }},mode=min
+          # zstd compresses + decompresses faster than gzip and produces
+          # smaller layers, which translates to a noticeably shorter
+          # "exporting to image" / "pushing layers" phase. Modern OCI
+          # tooling (containerd, podman, recent Docker) handles zstd
+          # transparently; older Docker daemons (≤ 23.0) might fall back
+          # to slower decompression — fine for a v0.1 with no legacy
+          # registries to support.
+          outputs: type=image,push=true,compression=zstd,compression-level=3,force-compression=true
+          # Registry-backed cache instead of `type=gha`. GHA's cache has
+          # a 10 GB quota shared across the whole repo; Docker layer
+          # caches get evicted aggressively whenever the SPA test cache
+          # or any other workflow cache pushes them out, so cache hits
+          # were inconsistent. `type=registry` lives next to the image
+          # in ghcr and has no shared quota — far higher hit rate, esp.
+          # on the slow `dotnet restore` + npm install + .NET build
+          # layers that dominate a Docker run.
+          #
+          # `mode=min` (only export layers reachable from the final
+          # image) keeps the slim job from redundantly building the
+          # `runtime-fat` apt step — see the variant table for which
+          # stages each variant actually needs.
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache-${{ matrix.variant }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache-${{ matrix.variant }},mode=min,image-manifest=true,oci-mediatypes=true
