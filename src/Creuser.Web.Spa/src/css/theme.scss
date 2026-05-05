@@ -16,6 +16,24 @@
 // hex literals in scoped SCSS, no references to the SCSS `$primary` etc.
 // from `quasar.variables.scss` (those are build-time, not runtime). If a
 // component needs a color we haven't tokenized, add it here first.
+//
+// ⚠️ KEEP IN SYNC ⚠️
+// The chrome values in the `:root` and `.body--light` blocks below are
+// duplicated in two TypeScript places so that the Branding admin page can
+// show populated chrome fields when "Creuser Dark" or "Creuser Light" is
+// picked, and so a fresh server install lands on those presets:
+//
+//   1. src/css/palettes/registry.ts → `CREUSER_DARK_CHROME` / `CREUSER_LIGHT_CHROME`
+//   2. src/Creuser.Web/Branding/BrandingConfig.cs → `BrandingConfig.Default.Chrome` / `.ChromeLight`
+//
+// Only the keys present in the SPA's `CHROME_KEYS` list (bgPage, bgSurface,
+// bgHeader, bgSidebar, bgElevated, fgPrimary, fgSecondary, fgTertiary,
+// borderSubtle, borderDefault, borderStrong) need to be mirrored — the
+// auxiliary tokens (bgHover, bgActive, brandTintSoft, etc.) are SCSS-only.
+// When you change a mirrored value here, update both TS places. Otherwise
+// the page will keep rendering correctly (the SCSS still wins at build
+// time) but the Branding picker will start showing "Custom" instead of
+// the matching Creuser preset.
 
 :root {
   // Body / surfaces — anchored on the brand's #143734 dark teal-forest.

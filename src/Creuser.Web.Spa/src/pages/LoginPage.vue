@@ -15,7 +15,6 @@
             label="Email"
             dense
             outlined
-            dark
             color="primary"
             lazy-rules
             :rules="[(v: string) => !!v || 'Required']"
@@ -27,7 +26,6 @@
             label="Password"
             dense
             outlined
-            dark
             color="primary"
             lazy-rules
             :rules="[(v: string) => !!v || 'Required']"
@@ -65,7 +63,6 @@
             label="New Password"
             dense
             outlined
-            dark
             color="primary"
             lazy-rules
             :rules="[
@@ -90,7 +87,6 @@
             label="Confirm Password"
             dense
             outlined
-            dark
             color="primary"
             lazy-rules
             :rules="[
@@ -138,7 +134,7 @@ const auth = useAuthStore();
 const branding = useBrandingStore();
 
 const productName = computed(() => branding.productName);
-const logoUrl = computed(() => branding.logoUrl);
+const logoUrl = computed(() => branding.effectiveLogoUrl);
 const productInitial = computed(() => branding.productName.charAt(0).toUpperCase() || 'C');
 const tagline = computed(
   () => branding.config.loginTagline?.trim() || 'Workflow & agent orchestration',

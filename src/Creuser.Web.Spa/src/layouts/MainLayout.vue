@@ -314,7 +314,7 @@ const assistant = useAssistantStore();
 const drawer = ref(false);
 
 const productName = computed(() => branding.productName);
-const logoUrl = computed(() => branding.logoUrl);
+const logoUrl = computed(() => branding.effectiveLogoUrl);
 const productInitial = computed(() => branding.productName.charAt(0).toUpperCase() || 'C');
 
 interface NavLeaf {

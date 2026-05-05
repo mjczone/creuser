@@ -70,14 +70,76 @@ export interface PalettePreset {
 // Dark presets
 // ─────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────
+// Creuser house themes — palette + chrome values mirror the bundled SCSS
+// defaults so the Branding-page editor fields populate with concrete
+// starting values (instead of staying blank) when an admin picks one of
+// these. The values must stay in sync with:
+//
+//   - Quasar palette → src/css/quasar.variables.scss (`$primary` etc.)
+//   - Dark chrome    → src/css/theme.scss `:root { ... }`
+//   - Light chrome   → src/css/theme.scss `.body--light { ... }`
+//
+// Both SCSS files carry a header comment pointing at this registry as a
+// reminder. If you change one place, change the other.
+// ─────────────────────────────────────────────────────────────────────────
+
+const CREUSER_PALETTE: Palette = {
+  primary: '#5c7e62',
+  secondary: '#7c9a82',
+  accent: '#d7a06b',
+  positive: '#22c55e',
+  negative: '#ef4444',
+  info: '#0ea5e9',
+  warning: '#f59e0b',
+};
+
+const CREUSER_DARK_CHROME: Chrome = {
+  bgPage: '#0c2422',
+  bgSurface: '#143734',
+  bgHeader: '#1a4441',
+  bgSidebar: '#1a4441',
+  bgElevated: '#225855',
+  fgPrimary: 'rgba(255, 255, 255, 0.95)',
+  fgSecondary: 'rgba(255, 255, 255, 0.72)',
+  fgTertiary: 'rgba(255, 255, 255, 0.5)',
+  borderSubtle: 'rgba(255, 255, 255, 0.08)',
+  borderDefault: 'rgba(255, 255, 255, 0.14)',
+  borderStrong: 'rgba(255, 255, 255, 0.28)',
+};
+
+const CREUSER_LIGHT_CHROME: Chrome = {
+  bgPage: '#fafafa',
+  bgSurface: '#ffffff',
+  bgHeader: '#ffffff',
+  bgSidebar: '#f6f6f7',
+  bgElevated: '#ececee',
+  fgPrimary: 'rgba(0, 0, 0, 0.88)',
+  fgSecondary: 'rgba(0, 0, 0, 0.55)',
+  fgTertiary: 'rgba(0, 0, 0, 0.3)',
+  borderSubtle: 'rgba(0, 0, 0, 0.06)',
+  borderDefault: 'rgba(0, 0, 0, 0.12)',
+  borderStrong: 'rgba(0, 0, 0, 0.24)',
+};
+
+// Re-exported so the SPA's defaultBranding can carry the same values and
+// `Reset all` lands on a config that matches the Creuser presets — keeps
+// the picker showing "Creuser Dark / Creuser Light" instead of "Custom"
+// after a reset.
+export {
+  CREUSER_PALETTE as CREUSER_BUNDLED_PALETTE,
+  CREUSER_DARK_CHROME as CREUSER_BUNDLED_CHROME_DARK,
+  CREUSER_LIGHT_CHROME as CREUSER_BUNDLED_CHROME_LIGHT,
+};
+
 const CREUSER_DARK: PalettePreset = {
   id: 'creuser-dark',
   label: 'Creuser Dark',
   description: 'Sage green on dark teal-forest. The Creuser house dark theme.',
   mode: 'dark',
   swatches: ['#5c7e62', '#7c9a82', '#d7a06b', '#143734', '#0c2422'],
-  palette: {},
-  chrome: {},
+  palette: CREUSER_PALETTE,
+  chrome: CREUSER_DARK_CHROME,
   chromeLight: {},
   dockviewTheme: themeDark,
   useCreuserDockMapping: true,
@@ -349,9 +411,9 @@ const CREUSER_LIGHT: PalettePreset = {
   description: 'Sage green on warm parchment. The Creuser house light theme.',
   mode: 'light',
   swatches: ['#5c7e62', '#7c9a82', '#d7a06b', '#fafafa', '#f6f6f7'],
-  palette: {},
+  palette: CREUSER_PALETTE,
   chrome: {},
-  chromeLight: {},
+  chromeLight: CREUSER_LIGHT_CHROME,
   dockviewTheme: themeLight,
   useCreuserDockMapping: true,
 };
@@ -479,64 +541,44 @@ export function groupPresetsByMode(): Record<PresetMode, PalettePreset[]> {
 }
 
 /**
- * Detect which preset (if any) the current config matches by exact equality
- * of its palette + chrome fields. Used by the picker to highlight the
- * active preset and by DashboardPage to look up the preset's dockview
- * theme. Returns null when the user has manually tweaked colors away from
- * any preset (the picker shows "Custom" then; DashboardPage falls back to
- * Creuser-mapped chrome on `themeAbyss`).
+ * Detect which preset (if any) the saved config's slot for `mode` matches
+ * by exact equality of its palette + chrome fields. The Branding page
+ * calls this twice — once for the dark slot (config.palette + config.chrome
+ * vs dark presets) and once for the light slot (config.paletteLight +
+ * config.chromeLight vs light presets) — so each picker can highlight its
+ * active preset independently. DashboardPage calls this once for the user's
+ * effective mode to pick the right `dockviewTheme`.
  *
- * Normalizes both sides — strips null/undefined entries before comparing
- * — because the persisted config (`cr.app_settings` row) materializes
- * every key with a null default, while presets use sparse `{}` for "use
- * the bundled values." Without normalization, every config would always
- * read as "Custom" even when it exactly matches a preset.
+ * Returns null when the slot has been manually tweaked away from any
+ * preset; the picker shows "Custom" and DashboardPage falls back to
+ * Creuser-mapped chrome on `themeAbyss`.
+ *
+ * Normalizes both sides — strips null/undefined entries before comparing —
+ * because the persisted config materializes every key with a null default,
+ * while presets use sparse `{}` for "use the bundled values."
  */
 export function detectActivePreset(
   palette: Palette | null | undefined,
   chrome: Chrome | null | undefined,
-  chromeLight: Chrome | null | undefined,
-  mode?: PresetMode | null,
+  mode: PresetMode,
 ): PalettePreset | null {
-  const a = canonical({ palette, chrome, chromeLight });
-  // Two-pass match — prefer presets whose `mode` matches first, then fall
-  // back to mode-agnostic match. The Creuser Dark / Creuser Light presets
-  // are identical except for `mode` (both ship empty palette/chrome and
-  // rely on the bundled defaults that flip via `.body--light`), so without
-  // mode-based disambiguation Creuser Light would always match Creuser
-  // Dark (the first entry).
-  if (mode) {
-    for (const preset of PALETTE_PRESETS) {
-      if (preset.mode !== mode) continue;
-      const b = canonical({
-        palette: preset.palette,
-        chrome: preset.chrome,
-        chromeLight: preset.chromeLight,
-      });
-      if (a === b) return preset;
-    }
-  }
+  const target = JSON.stringify({
+    palette: stripNulls(palette),
+    chrome: stripNulls(chrome),
+  });
   for (const preset of PALETTE_PRESETS) {
-    const b = canonical({
-      palette: preset.palette,
-      chrome: preset.chrome,
-      chromeLight: preset.chromeLight,
+    if (preset.mode !== mode) continue;
+    // Light presets store their chrome values in the `chromeLight` field
+    // (the `chrome` field is empty `{}`), so the comparable slot depends
+    // on the preset's mode.
+    const presetChrome = mode === 'dark' ? preset.chrome : preset.chromeLight;
+    const presetCanon = JSON.stringify({
+      palette: stripNulls(preset.palette),
+      chrome: stripNulls(presetChrome),
     });
-    if (a === b) return preset;
+    if (target === presetCanon) return preset;
   }
   return null;
-}
-
-function canonical(input: {
-  palette: Palette | null | undefined;
-  chrome: Chrome | null | undefined;
-  chromeLight: Chrome | null | undefined;
-}): string {
-  return JSON.stringify({
-    palette: stripNulls(input.palette),
-    chrome: stripNulls(input.chrome),
-    chromeLight: stripNulls(input.chromeLight),
-  });
 }
 
 function stripNulls(obj: Record<string, unknown> | null | undefined): Record<string, unknown> {

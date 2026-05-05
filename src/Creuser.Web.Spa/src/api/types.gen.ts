@@ -216,11 +216,13 @@ export type BrandingAssetResult = {
 export type BrandingConfig = {
   productName: string;
   logoUrl: null | string;
+  logoUrlLight: null | string;
   faviconUrl: null | string;
   loginBackgroundUrl: null | string;
   loginTagline: null | string;
   mode: string;
   palette: BrandPalette;
+  paletteLight: BrandPalette;
   chrome: ChromeTokens;
   chromeLight: ChromeTokens;
   fontFamily: null | string;

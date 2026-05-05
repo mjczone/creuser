@@ -15,7 +15,7 @@
         switch-toggle-side
         expand-icon-toggle
         label="Identity"
-        caption="Product name, login tagline, logo"
+        caption="Product name, login tagline, logos"
         header-class="cr-branding-section-header"
         class="cr-branding-section"
         data-section-key="identity"
@@ -41,11 +41,27 @@
             class="cr-branding-input"
           />
 
-          <LogoUploadField
-            :model-value="draft.logoUrl"
-            :alt="draft.productName"
-            @update:model-value="onLogoChange"
-          />
+          <div class="cr-branding-logos">
+            <div class="cr-branding-logo-slot">
+              <div class="cr-branding-logo-slot-label">Logo (dark mode)</div>
+              <LogoUploadField
+                :model-value="draft.logoUrl"
+                :alt="draft.productName"
+                @update:model-value="onLogoChange"
+              />
+            </div>
+            <div class="cr-branding-logo-slot">
+              <div class="cr-branding-logo-slot-label">Logo (light mode)</div>
+              <LogoUploadField
+                :model-value="draft.logoUrlLight"
+                :alt="draft.productName"
+                @update:model-value="onLogoLightChange"
+              />
+              <p class="cr-branding-logo-slot-hint">
+                Optional — leave empty to reuse the dark-mode logo in light mode too.
+              </p>
+            </div>
+          </div>
         </div>
       </q-expansion-item>
 
@@ -81,22 +97,75 @@
       </q-expansion-item>
 
       <q-expansion-item
+        v-model="expanded.typography"
+        dense
+        switch-toggle-side
+        expand-icon-toggle
+        label="Typography"
+        caption="Body + monospace fonts"
+        header-class="cr-branding-section-header"
+        class="cr-branding-section"
+        data-section-key="typography"
+      >
+        <div class="cr-branding-section-body">
+          <p class="cr-branding-section-hint">
+            Pick from the curated bundled set, leave on <em>System default</em> for the OS stack, or
+            choose <em>Custom</em> to paste a font-family list. Bundled fonts are lazy-loaded — the
+            woff2 only ships when an admin selects it. Typography applies to both dark and light
+            modes.
+          </p>
+
+          <FontPicker
+            :model-value="fontFamilyField"
+            type="sans"
+            label="Body font"
+            @update:model-value="onFontFamilyChange"
+          />
+          <FontPicker
+            :model-value="fontFamilyMonoField"
+            type="mono"
+            label="Monospace font"
+            @update:model-value="onFontFamilyMonoChange"
+          />
+        </div>
+      </q-expansion-item>
+
+      <q-expansion-item
         v-model="expanded.presets"
         dense
         switch-toggle-side
         expand-icon-toggle
-        label="Theme presets"
-        caption="One-click curated palettes"
+        label="Base theme presets"
+        caption="Pick a starting point for each mode"
         header-class="cr-branding-section-header"
         class="cr-branding-section"
         data-section-key="presets"
       >
         <div class="cr-branding-section-body">
           <p class="cr-branding-section-hint">
-            Picking a preset overwrites the palette + chrome (both modes) below; identity, fonts,
-            and custom CSS are preserved. Tweak afterward to taste.
+            Each mode has its own base. Picking a preset overwrites that mode's palette + chrome
+            below; identity, fonts, the other mode's customizations, and custom CSS are preserved.
+            Tweak afterward in the Palette and Chrome sections.
           </p>
-          <PalettePicker :active-id="activePresetId" @pick="onPickPreset" />
+
+          <div class="cr-branding-presets-pair">
+            <div class="cr-branding-preset-slot">
+              <h3 class="cr-branding-preset-slot-title">Dark mode base</h3>
+              <PalettePicker
+                mode="dark"
+                :active-id="activeDarkPresetId"
+                @pick="onPickDarkPreset"
+              />
+            </div>
+            <div class="cr-branding-preset-slot">
+              <h3 class="cr-branding-preset-slot-title">Light mode base</h3>
+              <PalettePicker
+                mode="light"
+                :active-id="activeLightPresetId"
+                @pick="onPickLightPreset"
+              />
+            </div>
+          </div>
         </div>
       </q-expansion-item>
 
@@ -106,16 +175,30 @@
         switch-toggle-side
         expand-icon-toggle
         label="Palette"
-        caption="Quasar brand colors"
+        caption="Quasar brand colors per mode"
         header-class="cr-branding-section-header"
         class="cr-branding-section"
         data-section-key="palette"
       >
         <div class="cr-branding-section-body">
           <p class="cr-branding-section-hint">
-            Hex (or rgba) values. Leave blank to use the baked-in default. The palette applies to
-            both modes — for per-mode brand-color tuning, use the Custom CSS section below.
+            Hex (or rgba) values. Leave blank to use the baked-in default. Edits made in the Dark
+            tab affect what users see in dark mode; edits in the Light tab affect light mode. Use
+            the theme switcher (top right) if you want to compare your changes live.
           </p>
+
+          <q-tabs
+            v-model="paletteEditMode"
+            dense
+            no-caps
+            align="left"
+            class="cr-branding-mode-tabs"
+            indicator-color="primary"
+            active-color="primary"
+          >
+            <q-tab name="dark" label="Dark" />
+            <q-tab name="light" label="Light" />
+          </q-tabs>
 
           <div class="cr-branding-grid">
             <ColorField
@@ -135,18 +218,30 @@
         switch-toggle-side
         expand-icon-toggle
         label="Chrome"
-        :caption="`Editing ${chromeModeLabel} mode`"
+        caption="Background, foreground, border tokens per mode"
         header-class="cr-branding-section-header"
         class="cr-branding-section"
         data-section-key="chrome"
       >
         <div class="cr-branding-section-body">
           <p class="cr-branding-section-hint">
-            Background, foreground, and border tokens for the app shell. You're editing values for
-            <strong>{{ chromeModeLabel }}</strong> mode — switch your theme (top right) to edit the
-            other mode. For more elaborate per-mode tweaks (e.g. dark sidebar in light mode), use
-            the Custom CSS section below.
+            Background, foreground, and border tokens for the app shell. The Dark and Light tabs
+            edit each mode independently — your current viewing mode (top right) doesn't affect
+            which slot you're editing.
           </p>
+
+          <q-tabs
+            v-model="chromeEditMode"
+            dense
+            no-caps
+            align="left"
+            class="cr-branding-mode-tabs"
+            indicator-color="primary"
+            active-color="primary"
+          >
+            <q-tab name="dark" label="Dark" />
+            <q-tab name="light" label="Light" />
+          </q-tabs>
 
           <div class="cr-branding-grid">
             <ColorField
@@ -157,39 +252,6 @@
               @update:model-value="(v) => setChrome(entry.key, v)"
             />
           </div>
-        </div>
-      </q-expansion-item>
-
-      <q-expansion-item
-        v-model="expanded.typography"
-        dense
-        switch-toggle-side
-        expand-icon-toggle
-        label="Typography"
-        caption="Body + monospace fonts"
-        header-class="cr-branding-section-header"
-        class="cr-branding-section"
-        data-section-key="typography"
-      >
-        <div class="cr-branding-section-body">
-          <p class="cr-branding-section-hint">
-            Pick from the curated bundled set, leave on <em>System default</em> for the OS stack, or
-            choose <em>Custom</em> to paste a font-family list. Bundled fonts are lazy-loaded — the
-            woff2 only ships when an admin selects it.
-          </p>
-
-          <FontPicker
-            :model-value="fontFamilyField"
-            type="sans"
-            label="Body font"
-            @update:model-value="onFontFamilyChange"
-          />
-          <FontPicker
-            :model-value="fontFamilyMonoField"
-            type="mono"
-            label="Monospace font"
-            @update:model-value="onFontFamilyMonoChange"
-          />
         </div>
       </q-expansion-item>
 
@@ -221,7 +283,7 @@
               @click="onInsertBaseline"
             >
               <q-tooltip>
-                Drop a starter block — current Quasar palette, Creuser chrome (both modes), plus a
+                Drop a starter block — Quasar palette + Creuser chrome (both modes) plus a
                 commented dockview block — into the editor. Useful as a starting point when
                 customizing.
               </q-tooltip>
@@ -231,10 +293,10 @@
           <details class="cr-branding-help">
             <summary>Available tokens and mode selectors</summary>
             <div class="cr-branding-help-body">
-              <p><strong>Per-mode rules:</strong></p>
+              <p><strong>Per-mode rules — wrap any selector with the body class for that mode:</strong></p>
               <pre>
-body.body--light .cr-drawer { background: #1a1a1d; color: #fff; }
-body.body--dark  .cr-header { background: #000; }</pre
+body.body--dark  .cr-drawer { background: #0c2422; }
+body.body--light .cr-drawer { background: #ffffff; color: #1f2328; }</pre
               >
               <p>
                 <strong>Available <code>--cr-*</code> tokens (overridable directly):</strong>
@@ -277,7 +339,7 @@ body.body--dark  .cr-header { background: #000; }</pre
             outlined
             class="cr-branding-css"
             input-class="cr-branding-css-input"
-            placeholder="/* Plain CSS — applied last, wins over the structured overrides. Applies on Save (typing CSS live can break the page mid-edit). */"
+            placeholder="/* Plain CSS — applied last, wins over the structured overrides. Applies on Save (typing CSS live can break the page mid-edit).&#10;&#10;   Use body.body--dark and body.body--light to scope rules to a specific mode:&#10;     body.body--light .cr-drawer { background: white; }&#10;     body.body--dark  .cr-header { background: black; }&#10;*/"
           />
         </div>
       </q-expansion-item>
@@ -329,7 +391,6 @@ import {
   type ChromeKey,
 } from 'stores/branding';
 import type { BrandingConfig } from 'stores/branding';
-import { useThemeModeStore } from 'stores/themeMode';
 import ColorField from 'components/branding/ColorField.vue';
 import FontPicker from 'components/branding/FontPicker.vue';
 import LogoUploadField from 'components/branding/LogoUploadField.vue';
@@ -374,7 +435,16 @@ const chromeFields: FieldDef<ChromeKey>[] = CHROME_KEYS.map((key) => ({
 
 const $q = useQuasar();
 const branding = useBrandingStore();
-const themeMode = useThemeModeStore();
+
+// The Palette and Chrome sections expose explicit Dark/Light tabs that are
+// fully decoupled from the user's header theme toggle — editing the Light
+// tab while viewing the page in dark mode just edits the data; the visible
+// surfaces don't change. Persisted in localStorage so the admin's last
+// choice sticks across reloads (with `dark` as the default since that's
+// the most common starting point).
+type EditMode = 'dark' | 'light';
+const paletteEditMode = useLocalStorage<EditMode>('creuser.branding.paletteEditMode', 'dark');
+const chromeEditMode = useLocalStorage<EditMode>('creuser.branding.chromeEditMode', 'dark');
 
 // Per-user expand/collapse memory. localStorage means the state is scoped
 // to the browser, not the user account — that's fine for v1, can promote
@@ -405,6 +475,11 @@ function onLogoChange(url: string | null) {
   onLiveChange();
 }
 
+function onLogoLightChange(url: string | null) {
+  draft.logoUrlLight = url;
+  onLiveChange();
+}
+
 function onFontFamilyChange(v: string) {
   fontFamilyField.value = v;
   draft.fontFamily = v === '' ? null : v;
@@ -423,46 +498,54 @@ watch(customCssField, (v) => {
 });
 
 /**
- * Build a baseline CSS snippet from the current draft — Quasar palette,
- * Creuser chrome (both modes), plus the dockview variables as a commented
- * block. Inserted into the Custom CSS editor as a starting point so admins
- * can tweak individual rules without having to look up token names. The
- * snippet only emits values the draft actually defines (a preset's empty
- * keys are skipped) — admins see exactly what they're starting from.
+ * Build a baseline CSS snippet from the current draft — Quasar palette
+ * (per mode), Creuser chrome (per mode), plus the dockview variables as a
+ * commented block. Inserted into the Custom CSS editor as a starting
+ * point so admins can tweak individual rules without having to look up
+ * token names. The snippet only emits values the draft actually defines
+ * (a preset's empty keys are skipped) — admins see exactly what they're
+ * starting from.
  */
-function buildBaselineSnippet(d: BrandingConfig, presetLabel: string | null): string {
+function buildBaselineSnippet(d: BrandingConfig): string {
   const palette = (d.palette ?? {}) as Record<string, string | null | undefined>;
+  const paletteLight = (d.paletteLight ?? {}) as Record<string, string | null | undefined>;
   const chrome = (d.chrome ?? {}) as Record<string, string | null | undefined>;
   const chromeLight = (d.chromeLight ?? {}) as Record<string, string | null | undefined>;
 
-  const palLines = PALETTE_KEYS.map((k) =>
+  const palDarkLines = PALETTE_KEYS.map((k) =>
     palette[k] ? `  --q-${quasarKey(k)}: ${palette[k]};` : null,
   ).filter((s): s is string => s !== null);
-  const chromeLines = CHROME_KEYS.map((k) =>
+  const palLightLines = PALETTE_KEYS.map((k) =>
+    paletteLight[k] ? `  --q-${quasarKey(k)}: ${paletteLight[k]};` : null,
+  ).filter((s): s is string => s !== null);
+  const chromeDarkLines = CHROME_KEYS.map((k) =>
     chrome[k] ? `  ${chromeCssName(k)}: ${chrome[k]};` : null,
   ).filter((s): s is string => s !== null);
-  const lightLines = CHROME_KEYS.map((k) =>
+  const chromeLightLines = CHROME_KEYS.map((k) =>
     chromeLight[k] ? `  ${chromeCssName(k)}: ${chromeLight[k]};` : null,
   ).filter((s): s is string => s !== null);
 
   const out: string[] = [];
   out.push(
-    presetLabel
-      ? `/* Baseline copied from preset: ${presetLabel}. Edit any line; the Custom CSS block wins over the structured fields above. */`
-      : '/* Baseline copied from current draft. Edit any line; the Custom CSS block wins over the structured fields above. */',
+    '/* Baseline copied from current draft. Edit any line; the Custom CSS block wins over the structured fields above. */',
     '',
   );
 
-  if (palLines.length || chromeLines.length) {
+  if (palDarkLines.length || chromeDarkLines.length) {
     out.push(':root {');
-    if (palLines.length) out.push('  /* Quasar palette */', ...palLines);
-    if (palLines.length && chromeLines.length) out.push('');
-    if (chromeLines.length) out.push('  /* Creuser chrome (dark mode) */', ...chromeLines);
+    if (palDarkLines.length) out.push('  /* Quasar palette (dark mode) */', ...palDarkLines);
+    if (palDarkLines.length && chromeDarkLines.length) out.push('');
+    if (chromeDarkLines.length) out.push('  /* Creuser chrome (dark mode) */', ...chromeDarkLines);
     out.push('}', '');
   }
 
-  if (lightLines.length) {
-    out.push('.body--light {', '  /* Creuser chrome (light mode) */', ...lightLines, '}', '');
+  if (palLightLines.length || chromeLightLines.length) {
+    out.push('.body--light {');
+    if (palLightLines.length) out.push('  /* Quasar palette (light mode) */', ...palLightLines);
+    if (palLightLines.length && chromeLightLines.length) out.push('');
+    if (chromeLightLines.length)
+      out.push('  /* Creuser chrome (light mode) */', ...chromeLightLines);
+    out.push('}', '');
   }
 
   // Dockview variables are auto-derived in theme.scss from --cr-*/--q-*
@@ -501,13 +584,7 @@ function buildBaselineSnippet(d: BrandingConfig, presetLabel: string | null): st
 }
 
 function onInsertBaseline() {
-  const preset = detectActivePreset(
-    draft.palette,
-    draft.chrome,
-    draft.chromeLight,
-    draft.mode === 'light' ? 'light' : 'dark',
-  );
-  const snippet = buildBaselineSnippet(draft, preset?.label ?? null);
+  const snippet = buildBaselineSnippet(draft);
   // If the textarea already has content, keep it and prepend the baseline
   // with a separator so the admin's prior work isn't clobbered. Otherwise
   // just drop the baseline in directly.
@@ -518,49 +595,58 @@ function onInsertBaseline() {
 
 const isDirty = computed(() => JSON.stringify(draft) !== JSON.stringify(branding.config));
 
-const activePresetId = computed(() => {
-  const match = detectActivePreset(
-    draft.palette,
-    draft.chrome,
-    draft.chromeLight,
-    draft.mode === 'light' ? 'light' : 'dark',
-  );
-  return match?.id ?? null;
-});
+// Each mode's slot is matched against its own pool of presets independently.
+// `Custom` shows in the picker when the user has tweaked colors away from
+// any preset for that mode.
+const activeDarkPresetId = computed(
+  () => detectActivePreset(draft.palette, draft.chrome, 'dark')?.id ?? null,
+);
+const activeLightPresetId = computed(
+  () => detectActivePreset(draft.paletteLight, draft.chromeLight, 'light')?.id ?? null,
+);
 
-function onPickPreset(preset: PalettePreset) {
-  // Overwrite palette + both chrome blocks AND `mode` (each preset is now
-  // either dark-only or light-only and pairs 1:1 with a dockview theme,
-  // so picking "Dracula" should flip the default mode to dark even if the
-  // admin was previewing in light). Identity, fonts, and custom CSS are
-  // preserved so an admin can pick a preset without losing their product
-  // name, logo, or font choice.
+function onPickDarkPreset(preset: PalettePreset) {
+  // Writes only to the dark slot — paletteLight, chromeLight, and the
+  // admin's "default mode for new users" setting are preserved so a dark
+  // preset pick doesn't disturb the light side of the brand.
   draft.palette = JSON.parse(JSON.stringify(preset.palette)) as typeof draft.palette;
   draft.chrome = JSON.parse(JSON.stringify(preset.chrome)) as typeof draft.chrome;
-  draft.chromeLight = JSON.parse(JSON.stringify(preset.chromeLight)) as typeof draft.chromeLight;
-  draft.mode = preset.mode;
   onLiveChange();
 }
 
-const chromeModeLabel = computed(() => (themeMode.effective === 'light' ? 'Light' : 'Dark'));
+function onPickLightPreset(preset: PalettePreset) {
+  // Light presets ship their palette in `palette` and their chrome in
+  // `chromeLight` (the `chrome` field is empty `{}` for light presets),
+  // so we pull from each preset field into the appropriate config slot.
+  draft.paletteLight = JSON.parse(JSON.stringify(preset.palette)) as typeof draft.paletteLight;
+  draft.chromeLight = JSON.parse(JSON.stringify(preset.chromeLight)) as typeof draft.chromeLight;
+  onLiveChange();
+}
 
 function paletteValue(key: PaletteKey): string {
-  return draft.palette?.[key] ?? '';
+  const slot = paletteEditMode.value === 'light' ? draft.paletteLight : draft.palette;
+  return slot?.[key] ?? '';
 }
 
 function setPalette(key: PaletteKey, value: string) {
-  if (!draft.palette) draft.palette = {};
-  draft.palette[key] = value === '' ? null : value;
+  const isLight = paletteEditMode.value === 'light';
+  if (isLight) {
+    if (!draft.paletteLight) draft.paletteLight = {};
+    draft.paletteLight[key] = value === '' ? null : value;
+  } else {
+    if (!draft.palette) draft.palette = {};
+    draft.palette[key] = value === '' ? null : value;
+  }
   onLiveChange();
 }
 
 function chromeValue(key: ChromeKey): string {
-  const slot = themeMode.effective === 'light' ? draft.chromeLight : draft.chrome;
+  const slot = chromeEditMode.value === 'light' ? draft.chromeLight : draft.chrome;
   return slot?.[key] ?? '';
 }
 
 function setChrome(key: ChromeKey, value: string) {
-  const isLight = themeMode.effective === 'light';
+  const isLight = chromeEditMode.value === 'light';
   if (isLight) {
     if (!draft.chromeLight) draft.chromeLight = {};
     draft.chromeLight[key] = value === '' ? null : value;
@@ -610,8 +696,9 @@ function onResetAll() {
   $q.dialog({
     title: 'Reset all branding?',
     message:
-      'This reverts every branding setting (logo, palette, chrome, typography, custom CSS) ' +
-      'back to the bundled defaults. Click Save afterward to persist for everyone.',
+      'This reverts every branding setting (logos, palette + chrome for both modes, ' +
+      'typography, custom CSS) back to the bundled defaults. Click Save afterward to persist ' +
+      'for everyone.',
     ok: { label: 'Reset all', color: 'negative', unelevated: true, noCaps: true },
     cancel: { flat: true, noCaps: true },
     persistent: true,
@@ -743,6 +830,72 @@ onMounted(honorExpandQuery);
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
+}
+
+// Two side-by-side logo upload fields (dark + light). Stacks on narrow widths.
+.cr-branding-logos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.cr-branding-logo-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cr-branding-logo-slot-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--cr-fg-secondary);
+  text-transform: uppercase;
+}
+
+.cr-branding-logo-slot-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--cr-fg-tertiary);
+  line-height: 1.4;
+}
+
+// Two side-by-side preset pickers (dark + light) for the Base theme presets
+// section. Stacks on narrow widths.
+.cr-branding-presets-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.cr-branding-preset-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cr-branding-preset-slot-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--cr-fg-secondary);
+  margin: 0;
+}
+
+// Dark/Light tabs above the Palette and Chrome editing grids — explicit
+// per-mode editing target, decoupled from the user's header theme toggle.
+.cr-branding-mode-tabs {
+  align-self: flex-start;
+  min-height: 28px;
+  border-bottom: 1px solid var(--cr-border-subtle);
+
+  :deep(.q-tab) {
+    min-height: 28px;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
 }
 
 .cr-branding-css-actions {

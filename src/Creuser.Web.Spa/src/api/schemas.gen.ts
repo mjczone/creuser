@@ -789,11 +789,13 @@ export const BrandingConfigSchema = {
   required: [
     'productName',
     'logoUrl',
+    'logoUrlLight',
     'faviconUrl',
     'loginBackgroundUrl',
     'loginTagline',
     'mode',
     'palette',
+    'paletteLight',
     'chrome',
     'chromeLight',
     'fontFamily',
@@ -810,6 +812,9 @@ export const BrandingConfigSchema = {
     logoUrl: {
       type: ['null', 'string'],
     },
+    logoUrlLight: {
+      type: ['null', 'string'],
+    },
     faviconUrl: {
       type: ['null', 'string'],
     },
@@ -823,6 +828,9 @@ export const BrandingConfigSchema = {
       type: 'string',
     },
     palette: {
+      $ref: '#/components/schemas/BrandPalette',
+    },
+    paletteLight: {
       $ref: '#/components/schemas/BrandPalette',
     },
     chrome: {

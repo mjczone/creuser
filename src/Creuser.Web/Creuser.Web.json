@@ -3370,11 +3370,13 @@
         "required": [
           "productName",
           "logoUrl",
+          "logoUrlLight",
           "faviconUrl",
           "loginBackgroundUrl",
           "loginTagline",
           "mode",
           "palette",
+          "paletteLight",
           "chrome",
           "chromeLight",
           "fontFamily",
@@ -3389,6 +3391,12 @@
             "type": "string"
           },
           "logoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "logoUrlLight": {
             "type": [
               "null",
               "string"
@@ -3416,6 +3424,9 @@
             "type": "string"
           },
           "palette": {
+            "$ref": "#/components/schemas/BrandPalette"
+          },
+          "paletteLight": {
             "$ref": "#/components/schemas/BrandPalette"
           },
           "chrome": {

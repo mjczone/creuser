@@ -91,6 +91,7 @@ import 'dockview-core/dist/styles/dockview.css';
 import { useDashboardsStore } from 'src/stores/dashboards';
 import { useAuthStore } from 'src/stores/auth';
 import { useBrandingStore } from 'src/stores/branding';
+import { useThemeModeStore } from 'src/stores/themeMode';
 import { detectActivePreset } from 'src/css/palettes/registry';
 import AddWidgetDialog from 'src/components/AddWidgetDialog.vue';
 
@@ -112,6 +113,7 @@ const $q = useQuasar();
 const dashboardsStore = useDashboardsStore();
 const auth = useAuthStore();
 const branding = useBrandingStore();
+const themeMode = useThemeModeStore();
 
 /**
  * Resolve the dockview theme to apply, plus whether the canvas should
@@ -126,15 +128,21 @@ const branding = useBrandingStore();
  *     the surrounding `--cr-*` chrome tokens instead.
  *   - Custom configs (admin tweaked colors away from any preset) fall
  *     back to the Creuser-mapped path on `themeAbyss`.
+ *
+ * The match runs against the slot for the user's *effective* mode — dark
+ * slot (palette + chrome) when the user is viewing dark, light slot
+ * (paletteLight + chromeLight) when viewing light — so a header theme
+ * toggle reactively swaps both the `--cr-*` chrome and the dockview
+ * theme to match.
  */
-const activePreset = computed(() =>
-  detectActivePreset(
-    branding.liveConfig.palette,
-    branding.liveConfig.chrome,
-    branding.liveConfig.chromeLight,
-    branding.liveConfig.mode === 'light' ? 'light' : 'dark',
-  ),
-);
+const activePreset = computed(() => {
+  const isLight = themeMode.effective === 'light';
+  return detectActivePreset(
+    isLight ? branding.liveConfig.paletteLight : branding.liveConfig.palette,
+    isLight ? branding.liveConfig.chromeLight : branding.liveConfig.chrome,
+    isLight ? 'light' : 'dark',
+  );
+});
 const dockviewTheme = computed<DockviewTheme>(
   () => activePreset.value?.dockviewTheme ?? themeAbyss,
 );

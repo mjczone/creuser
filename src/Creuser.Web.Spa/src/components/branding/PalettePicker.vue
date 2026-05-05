@@ -1,40 +1,26 @@
 <template>
   <div class="cr-palette-picker">
-    <div v-for="group in groups" :key="group.label" class="cr-palette-group">
-      <h3 class="cr-palette-group-title">{{ group.label }}</h3>
-      <div class="cr-palette-grid">
-        <button
-          v-for="preset in group.presets"
-          :key="preset.id"
-          type="button"
-          class="cr-palette-card"
-          :class="{ 'cr-palette-card--active': preset.id === activeId }"
-          :data-preset-id="preset.id"
-          :title="preset.description"
-          @click="onPick(preset.id)"
-        >
-          <div class="cr-palette-swatches" :aria-hidden="true">
-            <span
-              v-for="(color, i) in preset.swatches"
-              :key="i"
-              class="cr-palette-swatch"
-              :style="{ background: color }"
-            />
-          </div>
-          <span class="cr-palette-label">{{ preset.label }}</span>
-        </button>
-
-        <div
-          v-if="!activeId && group.label === 'Custom'"
-          class="cr-palette-card cr-palette-card--custom"
-          aria-hidden="true"
-        >
-          <div class="cr-palette-swatches">
-            <span class="cr-palette-swatch cr-palette-swatch--custom">…</span>
-          </div>
-          <span class="cr-palette-label">Custom</span>
+    <div class="cr-palette-grid">
+      <button
+        v-for="preset in presets"
+        :key="preset.id"
+        type="button"
+        class="cr-palette-card"
+        :class="{ 'cr-palette-card--active': preset.id === activeId }"
+        :data-preset-id="preset.id"
+        :title="preset.description"
+        @click="onPick(preset.id)"
+      >
+        <div class="cr-palette-swatches" :aria-hidden="true">
+          <span
+            v-for="(color, i) in preset.swatches"
+            :key="i"
+            class="cr-palette-swatch"
+            :style="{ background: color }"
+          />
         </div>
-      </div>
+        <span class="cr-palette-label">{{ preset.label }}</span>
+      </button>
     </div>
 
     <p v-if="!activeId" class="cr-palette-custom-note">
@@ -46,26 +32,27 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { PALETTE_PRESETS, type PalettePreset } from 'src/css/palettes/registry';
+import {
+  PALETTE_PRESETS,
+  type PalettePreset,
+  type PresetMode,
+} from 'src/css/palettes/registry';
 
 interface Props {
+  /** Filter the picker to presets for this mode only (dark or light). */
+  mode: PresetMode;
+  /** ID of the preset currently considered active for this slot, or null. */
   activeId: string | null;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 const emit = defineEmits<{
   pick: [preset: PalettePreset];
 }>();
 
-interface Group {
-  label: string;
-  presets: PalettePreset[];
-}
-
-const groups = computed<Group[]>(() => [
-  { label: 'Dark mode', presets: PALETTE_PRESETS.filter((p) => p.mode === 'dark') },
-  { label: 'Light mode', presets: PALETTE_PRESETS.filter((p) => p.mode === 'light') },
-]);
+const presets = computed<PalettePreset[]>(() =>
+  PALETTE_PRESETS.filter((p) => p.mode === props.mode),
+);
 
 function onPick(id: string) {
   const preset = PALETTE_PRESETS.find((p) => p.id === id);
@@ -77,16 +64,7 @@ function onPick(id: string) {
 .cr-palette-picker {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-
-.cr-palette-group-title {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--cr-fg-tertiary);
-  margin: 0 0 8px;
+  gap: 12px;
 }
 
 .cr-palette-grid {

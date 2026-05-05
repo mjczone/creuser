@@ -1,10 +1,14 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
-import { computed, ref } from 'vue';
-import { setCssVar } from 'quasar';
+import { computed, ref, watch } from 'vue';
 import { Branding } from 'src/api';
 import type { BrandingConfig as ApiBrandingConfig } from 'src/api';
 import { useThemeModeStore } from 'stores/themeMode';
 import { loadIfBundled } from 'src/css/fonts/registry';
+import {
+  CREUSER_BUNDLED_PALETTE,
+  CREUSER_BUNDLED_CHROME_DARK,
+  CREUSER_BUNDLED_CHROME_LIGHT,
+} from 'src/css/palettes/registry';
 
 export type BrandingConfig = ApiBrandingConfig;
 
@@ -14,23 +18,44 @@ export type BrandingConfig = ApiBrandingConfig;
 // before assigning to a draft.
 export const defaultBranding: BrandingConfig = {
   productName: 'Creuser',
-  // Match the C# BrandingConfig.Default — points at the bundled logo + ico
-  // in `public/`. Used when the API call fails or hasn't returned yet so
-  // there's no flash of an unbranded "C" placeholder before the API hydrates.
-  logoUrl: '/logo.svg',
+  // Match the C# BrandingConfig.Default — points at the bundled per-mode
+  // Creuser logos plus the icongenie-regenerated favicon, all under
+  // `public/`. Used when the API call fails or hasn't returned yet so
+  // there's no flash of an unbranded "C" placeholder before the API
+  // hydrates. The two logo URLs let the sidebar / login / favicon pick
+  // the right asset for the user's effective mode out of the box.
+  logoUrl: '/logo-dark.svg',
+  logoUrlLight: '/logo-light.svg',
   faviconUrl: '/favicon.ico',
   loginBackgroundUrl: null,
   loginTagline: 'Workflow & agent orchestration',
   mode: 'dark',
-  palette: {},
-  chrome: {},
-  chromeLight: {},
+  // Each slot mirrors the corresponding bundled SCSS values so Reset All
+  // (which copies defaultBranding into the draft) lands on a config that
+  // exactly matches the Creuser Dark + Creuser Light presets — the
+  // detect-active-preset comparison is a strict canonical equality, so an
+  // empty `{}` here would read as "Custom" instead of "Creuser Dark".
+  // Sourced from src/css/palettes/registry.ts (which itself mirrors the
+  // SCSS — single edit point per side, two-way comments keep them honest).
+  palette: { ...CREUSER_BUNDLED_PALETTE },
+  paletteLight: { ...CREUSER_BUNDLED_PALETTE },
+  chrome: { ...CREUSER_BUNDLED_CHROME_DARK },
+  chromeLight: { ...CREUSER_BUNDLED_CHROME_LIGHT },
   fontFamily: null,
   fontFamilyMono: null,
   customCss: null,
   footerText: null,
   supportEmail: null,
 };
+
+// Every URL in this set is a bundled-default placeholder, not an admin
+// choice. Treated as "unset" by the favicon picker so a row with
+// `logoUrl: "/logo-dark.svg"` falls through to the bundled `.ico` instead
+// of trying to render the generic SVG as a 16x16 tab icon.
+//
+// Includes `/logo.svg` for older saved configs that still point at it,
+// even though the current default is the per-mode pair.
+const BUNDLED_LOGO_URLS = new Set<string>(['/logo.svg', '/logo-dark.svg', '/logo-light.svg']);
 
 export const PALETTE_KEYS = [
   'primary',
@@ -88,6 +113,27 @@ function buildChromeRules(
   return declarations ? `${selector} {\n${declarations}\n}` : '';
 }
 
+// Quasar palette is now applied via the same injected stylesheet that handles
+// chrome — `:root { --q-primary: ... }` for the dark slot and
+// `.body--light { --q-primary: ... }` for the light slot — so a header theme
+// toggle flips Quasar's brand colors via CSS cascade without any JS work.
+// Keys not set in `paletteLight` simply inherit the `:root` value, which
+// matches the legacy single-palette behavior for partially-customized
+// configs.
+function buildPaletteRules(
+  selector: string,
+  palette: Record<string, string | null | undefined> | null | undefined,
+): string {
+  if (!palette) return '';
+  const declarations = PALETTE_KEYS.map((key) => {
+    const value = palette[key];
+    return value ? `  --q-${quasarKey(key)}: ${value};` : null;
+  })
+    .filter((s): s is string => s !== null)
+    .join('\n');
+  return declarations ? `${selector} {\n${declarations}\n}` : '';
+}
+
 function buildTypographyRules(next: BrandingConfig): string {
   const declarations: string[] = [];
   if (next.fontFamily) declarations.push(`  --cr-font-family: ${next.fontFamily};`);
@@ -99,18 +145,23 @@ function buildTypographyRules(next: BrandingConfig): string {
  * Build the full stylesheet body that the injected style tag carries.
  * Order matters — later rules override earlier ones:
  *   1. typography (font-family vars on :root)
- *   2. dark-mode chrome (:root)
- *   3. light-mode chrome (.body--light)
- *   4. admin's custom CSS (wins over everything)
+ *   2. dark-mode palette (:root)
+ *   3. light-mode palette (.body--light)
+ *   4. dark-mode chrome (:root)
+ *   5. light-mode chrome (.body--light)
+ *   6. admin's custom CSS (wins over everything)
  *
- * Quasar palette colors (--q-primary, etc.) are NOT in this stylesheet.
- * They're set via `setCssVar` directly on the document root because Quasar
- * components reference them with the same `:root` precedence and we want
- * a single source of truth for them.
+ * Both Quasar palette tokens (`--q-*`) and Creuser chrome tokens (`--cr-*`)
+ * live in this stylesheet. The `:root` block sets the dark-mode values; the
+ * `.body--light` block overrides for light. When the user toggles their
+ * theme (top right), Quasar swaps the body class and the cascade does the
+ * rest — no JS palette work happens on toggle.
  */
 function buildStyleSheet(next: BrandingConfig): string {
   const blocks = [
     buildTypographyRules(next),
+    buildPaletteRules(':root', next.palette ?? null),
+    buildPaletteRules('.body--light', next.paletteLight ?? null),
     buildChromeRules(':root', next.chrome ?? null),
     buildChromeRules('.body--light', next.chromeLight ?? null),
     next.customCss?.trim() ? `/* custom */\n${next.customCss}` : '',
@@ -133,6 +184,7 @@ function mergeWithDefaults(saved: BrandingConfig): BrandingConfig {
   return {
     ...saved,
     logoUrl: saved.logoUrl ?? defaultBranding.logoUrl,
+    logoUrlLight: saved.logoUrlLight ?? defaultBranding.logoUrlLight,
     faviconUrl: saved.faviconUrl ?? defaultBranding.faviconUrl,
     loginTagline: saved.loginTagline ?? defaultBranding.loginTagline,
   };
@@ -183,6 +235,31 @@ function setFavicon(url: string | null) {
   managed.href = url ?? '/favicon.ico';
 }
 
+// The bundled URLs in `defaultBranding` double as "no admin choice yet"
+// sentinels — they're seeded into the C# default and persisted to
+// `cr.app_settings` on first save, so a row with `faviconUrl: "/favicon.ico"`
+// almost always means "admin never picked one" rather than "admin deliberately
+// pointed the favicon at the bundled ICO". Treat those literal defaults as
+// unset so a logo upload becomes the favicon without requiring a separate
+// favicon field. An admin who genuinely wants a custom favicon can set
+// `faviconUrl` to any other URL via the API and that value wins.
+//
+// `isLight` mirrors the sidebar/login resolution from `effectiveLogoUrl`:
+// when the user is in light mode and the admin uploaded a `logoUrlLight`,
+// the favicon picks that asset; otherwise it falls back to the dark-mode
+// logo. The store wires this to `themeMode.effective` so toggling the
+// header theme reactively swaps the browser-tab icon too.
+function pickFaviconHref(b: BrandingConfig, isLight: boolean): string | null {
+  const customFavicon =
+    b.faviconUrl && b.faviconUrl !== defaultBranding.faviconUrl ? b.faviconUrl : null;
+  const lightLogo =
+    isLight && b.logoUrlLight && b.logoUrlLight.trim().length > 0 ? b.logoUrlLight : null;
+  const effectiveLogo = lightLogo ?? b.logoUrl;
+  const customLogo =
+    effectiveLogo && !BUNDLED_LOGO_URLS.has(effectiveLogo) ? effectiveLogo : null;
+  return customFavicon ?? customLogo;
+}
+
 export const useBrandingStore = defineStore('branding', () => {
   // `config` is the canonical saved state — what's persisted on the server.
   // The Branding page's dirty-tracking compares its draft against this, and
@@ -204,12 +281,28 @@ export const useBrandingStore = defineStore('branding', () => {
   const logoUrl = computed(() => liveConfig.value.logoUrl);
   const mode = computed(() => liveConfig.value.mode);
 
+  // The logo asset that should render at the user's *current* effective
+  // theme — picks `logoUrlLight` in light mode when the admin uploaded one,
+  // otherwise falls back to `logoUrl`. Sidebar, login, and any other
+  // chrome consumers should bind to this rather than `logoUrl` so a
+  // header-toggle flip swaps the asset reactively.
+  const effectiveLogoUrl = computed(() => {
+    const themeMode = useThemeModeStore();
+    if (themeMode.effective === 'light') {
+      const lightLogo = liveConfig.value.logoUrlLight;
+      if (lightLogo && lightLogo.trim().length > 0) return lightLogo;
+    }
+    return liveConfig.value.logoUrl;
+  });
+
   /**
    * Push a config into the live document — visual side effects only.
-   * Quasar palette colors go via `setCssVar` (matches Quasar's own component
-   * expectations); chrome tokens, typography, and custom CSS go into a
-   * single injected `<style>` tag so per-mode rules and admin-authored
-   * selectors apply with the right precedence.
+   * Both the Quasar palette and Creuser chrome tokens go into a single
+   * injected `<style>` tag, with `:root` carrying the dark-mode values and
+   * `.body--light` overriding for light. The user's header theme toggle
+   * already drives `Dark.set()` (via the themeMode store), which adds /
+   * removes `.body--light` on the body — palette + chrome both flip via
+   * cascade with no further JS work.
    *
    * Crucially this does NOT update `config.value` — it's the live-preview
    * surface. Callers that need to mark the config canonically saved (load,
@@ -226,19 +319,13 @@ export const useBrandingStore = defineStore('branding', () => {
     const themeMode = useThemeModeStore();
     themeMode.setAdminDefault(next.mode === 'light' ? 'light' : 'dark');
 
-    // Clear any prior palette overrides before applying the new ones.
-    // Quasar's `setCssVar` writes inline styles onto document.body; if a new
-    // preset omits a key (e.g. Creuser Default uses an empty palette to fall
-    // back to the SCSS build-time defaults), the prior preset's inline value
-    // for that key would otherwise persist. Remove all known palette
-    // properties first, then re-apply only the values present in `next`.
-    const palette = (next.palette ?? {}) as Record<string, string | null | undefined>;
+    // Earlier versions of this code applied palette via Quasar's
+    // `setCssVar`, which writes inline styles onto document.body. Inline
+    // styles outrank `:root` rules in our injected stylesheet, so any
+    // leftover inline value would prevent the new per-mode CSS from
+    // taking effect. Clear them once on every preview as a safety net.
     for (const key of PALETTE_KEYS) {
       document.body.style.removeProperty(`--q-${quasarKey(key)}`);
-    }
-    for (const key of PALETTE_KEYS) {
-      const value = palette[key];
-      if (value) setCssVar(quasarKey(key), value);
     }
 
     // Lazy-load any bundled fontsource font referenced by this config.
@@ -251,9 +338,24 @@ export const useBrandingStore = defineStore('branding', () => {
 
     // Favicon defaults to the uploaded logo when no separate faviconUrl is
     // set — one upload covers both surfaces, with an override path for
-    // organizations that want a different glyph in the browser tab.
-    setFavicon(next.faviconUrl ?? next.logoUrl);
+    // organizations that want a different glyph in the browser tab. Picks
+    // the light-mode logo when the user is currently viewing light, mirroring
+    // the sidebar/login resolution.
+    setFavicon(pickFaviconHref(next, themeMode.effective === 'light'));
   }
+
+  // Browser tab icon needs to track the user's effective mode reactively,
+  // not just at preview() time. Without this watcher, a header theme toggle
+  // flips the sidebar logo (via the `effectiveLogoUrl` computed) but the
+  // favicon stays pinned to whatever mode preview() last ran in. Re-runs
+  // setFavicon whenever the effective mode flips.
+  const themeModeStore = useThemeModeStore();
+  watch(
+    () => themeModeStore.effective,
+    (mode) => {
+      setFavicon(pickFaviconHref(liveConfig.value, mode === 'light'));
+    },
+  );
 
   /**
    * Mark `next` as the canonical saved config and reflect it visually.
@@ -297,6 +399,7 @@ export const useBrandingStore = defineStore('branding', () => {
     isSaving,
     productName,
     logoUrl,
+    effectiveLogoUrl,
     mode,
     preview,
     apply,

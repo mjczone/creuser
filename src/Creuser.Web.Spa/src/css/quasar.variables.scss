@@ -10,6 +10,19 @@
 // Creuser-specific chrome variables (header bg, sidebar bg, borders, etc.)
 // are *not* part of Quasar's brand palette — they live in `theme.scss` as
 // `--cr-*` CSS variables and are consumed directly by component styles.
+//
+// ⚠️ KEEP IN SYNC ⚠️
+// The values below are duplicated in two TypeScript places so that the
+// Branding admin page can show populated palette fields when "Creuser
+// Dark" or "Creuser Light" is picked, and so a fresh server install lands
+// on those presets:
+//
+//   1. src/css/palettes/registry.ts → `CREUSER_PALETTE`
+//   2. src/Creuser.Web/Branding/BrandingConfig.cs → `BrandingConfig.Default.Palette` / `.PaletteLight`
+//
+// When you change a value here, update both. Otherwise the page will keep
+// rendering correctly (the SCSS still wins at build time) but the picker
+// will start showing "Custom" instead of the matching Creuser preset.
 
 // Creuser brand palette — sourced from the logo (sage on dark teal-forest).
 $primary: #5c7e62; // sage green — the brand accent
