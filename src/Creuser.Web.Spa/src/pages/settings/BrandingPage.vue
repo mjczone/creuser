@@ -151,11 +151,7 @@
           <div class="cr-branding-presets-pair">
             <div class="cr-branding-preset-slot">
               <h3 class="cr-branding-preset-slot-title">Dark mode base</h3>
-              <PalettePicker
-                mode="dark"
-                :active-id="activeDarkPresetId"
-                @pick="onPickDarkPreset"
-              />
+              <PalettePicker mode="dark" :active-id="activeDarkPresetId" @pick="onPickDarkPreset" />
             </div>
             <div class="cr-branding-preset-slot">
               <h3 class="cr-branding-preset-slot-title">Light mode base</h3>
@@ -283,9 +279,8 @@
               @click="onInsertBaseline"
             >
               <q-tooltip>
-                Drop a starter block — Quasar palette + Creuser chrome (both modes) plus a
-                commented dockview block — into the editor. Useful as a starting point when
-                customizing.
+                Drop a starter block — Quasar palette + Creuser chrome (both modes) plus a commented
+                dockview block — into the editor. Useful as a starting point when customizing.
               </q-tooltip>
             </q-btn>
           </div>
@@ -293,7 +288,11 @@
           <details class="cr-branding-help">
             <summary>Available tokens and mode selectors</summary>
             <div class="cr-branding-help-body">
-              <p><strong>Per-mode rules — wrap any selector with the body class for that mode:</strong></p>
+              <p>
+                <strong
+                  >Per-mode rules — wrap any selector with the body class for that mode:</strong
+                >
+              </p>
               <pre>
 body.body--dark  .cr-drawer { background: #0c2422; }
 body.body--light .cr-drawer { background: #ffffff; color: #1f2328; }</pre

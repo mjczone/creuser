@@ -32,11 +32,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import {
-  PALETTE_PRESETS,
-  type PalettePreset,
-  type PresetMode,
-} from 'src/css/palettes/registry';
+import { PALETTE_PRESETS, type PalettePreset, type PresetMode } from 'src/css/palettes/registry';
 
 interface Props {
   /** Filter the picker to presets for this mode only (dark or light). */

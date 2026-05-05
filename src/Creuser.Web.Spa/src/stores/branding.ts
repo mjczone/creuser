@@ -255,8 +255,7 @@ function pickFaviconHref(b: BrandingConfig, isLight: boolean): string | null {
   const lightLogo =
     isLight && b.logoUrlLight && b.logoUrlLight.trim().length > 0 ? b.logoUrlLight : null;
   const effectiveLogo = lightLogo ?? b.logoUrl;
-  const customLogo =
-    effectiveLogo && !BUNDLED_LOGO_URLS.has(effectiveLogo) ? effectiveLogo : null;
+  const customLogo = effectiveLogo && !BUNDLED_LOGO_URLS.has(effectiveLogo) ? effectiveLogo : null;
   return customFavicon ?? customLogo;
 }
 
