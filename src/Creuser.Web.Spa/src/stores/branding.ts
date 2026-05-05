@@ -86,6 +86,15 @@ export const CHROME_KEYS = [
 export type ChromeKey = (typeof CHROME_KEYS)[number];
 
 const STYLE_TAG_ID = 'cr-branding-overrides';
+// Admin-authored Custom CSS lives in its own style tag so an admin's
+// `@import url(...)` lines (e.g. Google Fonts) sit at the top of *that*
+// stylesheet, not after the structured palette/chrome rules. The CSS
+// spec scopes `@import`'s "must come first" requirement per stylesheet,
+// not per document — so a separate tag is the natural fix. The custom
+// tag is appended after the overrides tag, which keeps cascade
+// precedence intact for equally-specific selectors (last stylesheet
+// wins).
+const CUSTOM_STYLE_TAG_ID = 'cr-branding-custom';
 
 // Quasar's setCssVar uses kebab-case keys for `dark-page` etc. Exported so
 // the BrandingPage's "insert baseline tokens" button can format `--q-*`
@@ -142,20 +151,24 @@ function buildTypographyRules(next: BrandingConfig): string {
 }
 
 /**
- * Build the full stylesheet body that the injected style tag carries.
- * Order matters — later rules override earlier ones:
+ * Build the structured-overrides stylesheet that the `cr-branding-overrides`
+ * tag carries. Order matters — later rules override earlier ones:
  *   1. typography (font-family vars on :root)
  *   2. dark-mode palette (:root)
  *   3. light-mode palette (.body--light)
  *   4. dark-mode chrome (:root)
  *   5. light-mode chrome (.body--light)
- *   6. admin's custom CSS (wins over everything)
  *
  * Both Quasar palette tokens (`--q-*`) and Creuser chrome tokens (`--cr-*`)
  * live in this stylesheet. The `:root` block sets the dark-mode values; the
  * `.body--light` block overrides for light. When the user toggles their
  * theme (top right), Quasar swaps the body class and the cascade does the
  * rest — no JS palette work happens on toggle.
+ *
+ * Admin-authored Custom CSS goes into a separate `cr-branding-custom`
+ * tag (see CUSTOM_STYLE_TAG_ID) so its `@import` lines stay valid — the
+ * CSS spec rejects @import after any non-@charset/@layer rule in the
+ * same stylesheet.
  */
 function buildStyleSheet(next: BrandingConfig): string {
   const blocks = [
@@ -164,7 +177,6 @@ function buildStyleSheet(next: BrandingConfig): string {
     buildPaletteRules('.body--light', next.paletteLight ?? null),
     buildChromeRules(':root', next.chrome ?? null),
     buildChromeRules('.body--light', next.chromeLight ?? null),
-    next.customCss?.trim() ? `/* custom */\n${next.customCss}` : '',
   ].filter(Boolean);
   return blocks.join('\n\n');
 }
@@ -197,6 +209,27 @@ function ensureStyleTag(): HTMLStyleElement {
     el.id = STYLE_TAG_ID;
     document.head.appendChild(el);
   }
+  return el;
+}
+
+// Companion to ensureStyleTag for the admin's Custom CSS. Always
+// (re-)appended after the overrides tag so document order is
+// `<head>... overrides ... custom ...</head>` — which means custom CSS
+// wins on cascade for equally-specific selectors. `appendChild` on an
+// element already in `<head>` moves it to the end, so this is
+// idempotent and self-correcting if some other code appends head
+// elements between calls.
+function ensureCustomStyleTag(): HTMLStyleElement {
+  // Make sure the overrides tag exists first so cascade order is
+  // guaranteed even if the custom tag was created earlier (e.g., HMR
+  // replaying the order in which the store was instantiated).
+  ensureStyleTag();
+  let el = document.getElementById(CUSTOM_STYLE_TAG_ID) as HTMLStyleElement | null;
+  if (!el) {
+    el = document.createElement('style');
+    el.id = CUSTOM_STYLE_TAG_ID;
+  }
+  document.head.appendChild(el);
   return el;
 }
 
@@ -334,6 +367,13 @@ export const useBrandingStore = defineStore('branding', () => {
     loadIfBundled(next.fontFamilyMono);
 
     ensureStyleTag().textContent = buildStyleSheet(next);
+    // Custom CSS goes in its own tag so admin-authored `@import` lines
+    // (Google Fonts, etc.) stay at the top of *that* stylesheet — the
+    // browser drops `@import` rules that appear after any other at-rule
+    // in the same stylesheet. Empty string when the admin hasn't set
+    // any custom CSS, which clears the tag's contents but leaves the
+    // tag in place (cheap, avoids a flash on the next save).
+    ensureCustomStyleTag().textContent = next.customCss?.trim() ?? '';
 
     // Favicon defaults to the uploaded logo when no separate faviconUrl is
     // set — one upload covers both surfaces, with an override path for
