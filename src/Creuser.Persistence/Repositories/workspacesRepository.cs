@@ -146,6 +146,39 @@ public sealed class workspacesRepository : IWorkspaceStore
         );
     }
 
+    public async Task UpdatePushStatusAsync(
+        Guid id,
+        DateTime pushedAt,
+        string status,
+        string? sha,
+        string? message,
+        CancellationToken ct = default
+    )
+    {
+        await using var conn = await _ds.OpenConnectionAsync(ct);
+        await conn.ExecuteAsync(
+            new CommandDefinition(
+                $"""
+                UPDATE {SchemaTable}
+                   SET last_push_at      = @pushedAt,
+                       last_push_status  = @status,
+                       last_push_sha     = @sha,
+                       last_push_message = @message
+                 WHERE id = @id
+                """,
+                new
+                {
+                    id,
+                    pushedAt,
+                    status,
+                    sha,
+                    message,
+                },
+                cancellationToken: ct
+            )
+        );
+    }
+
     private static Workspace ToDomain(workspaces r) =>
         new(
             r.id,
@@ -160,7 +193,11 @@ public sealed class workspacesRepository : IWorkspaceStore
             r.last_sync_at,
             r.last_sync_sha,
             r.last_sync_status,
-            r.last_sync_message
+            r.last_sync_message,
+            r.last_push_at,
+            r.last_push_sha,
+            r.last_push_status,
+            r.last_push_message
         );
 
     private static workspaces ToRow(Workspace w) =>
@@ -179,5 +216,9 @@ public sealed class workspacesRepository : IWorkspaceStore
             last_sync_sha = w.LastSyncSha,
             last_sync_status = w.LastSyncStatus,
             last_sync_message = w.LastSyncMessage,
+            last_push_at = w.LastPushAt,
+            last_push_sha = w.LastPushSha,
+            last_push_status = w.LastPushStatus,
+            last_push_message = w.LastPushMessage,
         };
 }

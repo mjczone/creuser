@@ -27,7 +27,15 @@ public sealed record Workspace(
     /// <summary>One of <c>ok</c>, <c>failed</c>, or null (never synced).</summary>
     string? LastSyncStatus = null,
     /// <summary>Free-text message from the last sync — git stderr on failure, success summary on success.</summary>
-    string? LastSyncMessage = null
+    string? LastSyncMessage = null,
+    /// <summary>UTC time of the most recent push attempt — null until the first push.</summary>
+    DateTime? LastPushAt = null,
+    /// <summary>Resolved commit SHA after the last successful push (HEAD at push time). Null on failure or for non-git types.</summary>
+    string? LastPushSha = null,
+    /// <summary>One of <c>ok</c>, <c>nothing-to-push</c>, <c>failed</c>, or null (never pushed).</summary>
+    string? LastPushStatus = null,
+    /// <summary>Free-text message from the last push — git stderr on failure, success summary on success.</summary>
+    string? LastPushMessage = null
 );
 
 public static class WorkspaceType
@@ -53,8 +61,14 @@ public static class GitWorkspaceMode
 
 public static class GitWorkspacePushFrequency
 {
+    /// <summary>Push every commit to the remote as soon as it lands locally.</summary>
     public const string EveryCommit = "every-commit";
-    public const string Batched = "batched";
+
+    /// <summary>
+    /// Don't push automatically — local commits accumulate on the working
+    /// branch until an admin (or job script) explicitly triggers a push.
+    /// </summary>
+    public const string OnDemand = "on-demand";
 }
 
 /// <summary>
@@ -79,7 +93,7 @@ public sealed record GitWorkspaceSettings(
     string SourceBranch = "main",
     /// <summary>One of <see cref="GitWorkspaceMode.DirectPush"/> or <see cref="GitWorkspaceMode.PullRequest"/>.</summary>
     string Mode = GitWorkspaceMode.DirectPush,
-    /// <summary>One of <see cref="GitWorkspacePushFrequency.EveryCommit"/> or <see cref="GitWorkspacePushFrequency.Batched"/>.</summary>
+    /// <summary>One of <see cref="GitWorkspacePushFrequency.EveryCommit"/> or <see cref="GitWorkspacePushFrequency.OnDemand"/>.</summary>
     string PushFrequency = GitWorkspacePushFrequency.EveryCommit
 );
 
@@ -135,6 +149,21 @@ public interface IWorkspaceStore
     Task UpdateSyncStatusAsync(
         Guid id,
         DateTime syncedAt,
+        string status,
+        string? sha,
+        string? message,
+        CancellationToken ct = default
+    );
+
+    /// <summary>
+    /// Update only the push-state columns for a workspace. Mirror of
+    /// <see cref="UpdateSyncStatusAsync"/> for the on-demand push flow.
+    /// <paramref name="status"/> is one of <c>ok</c>, <c>nothing-to-push</c>,
+    /// or <c>failed</c>.
+    /// </summary>
+    Task UpdatePushStatusAsync(
+        Guid id,
+        DateTime pushedAt,
         string status,
         string? sha,
         string? message,

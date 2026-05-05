@@ -74,4 +74,20 @@ public class workspaces
     /// <summary>Free-text message from the last sync — git stderr on failure, "fast-forwarded N commits" on success.</summary>
     [DmColumn("last_sync_message", length: 2048, isNullable: true)]
     public string? last_sync_message { get; set; }
+
+    /// <summary>UTC timestamp of the last push attempt — success or failure.</summary>
+    [DmColumn("last_push_at", isNullable: true, providerDataType: "{postgresql:timestamptz}")]
+    public DateTime? last_push_at { get; set; }
+
+    /// <summary>HEAD SHA at the time of the last successful push. Null on failure or for non-git types.</summary>
+    [DmColumn("last_push_sha", length: 64, isNullable: true)]
+    public string? last_push_sha { get; set; }
+
+    /// <summary>One of <c>ok</c>, <c>nothing-to-push</c>, <c>failed</c>, or null (never pushed).</summary>
+    [DmColumn("last_push_status", length: 16, isNullable: true)]
+    public string? last_push_status { get; set; }
+
+    /// <summary>Free-text message from the last push — git stderr on failure, "Pushed N commit(s) to origin/&lt;branch&gt;" on success.</summary>
+    [DmColumn("last_push_message", length: 2048, isNullable: true)]
+    public string? last_push_message { get; set; }
 }

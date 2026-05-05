@@ -34,10 +34,14 @@ public static class WorkspacesEndpoints
     // the user's network is the problem and they need to know.
     private static readonly HttpClient _gitTestHttp = new() { Timeout = TimeSpan.FromSeconds(10) };
 
-    // Per-slug semaphore so concurrent sync requests for the same workspace
-    // serialize (clone+fetch on one slug at a time), but different slugs
-    // sync in parallel. In-memory only — multi-instance deployments would
-    // need a Postgres advisory lock here. Single-tenant on-prem v1 is fine.
+    // Per-slug semaphore so concurrent sync OR push requests for the same
+    // workspace serialize (one git operation per slug at a time), but
+    // different slugs run in parallel. Push and sync share the same lock
+    // because they both touch the working tree — running them concurrently
+    // would risk a sync's `reset --hard` racing a push's working-branch
+    // resolution, or two pushes producing duplicate uploads. In-memory
+    // only — multi-instance deployments would need a Postgres advisory
+    // lock here. Single-tenant on-prem v1 is fine.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<
         string,
         SemaphoreSlim
@@ -73,6 +77,10 @@ public static class WorkspacesEndpoints
             .MapPost("/{slug}/sync", (Delegate)Sync)
             .RequireAuthorization(p => p.RequireRole(Roles.Admin))
             .WithName("SyncWorkspace");
+        group
+            .MapPost("/{slug}/push", (Delegate)Push)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("PushWorkspace");
         group.MapGet("/{slug}/plugins", (Delegate)ListPlugins).WithName("ListWorkspacePlugins");
         group
             .MapPut("/{slug}/plugins/{pluginId}", (Delegate)SetPluginEnabled)
@@ -431,6 +439,8 @@ public static class WorkspacesEndpoints
     private sealed class TestConnectionMarker { }
 
     private sealed class SyncMarker { }
+
+    private sealed class PushMarker { }
 
     [AiCapability(
         "workspaces.plugins",
@@ -1040,15 +1050,68 @@ public static class WorkspacesEndpoints
                     ? statusRes.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length
                     : 0;
 
-            // Refuse to sync over uncommitted changes unless the caller
-            // explicitly opted in. The SPA gates a confirmation dialog on
-            // RequiresForce; CLI / API callers see the same signal and can
-            // pass force=true to retry. The fetch we already did above stays
-            // in object storage — wasted bandwidth, but small for shallow
-            // fetches and means a confirmation retry doesn't re-fetch.
-            if (dirtyCount > 0 && !force)
+            // Compute the reset target up-front so the ahead-count check can
+            // measure against the same ref the upcoming `reset --hard` will
+            // use. (The original code derived this lower down; lifting it
+            // here keeps the dirty/ahead gates symmetric.)
+            var target = workingOnRemote ? $"origin/{workingBranch}" : $"origin/{sourceBranch}";
+
+            // Sync's `reset --hard` would silently destroy any local commits
+            // on `workingBranch` that aren't reachable from `target` — the
+            // dirty-count check above only catches working-tree modifications,
+            // not clean-but-unpushed commits. Compute ahead count so the same
+            // RequiresForce gate covers both cases.
+            //
+            // Skip the check if the local branch ref doesn't yet exist (true
+            // first-ever sync — `checkout -B` will create it from `target`,
+            // there's no prior local state to lose).
+            var aheadCount = 0;
+            var localRefRes = await RunGitAsync(
+                new List<string>
+                {
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    $"refs/heads/{workingBranch}",
+                },
+                env,
+                workingTree,
+                ct
+            );
+            if (localRefRes.ExitCode == 0)
+            {
+                var aheadRes = await RunGitAsync(
+                    new List<string> { "rev-list", "--count", $"{target}..{workingBranch}" },
+                    env,
+                    workingTree,
+                    ct
+                );
+                if (
+                    aheadRes.ExitCode == 0
+                    && int.TryParse(aheadRes.StdOut.Trim(), out var parsedAhead)
+                )
+                    aheadCount = parsedAhead;
+            }
+
+            // Refuse to sync over uncommitted changes OR unpushed commits
+            // unless the caller explicitly opted in. The SPA gates a
+            // confirmation dialog on RequiresForce; CLI / API callers see
+            // the same signal and can pass force=true to retry. The fetch
+            // we already did above stays in object storage — wasted
+            // bandwidth, but small for shallow fetches and means a
+            // confirmation retry doesn't re-fetch.
+            if ((dirtyCount > 0 || aheadCount > 0) && !force)
             {
                 sw.Stop();
+                var parts = new List<string>(2);
+                if (dirtyCount > 0)
+                    parts.Add(
+                        $"{dirtyCount} uncommitted change{(dirtyCount == 1 ? string.Empty : "s")}"
+                    );
+                if (aheadCount > 0)
+                    parts.Add(
+                        $"{aheadCount} unpushed commit{(aheadCount == 1 ? string.Empty : "s")}"
+                    );
                 return new WorkspaceSyncResult(
                     Ok: false,
                     Slug: ws.Slug,
@@ -1056,9 +1119,9 @@ public static class WorkspacesEndpoints
                     LatencyMs: sw.ElapsedMilliseconds,
                     SyncedAt: time.GetUtcNow().UtcDateTime,
                     Message: null,
-                    Error: $"Working tree has {dirtyCount} uncommitted change{(dirtyCount == 1 ? string.Empty : "s")}. "
-                        + "Confirm to discard.",
+                    Error: $"Working tree has {string.Join(" and ", parts)}. Confirm to discard.",
                     DirtyCount: dirtyCount,
+                    AheadCount: aheadCount,
                     RequiresForce: true
                 );
             }
@@ -1074,7 +1137,6 @@ public static class WorkspacesEndpoints
             //      files surviving across syncs. We deliberately omit -x;
             //      gitignored files (build outputs, .env scratch) are left
             //      alone since the platform shouldn't reach into them.
-            var target = workingOnRemote ? $"origin/{workingBranch}" : $"origin/{sourceBranch}";
             var checkoutArgs = new List<string> { "checkout", "-B", workingBranch, target };
             var checkout = await RunGitAsync(checkoutArgs, env, workingTree, ct);
             if (checkout.ExitCode != 0)
@@ -1175,6 +1237,343 @@ public static class WorkspacesEndpoints
             Sha: null,
             LatencyMs: sw.ElapsedMilliseconds,
             SyncedAt: time.GetUtcNow().UtcDateTime,
+            Message: null,
+            Error: error
+        );
+    }
+
+    /// <summary>
+    /// Push the working branch to <c>origin</c>. On-demand counterpart to
+    /// <see cref="Sync"/>. The platform writes by name to
+    /// <see cref="GitWorkspaceSettings.WorkingBranch"/> only — never to
+    /// <see cref="GitWorkspaceSettings.SourceBranch"/> as such; if an admin
+    /// has set those equal, the same code path targets that branch by name
+    /// because it's what they configured. First push auto-creates the
+    /// remote ref. Per-slug serialization shares the sync semaphore so
+    /// push doesn't race a concurrent <see cref="Sync"/>'s
+    /// <c>reset --hard</c>.
+    /// </summary>
+    private static async Task<Results<Ok<ApiResult<WorkspacePushResult>>, ProblemHttpResult>> Push(
+        string slug,
+        IWorkspaceStore store,
+        SecretsService secrets,
+        WorkspaceFilesystemService fs,
+        TimeProvider time,
+        ILogger<PushMarker> logger,
+        CancellationToken ct
+    )
+    {
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+
+        if (existing.Type != WorkspaceType.Git)
+        {
+            // Local workspaces have no remote and S3 isn't implemented yet —
+            // 400 (rather than 404) because the workspace exists, just
+            // doesn't support this operation.
+            return Problems.WorkspaceTypeNotSupported(slug, existing.Type, "push");
+        }
+
+        var gate = _syncLocks.GetOrAdd(slug, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            var sw = Stopwatch.StartNew();
+            WorkspacePushResult result;
+            try
+            {
+                result = await PushGitAsync(existing, secrets, fs, time, sw, ct);
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                logger.LogError(ex, "Workspace push failed for {Slug}", slug);
+                result = new WorkspacePushResult(
+                    Ok: false,
+                    Slug: slug,
+                    Sha: null,
+                    LatencyMs: sw.ElapsedMilliseconds,
+                    PushedAt: time.GetUtcNow().UtcDateTime,
+                    Message: null,
+                    Error: $"{ex.GetType().Name}: {ex.Message}"
+                );
+            }
+
+            // Persist the push state regardless of outcome — operators want
+            // to see "last attempt failed at <time>" in the UI, not just a
+            // stale "ok" from a week ago. nothing-to-push counts as a
+            // successful no-op and updates LastPushAt so the UI shows the
+            // workspace was checked recently.
+            var status = result.Ok ? (result.NothingToPush ? "nothing-to-push" : "ok") : "failed";
+            await store.UpdatePushStatusAsync(
+                existing.Id,
+                result.PushedAt,
+                status,
+                result.Sha,
+                result.Ok ? result.Message : result.Error,
+                ct
+            );
+
+            return TypedResults.Ok(new ApiResult<WorkspacePushResult>(result));
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private static async Task<WorkspacePushResult> PushGitAsync(
+        Workspace ws,
+        SecretsService secrets,
+        WorkspaceFilesystemService fs,
+        TimeProvider time,
+        Stopwatch sw,
+        CancellationToken ct
+    )
+    {
+        var settings = ParseGitSettings(ws.Settings);
+        if (settings is null)
+            return PushFailure(ws.Slug, sw, time, "Workspace settings are missing or unreadable.");
+
+        if (string.IsNullOrWhiteSpace(settings.RepositoryUrl))
+            return PushFailure(ws.Slug, sw, time, "Repository URL is not set.");
+
+        // The push relies on a working tree that's already been initialized
+        // by sync — there's no "fresh init" path here because there's no
+        // local content to push when the directory doesn't exist yet.
+        if (!fs.WorkingTreeExists(ws.Slug))
+            return PushFailure(
+                ws.Slug,
+                sw,
+                time,
+                "Working tree doesn't exist yet — sync the workspace first to initialize it."
+            );
+
+        // Resolve the credential up-front. Same machinery as sync — None
+        // mode is fine for "I'm pushing to a public mirror with anonymous
+        // creds preconfigured at the system level," even though that's
+        // unusual.
+        string? credential = null;
+        if (settings.AuthMode != GitAuthMode.None)
+        {
+            if (!string.IsNullOrWhiteSpace(settings.AuthSecret))
+                credential = await secrets.ReadInternalAsync(settings.AuthSecret, ct);
+            if (string.IsNullOrWhiteSpace(credential))
+                return PushFailure(
+                    ws.Slug,
+                    sw,
+                    time,
+                    settings.AuthMode == GitAuthMode.HttpsPat
+                        ? "PAT secret is missing — re-edit the workspace and supply the credential."
+                        : "Private key secret is missing — re-edit the workspace and supply the credential."
+                );
+        }
+
+        var workingTree = fs.GetWorkingTreePath(ws.Slug);
+        var workingBranch = string.IsNullOrWhiteSpace(settings.WorkingBranch)
+            ? "creuser/main"
+            : settings.WorkingBranch;
+
+        string? sshKeyPath = null;
+        try
+        {
+            var env = new Dictionary<string, string> { ["GIT_TERMINAL_PROMPT"] = "0" };
+            var configArgs = new List<string>();
+
+            if (settings.AuthMode == GitAuthMode.SshKey)
+            {
+                sshKeyPath = Path.Combine(
+                    Path.GetTempPath(),
+                    $"creuser-push-key-{Guid.NewGuid():N}.pem"
+                );
+                await File.WriteAllTextAsync(sshKeyPath, credential!.TrimEnd() + "\n", ct);
+                if (
+                    RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                    || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+                )
+                {
+                    File.SetUnixFileMode(
+                        sshKeyPath,
+                        UnixFileMode.UserRead | UnixFileMode.UserWrite
+                    );
+                }
+                env["GIT_SSH_COMMAND"] =
+                    $"ssh -i \"{sshKeyPath}\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
+                    + "-o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR";
+            }
+            else if (settings.AuthMode == GitAuthMode.HttpsPat)
+            {
+                var basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"git:{credential}"));
+                configArgs.Add("-c");
+                configArgs.Add($"http.extraHeader=Authorization: Basic {basic}");
+            }
+
+            // Make sure the workspace's currently-configured URL is what
+            // we'll push to (the admin may have rotated the URL since the
+            // last sync).
+            await RunGitAsync(
+                new List<string> { "remote", "set-url", "origin", settings.RepositoryUrl },
+                env,
+                workingTree,
+                ct
+            );
+
+            // Best-effort fetch of the working branch so we can compute an
+            // accurate ahead count. If the remote ref doesn't exist yet
+            // (first push case), the fetch fails benignly and we treat
+            // every local commit as ahead. We do NOT block push on a fetch
+            // failure — we'll find out for sure when push runs.
+            var fetchArgs = new List<string>(configArgs)
+            {
+                "fetch",
+                "--depth",
+                "1",
+                "origin",
+                workingBranch,
+            };
+            var fetchRes = await RunGitAsync(fetchArgs, env, workingTree, ct);
+            var remoteRefExists = fetchRes.ExitCode == 0;
+
+            // Compute ahead count. If the remote ref exists, count commits
+            // local-only relative to origin/<wb>. If not, count every commit
+            // reachable from <wb> — they're all about to be uploaded.
+            var aheadArgs = remoteRefExists
+                ? new List<string>
+                {
+                    "rev-list",
+                    "--count",
+                    $"origin/{workingBranch}..{workingBranch}",
+                }
+                : new List<string> { "rev-list", "--count", workingBranch };
+            var aheadRes = await RunGitAsync(aheadArgs, env, workingTree, ct);
+            var aheadCount = 0;
+            if (aheadRes.ExitCode == 0 && int.TryParse(aheadRes.StdOut.Trim(), out var parsed))
+                aheadCount = parsed;
+
+            // Resolve the current HEAD for the result's Sha (and the
+            // last_push_sha column). Done once up-front so failures still
+            // record what was on HEAD when the push attempt started.
+            var rev = await RunGitAsync(
+                new List<string> { "rev-parse", "HEAD" },
+                env,
+                workingTree,
+                ct
+            );
+            var sha = rev.ExitCode == 0 ? rev.StdOut.Trim() : null;
+            var shortSha = sha is null ? null : sha[..Math.Min(7, sha.Length)];
+
+            if (aheadCount == 0)
+            {
+                // Already in sync. No push attempt needed; success no-op.
+                sw.Stop();
+                return new WorkspacePushResult(
+                    Ok: true,
+                    Slug: ws.Slug,
+                    Sha: sha,
+                    LatencyMs: sw.ElapsedMilliseconds,
+                    PushedAt: time.GetUtcNow().UtcDateTime,
+                    Message: shortSha is null
+                        ? $"Already up-to-date with origin/{workingBranch}."
+                        : $"Already up-to-date with origin/{workingBranch} at {shortSha}.",
+                    Error: null,
+                    AheadCount: 0,
+                    NothingToPush: true
+                );
+            }
+
+            // Push the working branch by name. Git creates the remote ref
+            // on the first push; subsequent pushes fast-forward. We do NOT
+            // pass --force — if the remote diverged the admin should sync
+            // (or rebase out-of-band) and retry. Refusing here is the
+            // safer default for v1.
+            var pushArgs = new List<string>(configArgs)
+            {
+                "push",
+                "origin",
+                $"{workingBranch}:{workingBranch}",
+            };
+            var pushRes = await RunGitAsync(pushArgs, env, workingTree, ct);
+            if (pushRes.ExitCode != 0)
+            {
+                // Custom messaging for the "non-fast-forward" case since
+                // it's the most common push failure and the resolution is
+                // workflow-specific (sync first).
+                var stderr = pushRes.StdErr ?? string.Empty;
+                var nonFf =
+                    stderr.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
+                    || stderr.Contains("rejected", StringComparison.OrdinalIgnoreCase)
+                        && stderr.Contains("fetch first", StringComparison.OrdinalIgnoreCase);
+                var error = nonFf
+                    ? $"Remote rejected push — origin/{workingBranch} has commits we don't have. Sync the workspace and retry."
+                    : ParseGitError(stderr, "push");
+                sw.Stop();
+                return new WorkspacePushResult(
+                    Ok: false,
+                    Slug: ws.Slug,
+                    Sha: sha,
+                    LatencyMs: sw.ElapsedMilliseconds,
+                    PushedAt: time.GetUtcNow().UtcDateTime,
+                    Message: null,
+                    Error: error,
+                    AheadCount: aheadCount
+                );
+            }
+
+            sw.Stop();
+            var pluralCommit = aheadCount == 1 ? "commit" : "commits";
+            var msg = remoteRefExists
+                ? (
+                    shortSha is null
+                        ? $"Pushed {aheadCount} {pluralCommit} to origin/{workingBranch}."
+                        : $"Pushed {aheadCount} {pluralCommit} to origin/{workingBranch} (now at {shortSha})."
+                )
+                : (
+                    shortSha is null
+                        ? $"Created origin/{workingBranch} with {aheadCount} {pluralCommit}."
+                        : $"Created origin/{workingBranch} at {shortSha} ({aheadCount} {pluralCommit})."
+                );
+            return new WorkspacePushResult(
+                Ok: true,
+                Slug: ws.Slug,
+                Sha: sha,
+                LatencyMs: sw.ElapsedMilliseconds,
+                PushedAt: time.GetUtcNow().UtcDateTime,
+                Message: msg,
+                Error: null,
+                AheadCount: aheadCount
+            );
+        }
+        finally
+        {
+            if (sshKeyPath is not null)
+            {
+                try
+                {
+                    File.Delete(sshKeyPath);
+                }
+                catch
+                {
+                    // best-effort cleanup
+                }
+            }
+        }
+    }
+
+    private static WorkspacePushResult PushFailure(
+        string slug,
+        Stopwatch sw,
+        TimeProvider time,
+        string error
+    )
+    {
+        sw.Stop();
+        return new WorkspacePushResult(
+            Ok: false,
+            Slug: slug,
+            Sha: null,
+            LatencyMs: sw.ElapsedMilliseconds,
+            PushedAt: time.GetUtcNow().UtcDateTime,
             Message: null,
             Error: error
         );
@@ -1816,7 +2215,11 @@ public static class WorkspacesEndpoints
             LastSyncAt: w.LastSyncAt,
             LastSyncSha: w.LastSyncSha,
             LastSyncStatus: w.LastSyncStatus,
-            LastSyncMessage: w.LastSyncMessage
+            LastSyncMessage: w.LastSyncMessage,
+            LastPushAt: w.LastPushAt,
+            LastPushSha: w.LastPushSha,
+            LastPushStatus: w.LastPushStatus,
+            LastPushMessage: w.LastPushMessage
         );
     }
 }

@@ -138,6 +138,22 @@ public static class Problems
             }
         );
 
+    public static ProblemHttpResult WorkspaceTypeNotSupported(
+        string identifier,
+        string type,
+        string operation
+    ) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "workspace-type-not-supported",
+                Title = "Operation not supported for this workspace type",
+                Status = StatusCodes.Status400BadRequest,
+                Detail =
+                    $"Workspace '{identifier}' is of type '{type}'; the '{operation}' operation is only supported for git workspaces.",
+            }
+        );
+
     public static ProblemHttpResult SlugAlreadyExists(string slug) =>
         TypedResults.Problem(
             new ProblemDetails

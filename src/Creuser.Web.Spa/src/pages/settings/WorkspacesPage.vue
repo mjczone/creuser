@@ -108,6 +108,19 @@
             <q-tooltip>{{ props.row.type === 'local' ? 'Verify path' : 'Sync now' }}</q-tooltip>
           </q-btn>
           <q-btn
+            v-if="props.row.type === 'git'"
+            flat
+            dense
+            round
+            icon="upload"
+            size="sm"
+            :loading="pushingSlug === props.row.slug"
+            :aria-label="`Push ${props.row.slug}`"
+            @click="onPush(props.row)"
+          >
+            <q-tooltip>Push working branch to origin</q-tooltip>
+          </q-btn>
+          <q-btn
             flat
             dense
             round
@@ -399,6 +412,7 @@ const showSecret = ref(false);
 const testResult = ref<WorkspaceConnectionTestResult | null>(null);
 const error = ref('');
 const syncingSlug = ref<string | null>(null);
+const pushingSlug = ref<string | null>(null);
 
 const form = reactive<FormState>(emptyForm());
 
@@ -452,7 +466,7 @@ const modeOptions = [
 
 const pushFrequencyOptions = [
   { label: 'Every commit (real-time)', value: 'every-commit' },
-  { label: 'Batched', value: 'batched' },
+  { label: 'On-demand (manual)', value: 'on-demand' },
 ];
 
 const authModeOptions = [
@@ -665,17 +679,36 @@ async function onSync(ws: WorkspaceResult, force = false) {
     }
     const result = res.data?.result;
 
-    // Server refused because the working tree had uncommitted changes.
-    // Pop a confirmation dialog and retry with force=true if the admin
-    // says yes.
+    // Server refused because the working tree had uncommitted changes
+    // and/or the local branch had unpushed commits. Pop a confirmation
+    // dialog citing whichever counts are non-zero and retry with
+    // force=true if the admin says yes.
     if (result?.requiresForce) {
       const dirty = Number(result.dirtyCount ?? 0) || 0;
+      const ahead = Number(result.aheadCount ?? 0) || 0;
+      const lines: string[] = [];
+      if (dirty > 0) {
+        lines.push(
+          `<li><strong>${dirty}</strong> uncommitted ` +
+            `change${dirty === 1 ? '' : 's'} (modified, added, or untracked files) ` +
+            `will be wiped to match the remote.</li>`,
+        );
+      }
+      if (ahead > 0) {
+        lines.push(
+          `<li><strong>${ahead}</strong> unpushed ` +
+            `commit${ahead === 1 ? '' : 's'} on the working branch will become ` +
+            `unreachable (recoverable from the reflog for ~30 days, but not visible). ` +
+            `If you want to keep these commits, click <em>Push</em> first to send ` +
+            `them to origin, then sync.</li>`,
+        );
+      }
       $q.dialog({
-        title: 'Discard local changes?',
+        title: 'Discard local state?',
         message:
-          `<p>The working tree has <strong>${dirty}</strong> uncommitted ` +
-          `change${dirty === 1 ? '' : 's'} (modified, added, or untracked files). ` +
-          `Sync will reset the directory to match the remote — those changes will be lost.</p>`,
+          `<p>Sync will reset this workspace's working branch to match ` +
+          `<code>origin</code>. Doing so means:</p><ul>${lines.join('')}</ul>` +
+          `<p>Continue anyway?</p>`,
         html: true,
         ok: { label: 'Discard & sync', color: 'negative', unelevated: true, noCaps: true },
         cancel: { flat: true, noCaps: true },
@@ -706,6 +739,49 @@ async function onSync(ws: WorkspaceResult, force = false) {
     void load();
   } finally {
     syncingSlug.value = null;
+  }
+}
+
+// On-demand push counterpart to onSync. The endpoint computes ahead count
+// itself and short-circuits with `nothingToPush: true` when the working
+// branch is already up-to-date with origin, which we surface as an info
+// notify (not negative) so the admin sees the check happened. Working
+// branches that don't yet exist on the remote auto-create on first push;
+// no special-casing here.
+async function onPush(ws: WorkspaceResult) {
+  pushingSlug.value = ws.slug;
+  try {
+    const res = await Workspaces.pushWorkspace({ path: { slug: ws.slug } });
+    if (res.error) {
+      $q.notify({
+        type: 'negative',
+        position: 'top',
+        message: problemMessage(res.error) ?? 'Push failed.',
+      });
+      return;
+    }
+    const result = res.data?.result;
+
+    if (result?.ok) {
+      // Distinguish "we tried and there was nothing to push" from "we
+      // pushed N commits" so the admin doesn't think the click did
+      // nothing on the no-op path.
+      $q.notify({
+        type: result.nothingToPush ? 'info' : 'positive',
+        position: 'top',
+        message: result.message ?? `Workspace ${ws.slug} pushed.`,
+      });
+    } else {
+      $q.notify({
+        type: 'negative',
+        position: 'top',
+        message: result?.error ?? 'Push failed.',
+        timeout: 8000,
+      });
+    }
+    void load();
+  } finally {
+    pushingSlug.value = null;
   }
 }
 

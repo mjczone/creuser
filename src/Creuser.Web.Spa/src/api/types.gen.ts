@@ -199,6 +199,10 @@ export type ApiResultOfWorkspacePluginsResult = {
   result: null | WorkspacePluginsResult;
 };
 
+export type ApiResultOfWorkspacePushResult = {
+  result: null | WorkspacePushResult;
+};
+
 export type ApiResultOfWorkspaceResult = {
   result: null | WorkspaceResult;
 };
@@ -755,6 +759,18 @@ export type WorkspacePluginsResult = {
   note: null | string;
 };
 
+export type WorkspacePushResult = {
+  ok: boolean;
+  slug: string;
+  sha: null | string;
+  latencyMs: number | string;
+  pushedAt: string;
+  message: null | string;
+  error: null | string;
+  aheadCount?: number | string;
+  nothingToPush?: boolean;
+};
+
 export type WorkspaceResult = {
   workspaceId: string;
   slug: string;
@@ -770,6 +786,10 @@ export type WorkspaceResult = {
   lastSyncSha: null | string;
   lastSyncStatus: null | string;
   lastSyncMessage: null | string;
+  lastPushAt: null | string;
+  lastPushSha: null | string;
+  lastPushStatus: null | string;
+  lastPushMessage: null | string;
 };
 
 export type WorkspaceSyncResult = {
@@ -781,6 +801,7 @@ export type WorkspaceSyncResult = {
   message: null | string;
   error: null | string;
   dirtyCount?: number | string;
+  aheadCount?: number | string;
   requiresForce?: boolean;
 };
 
@@ -1253,6 +1274,24 @@ export type SyncWorkspaceResponses = {
 };
 
 export type SyncWorkspaceResponse = SyncWorkspaceResponses[keyof SyncWorkspaceResponses];
+
+export type PushWorkspaceData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/push';
+};
+
+export type PushWorkspaceResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspacePushResult;
+};
+
+export type PushWorkspaceResponse = PushWorkspaceResponses[keyof PushWorkspaceResponses];
 
 export type ListWorkspacePluginsData = {
   body?: never;

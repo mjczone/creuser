@@ -343,7 +343,7 @@ public sealed record GitWorkspaceSettings(
     string WorkingBranch = "creuser/main",
     string SourceBranch = "main",
     string Mode = "direct-push",       // "direct-push" | "pull-request"
-    string PushFrequency = "every-commit"  // | "batched"
+    string PushFrequency = "every-commit"  // | "on-demand"
 );
 ```
 
@@ -352,7 +352,9 @@ public sealed record GitWorkspaceSettings(
 - **Working branch** — branch the platform commits to (e.g. `creuser/main`, `acme/development`). Created locally on first sync if it doesn't yet exist on the remote (sync auto-falls-back to source branch).
 - **Source branch** — branch the working branch is rebased / pulled from when admins want fresh source content.
 - **Mode** — direct push (default) or pull-request (deferred to when the PR producer lands).
-- **Push frequency** — every-commit (real-time) or batched. Forward-looking; honoured once the commit/push side ships.
+- **Push frequency** — every-commit (real-time, push on each platform commit) or on-demand (manual: commits accumulate locally on the working branch until an admin or job script triggers a push). Forward-looking; honoured once the commit/push side ships.
+
+The platform writes by name to **`WorkingBranch` only** — there is no code path that pushes to `SourceBranch`. If an admin sets `WorkingBranch === SourceBranch` (e.g. both `main`), they have explicitly opted into the live-on-source flow and the same push code targets that branch by name. The "fetch source / push working" split keeps source-branch immutability a structural property of the schema, not a runtime check.
 
 ### Local workspace settings
 

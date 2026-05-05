@@ -102,6 +102,8 @@ import type {
   LogoutResponses,
   PingData,
   PingResponses,
+  PushWorkspaceData,
+  PushWorkspaceResponses,
   QueryEntitiesData,
   QueryEntitiesResponses,
   RemoveWorkspaceMemberData,
@@ -474,6 +476,15 @@ export class Workspaces {
   ) {
     return (options.client ?? client).post<SyncWorkspaceResponses, unknown, ThrowOnError>({
       url: '/api/workspaces/{slug}/sync',
+      ...options,
+    });
+  }
+
+  public static pushWorkspace<ThrowOnError extends boolean = false>(
+    options: Options<PushWorkspaceData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<PushWorkspaceResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/push',
       ...options,
     });
   }

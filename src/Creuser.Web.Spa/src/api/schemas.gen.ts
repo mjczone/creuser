@@ -733,6 +733,23 @@ export const ApiResultOfWorkspacePluginsResultSchema = {
   },
 } as const;
 
+export const ApiResultOfWorkspacePushResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/WorkspacePushResult',
+        },
+      ],
+    },
+  },
+} as const;
+
 export const ApiResultOfWorkspaceResultSchema = {
   required: ['result'],
   type: 'object',
@@ -2609,6 +2626,47 @@ export const WorkspacePluginsResultSchema = {
   },
 } as const;
 
+export const WorkspacePushResultSchema = {
+  required: ['ok', 'slug', 'sha', 'latencyMs', 'pushedAt', 'message', 'error'],
+  type: 'object',
+  properties: {
+    ok: {
+      type: 'boolean',
+    },
+    slug: {
+      type: 'string',
+    },
+    sha: {
+      type: ['null', 'string'],
+    },
+    latencyMs: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int64',
+    },
+    pushedAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+    message: {
+      type: ['null', 'string'],
+    },
+    error: {
+      type: ['null', 'string'],
+    },
+    aheadCount: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+      default: 0,
+    },
+    nothingToPush: {
+      type: 'boolean',
+      default: false,
+    },
+  },
+} as const;
+
 export const WorkspaceResultSchema = {
   required: [
     'workspaceId',
@@ -2625,6 +2683,10 @@ export const WorkspaceResultSchema = {
     'lastSyncSha',
     'lastSyncStatus',
     'lastSyncMessage',
+    'lastPushAt',
+    'lastPushSha',
+    'lastPushStatus',
+    'lastPushMessage',
   ],
   type: 'object',
   properties: {
@@ -2688,6 +2750,19 @@ export const WorkspaceResultSchema = {
     lastSyncMessage: {
       type: ['null', 'string'],
     },
+    lastPushAt: {
+      type: ['null', 'string'],
+      format: 'date-time',
+    },
+    lastPushSha: {
+      type: ['null', 'string'],
+    },
+    lastPushStatus: {
+      type: ['null', 'string'],
+    },
+    lastPushMessage: {
+      type: ['null', 'string'],
+    },
   },
 } as const;
 
@@ -2720,6 +2795,12 @@ export const WorkspaceSyncResultSchema = {
       type: ['null', 'string'],
     },
     dirtyCount: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+      default: 0,
+    },
+    aheadCount: {
       pattern: '^-?(?:0|[1-9]\\d*)$',
       type: ['integer', 'string'],
       format: 'int32',

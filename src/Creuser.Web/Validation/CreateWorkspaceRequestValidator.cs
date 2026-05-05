@@ -52,7 +52,10 @@ public sealed class CreateWorkspaceRequestValidator : AbstractValidator<CreateWo
                 RuleFor(x => x.GitSettings!.PushFrequency)
                     .Must(p =>
                         p == GitWorkspacePushFrequency.EveryCommit
-                        || p == GitWorkspacePushFrequency.Batched
+                        || p == GitWorkspacePushFrequency.OnDemand
+                    )
+                    .WithMessage(
+                        $"Push frequency must be '{GitWorkspacePushFrequency.EveryCommit}' or '{GitWorkspacePushFrequency.OnDemand}'."
                     );
                 RuleFor(x => x.GitSettings!.AuthMode)
                     .Must(GitAuthMode.IsValid)

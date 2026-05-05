@@ -858,6 +858,36 @@
         }
       }
     },
+    "/api/workspaces/{slug}/push": {
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "PushWorkspace",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspacePushResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{slug}/plugins": {
       "get": {
         "tags": [
@@ -3306,6 +3336,24 @@
           }
         }
       },
+      "ApiResultOfWorkspacePushResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspacePushResult"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfWorkspaceResult": {
         "required": [
           "result"
@@ -5714,6 +5762,69 @@
           }
         }
       },
+      "WorkspacePushResult": {
+        "required": [
+          "ok",
+          "slug",
+          "sha",
+          "latencyMs",
+          "pushedAt",
+          "message",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "sha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "latencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pushedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aheadCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
+          },
+          "nothingToPush": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
       "WorkspaceResult": {
         "required": [
           "workspaceId",
@@ -5729,7 +5840,11 @@
           "lastSyncAt",
           "lastSyncSha",
           "lastSyncStatus",
-          "lastSyncMessage"
+          "lastSyncMessage",
+          "lastPushAt",
+          "lastPushSha",
+          "lastPushStatus",
+          "lastPushMessage"
         ],
         "type": "object",
         "properties": {
@@ -5807,6 +5922,31 @@
               "null",
               "string"
             ]
+          },
+          "lastPushAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lastPushSha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastPushStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastPushMessage": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -5859,6 +5999,15 @@
             ]
           },
           "dirtyCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
+          },
+          "aheadCount": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
