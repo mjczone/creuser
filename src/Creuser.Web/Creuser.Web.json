@@ -1056,6 +1056,43 @@
         }
       }
     },
+    "/api/workspaces/{slug}/files/list": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "ListWorkspaceFolder",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspaceFolderListing"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{slug}/plugins": {
       "get": {
         "tags": [
@@ -3537,6 +3574,24 @@
               },
               {
                 "$ref": "#/components/schemas/WorkspaceFileContent"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfWorkspaceFolderListing": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceFolderListing"
               }
             ]
           }
@@ -6227,6 +6282,83 @@
               "string"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "WorkspaceFileEntry": {
+        "required": [
+          "name",
+          "path",
+          "sizeBytes",
+          "modifiedAt",
+          "contentKind"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "modifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "contentKind": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkspaceFolderEntry": {
+        "required": [
+          "name",
+          "path"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkspaceFolderListing": {
+        "required": [
+          "path",
+          "folders",
+          "files",
+          "truncated"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceFolderEntry"
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceFileEntry"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
           }
         }
       },

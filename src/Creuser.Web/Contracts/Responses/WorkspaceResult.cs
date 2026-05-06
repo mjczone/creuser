@@ -94,6 +94,36 @@ public sealed record WorkspaceFileContent(
 );
 
 /// <summary>
+/// Directory listing for one folder in a workspace's working surface.
+/// The file-manager widget consumes this; <see cref="Folders"/> render
+/// as drill-in rows, <see cref="Files"/> as clickable preview rows.
+/// </summary>
+public sealed record WorkspaceFolderListing(
+    /// <summary>Canonicalized request path (workspace-relative, forward-slash separators, no leading slash). Empty string at the root.</summary>
+    string Path,
+    IReadOnlyList<WorkspaceFolderEntry> Folders,
+    IReadOnlyList<WorkspaceFileEntry> Files,
+    /// <summary>True when the listing was capped — the folder has more than the per-request cap and additional entries were dropped. UI shows a "narrow your path" hint.</summary>
+    bool Truncated
+);
+
+public sealed record WorkspaceFolderEntry(string Name, string Path);
+
+/// <summary>
+/// One file in a directory listing. <see cref="ContentKind"/> is a
+/// hint derived from the extension so the file-manager widget knows
+/// which preview to render without a second round-trip.
+/// </summary>
+public sealed record WorkspaceFileEntry(
+    string Name,
+    string Path,
+    long SizeBytes,
+    DateTime ModifiedAt,
+    /// <summary>One of <c>text</c>, <c>image</c>, <c>binary</c>, <c>unknown</c>.</summary>
+    string ContentKind
+);
+
+/// <summary>
 /// Result of a batch of file writes against a workspace's working
 /// surface. Write-only — there is no commit step inside this verb.
 /// Commit (where supported) is a separate endpoint that batches all

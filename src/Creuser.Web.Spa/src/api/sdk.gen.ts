@@ -100,6 +100,8 @@ import type {
   ListToolsResponses,
   ListUsersData,
   ListUsersResponses,
+  ListWorkspaceFolderData,
+  ListWorkspaceFolderResponses,
   ListWorkspaceMembersData,
   ListWorkspaceMembersResponses,
   ListWorkspacePluginsData,
@@ -549,6 +551,15 @@ export class Workspaces {
   ) {
     return (options.client ?? client).get<GetWorkspaceFileResponses, unknown, ThrowOnError>({
       url: '/api/workspaces/{slug}/files',
+      ...options,
+    });
+  }
+
+  public static listWorkspaceFolder<ThrowOnError extends boolean = false>(
+    options: Options<ListWorkspaceFolderData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListWorkspaceFolderResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/files/list',
       ...options,
     });
   }

@@ -203,6 +203,10 @@ export type ApiResultOfWorkspaceFileContent = {
   result: null | WorkspaceFileContent;
 };
 
+export type ApiResultOfWorkspaceFolderListing = {
+  result: null | WorkspaceFolderListing;
+};
+
 export type ApiResultOfWorkspacePluginInfo = {
   result: null | WorkspacePluginInfo;
 };
@@ -825,6 +829,26 @@ export type WorkspaceFileContent = {
   content: string;
   contentHash: string;
   sizeBytes: number | string;
+};
+
+export type WorkspaceFileEntry = {
+  name: string;
+  path: string;
+  sizeBytes: number | string;
+  modifiedAt: string;
+  contentKind: string;
+};
+
+export type WorkspaceFolderEntry = {
+  name: string;
+  path: string;
+};
+
+export type WorkspaceFolderListing = {
+  path: string;
+  folders: Array<WorkspaceFolderEntry>;
+  files: Array<WorkspaceFileEntry>;
+  truncated: boolean;
 };
 
 export type WorkspacePluginInfo = {
@@ -1488,6 +1512,27 @@ export type GetWorkspaceFileResponses = {
 };
 
 export type GetWorkspaceFileResponse = GetWorkspaceFileResponses[keyof GetWorkspaceFileResponses];
+
+export type ListWorkspaceFolderData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: {
+    path?: string;
+  };
+  url: '/api/workspaces/{slug}/files/list';
+};
+
+export type ListWorkspaceFolderResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspaceFolderListing;
+};
+
+export type ListWorkspaceFolderResponse =
+  ListWorkspaceFolderResponses[keyof ListWorkspaceFolderResponses];
 
 export type ListWorkspacePluginsData = {
   body?: never;

@@ -750,6 +750,23 @@ export const ApiResultOfWorkspaceFileContentSchema = {
   },
 } as const;
 
+export const ApiResultOfWorkspaceFolderListingSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/WorkspaceFolderListing',
+        },
+      ],
+    },
+  },
+} as const;
+
 export const ApiResultOfWorkspacePluginInfoSchema = {
   required: ['result'],
   type: 'object',
@@ -2839,6 +2856,69 @@ export const WorkspaceFileContentSchema = {
       pattern: '^-?(?:0|[1-9]\\d*)$',
       type: ['integer', 'string'],
       format: 'int64',
+    },
+  },
+} as const;
+
+export const WorkspaceFileEntrySchema = {
+  required: ['name', 'path', 'sizeBytes', 'modifiedAt', 'contentKind'],
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+    },
+    path: {
+      type: 'string',
+    },
+    sizeBytes: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int64',
+    },
+    modifiedAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+    contentKind: {
+      type: 'string',
+    },
+  },
+} as const;
+
+export const WorkspaceFolderEntrySchema = {
+  required: ['name', 'path'],
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+    },
+    path: {
+      type: 'string',
+    },
+  },
+} as const;
+
+export const WorkspaceFolderListingSchema = {
+  required: ['path', 'folders', 'files', 'truncated'],
+  type: 'object',
+  properties: {
+    path: {
+      type: 'string',
+    },
+    folders: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/WorkspaceFolderEntry',
+      },
+    },
+    files: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/WorkspaceFileEntry',
+      },
+    },
+    truncated: {
+      type: 'boolean',
     },
   },
 } as const;

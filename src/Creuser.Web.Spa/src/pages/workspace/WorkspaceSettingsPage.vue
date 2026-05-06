@@ -88,6 +88,12 @@ const items = computed<NavItem[]>(() => {
       route: `${base}/schedules`,
     },
     {
+      icon: 'folder',
+      label: 'Files',
+      caption: 'Browse, edit, create, delete files',
+      route: `${base}/files`,
+    },
+    {
       icon: 'transform',
       label: 'Conventions',
       caption: 'Map files into typed entities',

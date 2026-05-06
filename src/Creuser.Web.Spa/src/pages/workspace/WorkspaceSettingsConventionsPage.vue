@@ -79,6 +79,26 @@
         </ul>
 
         <details class="cr-conv-help">
+          <summary>Schema reference (all options)</summary>
+          <p class="cr-conv-help-intro">
+            Every field a convention can declare, with inline comments. Most are optional —
+            the smallest valid file is just <code>id</code> + <code>match.glob</code>.
+          </p>
+          <pre class="cr-conv-std-yaml cr-conv-schema-yaml">{{ schemaReference }}</pre>
+          <div class="cr-conv-std-actions">
+            <q-btn
+              flat
+              dense
+              no-caps
+              size="xs"
+              icon="content_copy"
+              label="Copy reference"
+              @click="copySchemaReference"
+            />
+          </div>
+        </details>
+
+        <details class="cr-conv-help">
           <summary>Bundled standard library</summary>
           <p class="cr-conv-help-intro">
             Workspace conventions can <code>extends:</code> any of these to inherit its match
@@ -369,6 +389,82 @@ async function copyExtends(reference: string) {
   } catch {
     // Ignore — clipboard rejection (focus issues, permissions) is the
     // browser's problem, not ours.
+  }
+}
+
+// Annotated YAML covering every field the convention loader recognizes.
+// Mirrors `Creuser.Core.Projections.Convention` + its sub-records — keep
+// this in sync if those gain or rename fields. The reference is intentionally
+// non-runnable (the `glob` is a placeholder) so admins copy and edit rather
+// than dropping it in as-is.
+const schemaReference = `# Convention schema — all options annotated. Most fields are optional.
+# Smallest valid file: just \`id\` and \`match.glob\`.
+
+id: my_convention            # required. Becomes \`kind\` on each cr.entities row.
+                             # Must be unique within the workspace.
+description: One-line summary shown in the convention list.   # optional.
+extends: creuser:standard/markdown-doc  # optional. Inherit from a bundled
+                             # entry (see "Bundled standard library" below).
+                             # Local fields override inherited ones.
+priority: 0                  # optional. Higher wins when two conventions
+                             # match the same file. Default 0.
+
+match:
+  glob: "docs/**/*.md"       # required. The selector. POSIX-style globbing
+                             # via DotNet.Glob; \`**\` crosses directories.
+  exclude:                   # optional. Subtractive globs, ANDed with glob.
+    - "**/node_modules/**"
+    - "**/_drafts/**"
+  frontmatter_must_have:     # optional. Files lacking these YAML
+    - status                 # frontmatter keys are skipped. Useful when a
+                             # glob is too broad on its own.
+
+slug:                        # required. How to derive cr.entities.slug.
+  from: filename             # \`filename\` | \`path\` | \`frontmatter.<key>\` | \`template\`
+  transform: kebab           # \`kebab\` | \`snake\` | \`lower\` | \`as-is\` (default).
+  # template: "{parent_dir}-{filename}"  # only when from: template.
+                             # Variables: filename, parent_dir, path, extension.
+
+metadata:                    # optional. Default: source: none.
+  source: frontmatter        # \`frontmatter\` | \`none\`. (header / filename
+                             # patterns reserved for v0.2.)
+  computed:                  # optional. Synthetic fields stitched in from
+    line_count: file.line_count          # the file or git context. Dotted
+    last_commit: git.last_commit_sha     # accessors; see docs/projections.
+  required:                  # optional. Fail validation if any of these
+    - title                  # frontmatter keys are missing. Surfaces in
+    - status                 # \`find_invalid\` / projection report errors.
+
+relationships:               # optional. Typed edges into cr.entity_refs.
+  - kind: parent             # The relationship column on the row. Free-form.
+    select_path: "{file_dir}/index.md"   # Resolve target by interpolated
+                                         # path. Mutually exclusive with
+                                         # select_frontmatter.
+    target_kind: business_rule           # Required entity \`kind\` on the
+                                         # other end.
+  - kind: references
+    select_frontmatter: references       # Read this frontmatter key (list
+                                         # or scalar) and resolve each value
+                                         # to (target_kind, slug).
+    target_kind: business_rule
+
+validation:                  # optional. Declarative rules; failures bubble
+  - rule: has_title          # up via \`find_invalid\` and the projection
+    expr: metadata.title != null         # report. Expressions evaluate
+                                         # against metadata + relationships.
+`;
+
+async function copySchemaReference() {
+  try {
+    await copyToClipboard(schemaReference);
+    $q.notify({
+      type: 'info',
+      position: 'top',
+      message: 'Schema reference copied to clipboard.',
+      timeout: 1500,
+    });
+  } catch {
+    // Ignore — clipboard rejection is the browser's problem, not ours.
   }
 }
 
@@ -811,6 +907,11 @@ onMounted(() => {
   border-radius: 3px;
   overflow-x: auto;
   white-space: pre;
+}
+
+.cr-conv-schema-yaml {
+  max-height: 360px;
+  overflow-y: auto;
 }
 
 .cr-conv-std-actions {

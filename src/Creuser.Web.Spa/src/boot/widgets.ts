@@ -9,6 +9,7 @@ import JobScriptEditor from 'src/widgets/JobScriptEditor.vue';
 import Markdown from 'src/widgets/Markdown.vue';
 import ProjectionReport from 'src/widgets/ProjectionReport.vue';
 import WorkspaceMembers from 'src/widgets/WorkspaceMembers.vue';
+import FileManagerWidget from 'src/components/files/FileManagerWidget.vue';
 
 /**
  * Registers the v1 widget set against the global widget registry. Each
@@ -160,5 +161,24 @@ export default boot(({ app }) => {
     propsSchema: { type: 'object', properties: {} },
     defaultProps: {},
     defaultDockview: { minWidth: 240, preferredPosition: 'tab' },
+  });
+
+  registerWidget({
+    type: 'FileManager',
+    name: 'File Manager',
+    description: 'Browse, view, edit, create, and delete files in the workspace working tree.',
+    icon: 'folder',
+    component: FileManagerWidget,
+    propsSchema: {
+      type: 'object',
+      properties: {
+        initialPath: {
+          type: 'string',
+          description: 'Path to open by default. Empty string = workspace root.',
+        },
+      },
+    },
+    defaultProps: { initialPath: '' },
+    defaultDockview: { minWidth: 480, minHeight: 360, preferredPosition: 'tab' },
   });
 });

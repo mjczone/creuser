@@ -95,6 +95,10 @@ public static class WorkspacesEndpoints
             .MapGet("/{slug}/files", (Delegate)GetFile)
             .RequireAuthorization(p => p.RequireRole(Roles.Admin))
             .WithName("GetWorkspaceFile");
+        group
+            .MapGet("/{slug}/files/list", (Delegate)ListFolder)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("ListWorkspaceFolder");
         group.MapGet("/{slug}/plugins", (Delegate)ListPlugins).WithName("ListWorkspacePlugins");
         group
             .MapPut("/{slug}/plugins/{pluginId}", (Delegate)SetPluginEnabled)
@@ -1322,6 +1326,263 @@ public static class WorkspacesEndpoints
                 )
             )
         );
+    }
+
+    /// <summary>
+    /// List the immediate folders + files at a path within the workspace's
+    /// working surface. Read-only counterpart to <see cref="GetFile"/> for
+    /// the file-manager widget. Provider-dispatched via
+    /// <see cref="IWorkspaceProvider.ResolveRootAsync"/>; empty
+    /// <paramref name="path"/> means the workspace root.
+    ///
+    /// <para>
+    /// Hard-capped at <see cref="ListFolderEntryCap"/> total entries
+    /// (folders + files combined) to keep payloads bounded; the
+    /// `truncated` flag tells the widget to surface a "narrow your
+    /// path" hint instead of silently hiding rows.
+    /// </para>
+    /// </summary>
+    private const int ListFolderEntryCap = 500;
+
+    private static async Task<
+        Results<Ok<ApiResult<WorkspaceFolderListing>>, ProblemHttpResult>
+    > ListFolder(
+        string slug,
+        string? path,
+        IWorkspaceStore store,
+        IWorkspaceProviderRegistry registry,
+        CancellationToken ct
+    )
+    {
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+
+        var requested = path ?? string.Empty;
+        // Empty path = root; any other value gets the same safety
+        // check the file-read endpoint applies.
+        if (
+            !string.IsNullOrEmpty(requested)
+            && !WorkspaceChangeRequestValidator.IsSafeRelativePath(requested)
+        )
+            return Problems.WorkspaceFilePathInvalid(slug, requested);
+
+        var provider = registry.Resolve(existing);
+        var rootPath = await provider.ResolveRootAsync(existing, ct);
+        if (string.IsNullOrEmpty(rootPath) || !Directory.Exists(rootPath))
+            return Problems.WorkspaceFileNotFound(
+                slug,
+                requested,
+                existing.Type == WorkspaceType.Git
+                    ? "Working tree doesn't exist yet — sync the workspace first to initialize it."
+                    : "Workspace root path is missing or not configured."
+            );
+
+        var rootFull = Path.GetFullPath(rootPath);
+        var rel = requested.Replace('\\', '/').TrimStart('/');
+        var abs = string.IsNullOrEmpty(rel)
+            ? rootFull
+            : Path.GetFullPath(Path.Combine(rootPath, rel));
+        if (!abs.StartsWith(rootFull, StringComparison.Ordinal))
+            return Problems.WorkspaceFilePathInvalid(slug, requested);
+
+        if (!Directory.Exists(abs))
+            return Problems.WorkspaceFileNotFound(slug, requested, null);
+
+        var folders = new List<WorkspaceFolderEntry>();
+        var files = new List<WorkspaceFileEntry>();
+        var truncated = false;
+        try
+        {
+            // Enumerate directories first, then files, capping the
+            // combined total. Sort within each group alphabetically
+            // (case-insensitive) so the widget renders a stable order
+            // without per-call client-side sorting.
+            var dirInfos = new DirectoryInfo(abs)
+                .EnumerateDirectories()
+                .Where(d => !d.Name.StartsWith('.') || d.Name == ".creuser")
+                .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var fileInfos = new DirectoryInfo(abs)
+                .EnumerateFiles()
+                .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var dir in dirInfos)
+            {
+                if (folders.Count + files.Count >= ListFolderEntryCap)
+                {
+                    truncated = true;
+                    break;
+                }
+                folders.Add(
+                    new WorkspaceFolderEntry(
+                        Name: dir.Name,
+                        Path: string.IsNullOrEmpty(rel) ? dir.Name : $"{rel}/{dir.Name}"
+                    )
+                );
+            }
+            if (!truncated)
+            {
+                foreach (var file in fileInfos)
+                {
+                    if (folders.Count + files.Count >= ListFolderEntryCap)
+                    {
+                        truncated = true;
+                        break;
+                    }
+                    files.Add(
+                        new WorkspaceFileEntry(
+                            Name: file.Name,
+                            Path: string.IsNullOrEmpty(rel) ? file.Name : $"{rel}/{file.Name}",
+                            SizeBytes: file.Length,
+                            ModifiedAt: file.LastWriteTimeUtc,
+                            ContentKind: ClassifyContentKind(file.Name)
+                        )
+                    );
+                }
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Problems.WorkspaceFileNotFound(
+                slug,
+                requested,
+                "The platform process can't read this directory."
+            );
+        }
+
+        return TypedResults.Ok(
+            new ApiResult<WorkspaceFolderListing>(
+                new WorkspaceFolderListing(
+                    Path: rel,
+                    Folders: folders,
+                    Files: files,
+                    Truncated: truncated
+                )
+            )
+        );
+    }
+
+    /// <summary>
+    /// Classify a filename by extension into one of <c>text</c>,
+    /// <c>image</c>, <c>binary</c>, <c>unknown</c>. Drives the
+    /// file-manager widget's preview pane (Monaco for text, &lt;img&gt;
+    /// for images, "binary file" placeholder for binary). The
+    /// <c>unknown</c> bucket gets a "view as text anyway" escape hatch
+    /// in the UI for files like <c>.creuser</c> config files.
+    /// </summary>
+    private static string ClassifyContentKind(string fileName)
+    {
+        var ext = Path.GetExtension(fileName);
+        if (string.IsNullOrEmpty(ext))
+        {
+            // Bare names like LICENSE, README, Dockerfile, Makefile —
+            // treat as text since they're nearly always plain text.
+            return "text";
+        }
+        ext = ext.ToLowerInvariant();
+        return ext switch
+        {
+            ".md"
+            or ".txt"
+            or ".log"
+            or ".json"
+            or ".jsonc"
+            or ".yaml"
+            or ".yml"
+            or ".xml"
+            or ".html"
+            or ".htm"
+            or ".css"
+            or ".scss"
+            or ".sass"
+            or ".less"
+            or ".js"
+            or ".jsx"
+            or ".ts"
+            or ".tsx"
+            or ".vue"
+            or ".cs"
+            or ".csproj"
+            or ".csx"
+            or ".sln"
+            or ".slnx"
+            or ".props"
+            or ".targets"
+            or ".sql"
+            or ".py"
+            or ".rb"
+            or ".go"
+            or ".rs"
+            or ".java"
+            or ".kt"
+            or ".swift"
+            or ".c"
+            or ".cpp"
+            or ".h"
+            or ".hpp"
+            or ".sh"
+            or ".bash"
+            or ".zsh"
+            or ".ps1"
+            or ".toml"
+            or ".ini"
+            or ".cfg"
+            or ".conf"
+            or ".env"
+            or ".gitignore"
+            or ".gitattributes"
+            or ".editorconfig"
+            or ".dockerfile"
+            or ".makefile"
+            or ".tf"
+            or ".tfvars"
+            or ".lock"
+            or ".graphql"
+            or ".gql"
+            or ".proto" => "text",
+
+            ".png"
+            or ".jpg"
+            or ".jpeg"
+            or ".gif"
+            or ".webp"
+            or ".svg"
+            or ".bmp"
+            or ".ico"
+            or ".avif" => "image",
+
+            ".zip"
+            or ".tar"
+            or ".gz"
+            or ".tgz"
+            or ".bz2"
+            or ".7z"
+            or ".rar"
+            or ".pdf"
+            or ".dll"
+            or ".exe"
+            or ".so"
+            or ".dylib"
+            or ".bin"
+            or ".woff"
+            or ".woff2"
+            or ".ttf"
+            or ".otf"
+            or ".eot"
+            or ".mp3"
+            or ".mp4"
+            or ".wav"
+            or ".flac"
+            or ".ogg"
+            or ".webm"
+            or ".mov"
+            or ".db"
+            or ".sqlite" => "binary",
+
+            _ => "unknown",
+        };
     }
 
     private static async Task<Ok<ApiResult<WorkspaceConnectionTestResult>>> TestConnectionCore(
