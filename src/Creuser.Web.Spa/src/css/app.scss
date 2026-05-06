@@ -36,3 +36,14 @@
 ::-webkit-scrollbar-corner {
   background: var(--cr-bg-surface);
 }
+
+// CDFS action context menu — Quasar's default avatar slot is 56px wide,
+// which is too much for a 16px icon. Scoped `:deep()` doesn't reach it
+// because `q-menu` portals to <body>, escaping the component's scoped
+// selectors. Targeted by class to avoid touching every avatar slot.
+.cr-cdfs-action-menu {
+  .q-item__section--avatar {
+    min-width: 32px !important;
+    padding-right: 8px !important;
+  }
+}

@@ -32,7 +32,9 @@ public sealed record EntitySummary(
     string Slug,
     string Path,
     string ConventionId,
-    string ContentHash
+    string ContentHash,
+    /// <summary>Merged metadata (frontmatter + computed) as a JSON string. Same shape as <see cref="EntityDetail.MetadataJson"/>; bundled into the list response so callers (notably the CDFS view's per-row action filter) can evaluate `when:` clauses without an N+1 detail fetch.</summary>
+    string MetadataJson
 );
 
 public sealed record EntityDetail(
@@ -381,7 +383,8 @@ public static class ProjectionsEndpoints
                 e.Slug,
                 e.Path,
                 e.ConventionId,
-                e.ContentHash
+                e.ContentHash,
+                e.MetadataJson
             ))
             .ToList();
         return TypedResults.Ok(new ApiResult<IReadOnlyList<EntitySummary>>(summaries));

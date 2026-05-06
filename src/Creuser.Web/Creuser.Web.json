@@ -4871,7 +4871,8 @@
           "slug",
           "path",
           "conventionId",
-          "contentHash"
+          "contentHash",
+          "metadataJson"
         ],
         "type": "object",
         "properties": {
@@ -4892,6 +4893,9 @@
             "type": "string"
           },
           "contentHash": {
+            "type": "string"
+          },
+          "metadataJson": {
             "type": "string"
           }
         }

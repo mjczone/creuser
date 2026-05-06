@@ -23,7 +23,16 @@ namespace Creuser.Scripting.ToolLoop;
 public sealed class WorkspaceToolLoopRegistry : IToolLoopToolRegistry
 {
     public static IReadOnlyList<string> ToolNames { get; } =
-        new[] { "read_file", "list_directory", "grep", "find_files_by_pattern", "git_log" };
+        new[]
+        {
+            "read_file",
+            "list_directory",
+            "grep",
+            "find_files_by_pattern",
+            "git_log",
+            "write_file",
+            "delete_file",
+        };
 
     public IReadOnlyList<string> AvailableTools => ToolNames;
 
@@ -49,6 +58,8 @@ public sealed class WorkspaceToolLoopRegistry : IToolLoopToolRegistry
                 "grep" => BuildGrep(rootPath, sink),
                 "find_files_by_pattern" => BuildFindFilesByPattern(rootPath, sink),
                 "git_log" => BuildGitLog(rootPath, sink),
+                "write_file" => BuildWriteFile(rootPath, sink),
+                "delete_file" => BuildDeleteFile(rootPath, sink),
                 _ => throw new ToolLoopException(
                     $"Unknown tool '{name}'. Available tools: {string.Join(", ", AvailableTools)}."
                 ),
@@ -478,6 +489,100 @@ public sealed class WorkspaceToolLoopRegistry : IToolLoopToolRegistry
             },
             name: "git_log",
             description: "Read git history for the working tree. Optionally scoped to a path. Returns commits as {sha, author, when, subject}."
+        );
+
+    private static AIFunction BuildWriteFile(string root, ToolLogSink sink) =>
+        AIFunctionFactory.Create(
+            (
+                [Description(
+                    "Path to the file relative to the workspace root. Forward slashes. Missing parent directories are created automatically."
+                )]
+                    string path,
+                [Description("UTF-8 file content. Replaces the file if it exists.")] string content
+            ) =>
+            {
+                var sw = Stopwatch.StartNew();
+                // Don't echo content into the tool log — file writes can carry
+                // sizable bodies. Just record the path + size.
+                var argsJson = JsonSerializer.Serialize(
+                    new { path, content_length = content?.Length ?? 0 }
+                );
+                try
+                {
+                    if (!PathGuard.TryResolveSafe(root, path, out var full, out var err))
+                        return RecordFatal(sink, "write_file", argsJson, err, sw);
+                    if (path.Contains(".git/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var res = new { ok = false, error = "Refusing to write inside .git/." };
+                        return RecordResult(sink, "write_file", argsJson, res, sw);
+                    }
+                    var dir = Path.GetDirectoryName(full);
+                    if (!string.IsNullOrEmpty(dir))
+                        Directory.CreateDirectory(dir);
+                    File.WriteAllText(full, content ?? string.Empty, Encoding.UTF8);
+                    var size = new FileInfo(full).Length;
+                    var result = new
+                    {
+                        ok = true,
+                        path,
+                        size,
+                    };
+                    return RecordResult(sink, "write_file", argsJson, result, sw);
+                }
+                catch (Exception ex)
+                {
+                    return RecordError(sink, "write_file", argsJson, ex, sw);
+                }
+            },
+            name: "write_file",
+            description: "Write (or overwrite) a UTF-8 text file in the workspace working tree. Creates parent directories as needed. Use ONLY when the user has explicitly asked you to make changes — read tools first, then write. Returns the path and final size."
+        );
+
+    private static AIFunction BuildDeleteFile(string root, ToolLogSink sink) =>
+        AIFunctionFactory.Create(
+            (
+                [Description("Path to the file relative to the workspace root. Forward slashes.")]
+                    string path
+            ) =>
+            {
+                var sw = Stopwatch.StartNew();
+                var argsJson = JsonSerializer.Serialize(new { path });
+                try
+                {
+                    if (!PathGuard.TryResolveSafe(root, path, out var full, out var err))
+                        return RecordFatal(sink, "delete_file", argsJson, err, sw);
+                    if (path.Contains(".git/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var res = new { ok = false, error = "Refusing to delete inside .git/." };
+                        return RecordResult(sink, "delete_file", argsJson, res, sw);
+                    }
+                    if (Directory.Exists(full))
+                    {
+                        var res = new
+                        {
+                            ok = false,
+                            error = $"Path is a directory, not a file: {path}",
+                        };
+                        return RecordResult(sink, "delete_file", argsJson, res, sw);
+                    }
+                    var existed = File.Exists(full);
+                    if (existed)
+                        File.Delete(full);
+                    var result = new
+                    {
+                        ok = true,
+                        path,
+                        existed,
+                    };
+                    return RecordResult(sink, "delete_file", argsJson, result, sw);
+                }
+                catch (Exception ex)
+                {
+                    return RecordError(sink, "delete_file", argsJson, ex, sw);
+                }
+            },
+            name: "delete_file",
+            description: "Delete a file from the workspace working tree. Idempotent — succeeds with `existed: false` when the file is already gone. Use ONLY when the user has explicitly asked to remove the file. Refuses to delete directories (use the file manager UI for that)."
         );
 
     private static object ParseGrepLine(string line, string root)

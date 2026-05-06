@@ -19,14 +19,32 @@
       <q-btn
         flat
         dense
+        no-caps
+        size="sm"
+        icon="autorenew"
+        label="Re-scan"
+        :loading="syncing"
+        :disable="loading"
+        aria-label="Re-scan workspace and reload"
+        @click="onResync"
+      >
+        <q-tooltip>
+          Re-scan the working tree (runs projection-sync), then reload. Use this when files
+          changed on disk — direct writes don't auto-sync.
+        </q-tooltip>
+      </q-btn>
+      <q-btn
+        flat
+        dense
         round
         size="sm"
         icon="refresh"
         :loading="loading"
-        aria-label="Refresh"
+        :disable="syncing"
+        aria-label="Reload from current projection"
         @click="reload"
       >
-        <q-tooltip>Refresh</q-tooltip>
+        <q-tooltip>Reload from the current projection (no re-scan).</q-tooltip>
       </q-btn>
     </header>
 
@@ -69,29 +87,30 @@
             <q-icon name="article" size="18px" class="cr-cdfs-row-icon" />
             <span class="cr-cdfs-row-name">{{ ent.slug }}</span>
             <span class="cr-cdfs-row-path" :title="ent.path">{{ ent.path }}</span>
-            <q-menu touch-position context-menu auto-close>
+            <q-menu
+              v-if="visibleActionsFor(ent).length > 0"
+              class="cr-cdfs-action-menu"
+              touch-position
+              context-menu
+              auto-close
+            >
               <q-list dense style="min-width: 200px">
-                <q-item clickable @click="openEntity(ent)">
-                  <q-item-section>Open entity</q-item-section>
+                <q-item
+                  v-for="action in visibleActionsFor(ent)"
+                  :key="action.id"
+                  clickable
+                  @click="onActionClick(ent, action)"
+                >
+                  <q-item-section avatar v-if="action.icon">
+                    <q-icon :name="action.icon" size="16px" />
+                  </q-item-section>
+                  <q-item-section>
+                    {{ action.label }}
+                  </q-item-section>
+                  <q-item-section side>
+                    <code class="cr-cdfs-action-kind">{{ action.runs.kind }}</code>
+                  </q-item-section>
                 </q-item>
-                <template v-if="visibleActionsFor(ent).length > 0">
-                  <q-separator />
-                  <q-item-label header>Actions</q-item-label>
-                  <q-item
-                    v-for="action in visibleActionsFor(ent)"
-                    :key="action.id"
-                    clickable
-                    @click="onActionClick(ent, action)"
-                  >
-                    <q-item-section avatar v-if="action.icon">
-                      <q-icon :name="action.icon" size="16px" />
-                    </q-item-section>
-                    <q-item-section>
-                      {{ action.label }}
-                      <q-item-label caption>{{ action.runs.kind }}</q-item-label>
-                    </q-item-section>
-                  </q-item>
-                </template>
               </q-list>
             </q-menu>
           </li>
@@ -191,7 +210,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
-import { Projections } from 'src/api';
+import { Projections, Workspaces } from 'src/api';
 import type {
   CdfsActionDescriptor,
   CdfsConventionRow,
@@ -213,6 +232,7 @@ const { slug: activeWorkspaceSlug } = useActiveWorkspace();
 const slug = computed(() => props.workspaceSlug ?? activeWorkspaceSlug.value ?? '');
 
 const loading = ref(false);
+const syncing = ref(false);
 const rows = ref<CdfsConventionRow[]>([]);
 const activeConvention = ref<CdfsConventionRow | null>(null);
 const entities = ref<EntitySummary[]>([]);
@@ -239,6 +259,43 @@ async function reload() {
     await loadEntities(activeConvention.value);
   } else {
     await loadConventions();
+  }
+}
+
+async function onResync() {
+  if (!slug.value) return;
+  syncing.value = true;
+  try {
+    const res = await Projections.syncProjection({ path: { slug: slug.value } });
+    if (res.error) {
+      notifyError(res.error, 'Projection sync failed.');
+      return;
+    }
+    const report = res.data?.result?.report;
+    const total = report?.entityTotal ?? 0;
+    $q.notify({
+      type: 'positive',
+      position: 'top',
+      timeout: 2500,
+      message: `Re-scanned: ${total} entit${total === 1 ? 'y' : 'ies'}.`,
+    });
+    // After sync, conventions could be different (added/removed/renamed) so
+    // always refetch the root list. If the user was inside a convention,
+    // reload entities under it; if that convention no longer exists, fall
+    // back to root.
+    await loadConventions();
+    if (activeConvention.value) {
+      const stillThere = rows.value.find((r) => r.id === activeConvention.value!.id);
+      if (stillThere) {
+        activeConvention.value = stillThere;
+        entityDetailCache.value.clear();
+        await loadEntities(stillThere);
+      } else {
+        enterRoot();
+      }
+    }
+  } finally {
+    syncing.value = false;
   }
 }
 
@@ -329,15 +386,10 @@ function visibleActionsFor(ent: EntitySummary): CdfsActionDescriptor[] {
   if (!activeConvention.value) return [];
   const actions = activeConvention.value.actions ?? [];
   if (actions.length === 0) return [];
-  // `when:` is filtered against the entity's metadata. We need the detail
-  // for that — but the row context-menu is rendered on hover, before any
-  // detail load. For unloaded entities we render every action; the
-  // `when:` filter applies at click time inside `onActionClick` once the
-  // detail is in hand. This avoids a forced N detail loads for a kind
-  // with hundreds of entities.
-  const detail = entityDetailCache.value.get(ent.id);
-  if (!detail) return actions;
-  return actions.filter((a) => evaluateWhen(a.when, detail));
+  // EntitySummary now carries metadataJson, so the per-row `when:` filter
+  // runs at list-render time without a detail fetch. The detail cache
+  // still backs the inspector pane (refs + pretty-printed metadata).
+  return actions.filter((a) => evaluateWhenAgainstMetadata(a.when, ent.metadataJson));
 }
 
 async function onActionClick(ent: EntitySummary, action: CdfsActionDescriptor) {
@@ -405,18 +457,38 @@ async function dispatchAgentPrompt(action: CdfsActionDescriptor, detail: EntityD
     return;
   }
   const interpolated = interpolatePrompt(rawPrompt, detail);
-  // Append a compact entity context block so the assistant has the
-  // metadata + path even if the author didn't wire them into the
-  // template explicitly.
+
+  // Inline the file body so the assistant doesn't have to round-trip a
+  // fetch tool to read its own context. Capped at 4000 chars — enough
+  // for a typical markdown note or doc; longer entities get truncated
+  // with a marker so the assistant knows it's seeing a partial.
+  let bodySnippet = '';
+  if (slug.value) {
+    const fileRes = await Workspaces.getWorkspaceFile({
+      path: { slug: slug.value },
+      query: { path: detail.path },
+    });
+    const content = fileRes.data?.result?.content;
+    if (typeof content === 'string') {
+      bodySnippet = content.length > BODY_INLINE_CAP
+        ? content.slice(0, BODY_INLINE_CAP) +
+          `\n\n…(truncated; ${content.length - BODY_INLINE_CAP} chars omitted)`
+        : content;
+    }
+  }
+
   const contextBlock =
     `\n\n---\n` +
     `Entity context:\n` +
     `- kind: ${detail.kind}\n` +
     `- slug: ${detail.slug}\n` +
-    `- path: ${detail.path}`;
+    `- path: ${detail.path}` +
+    (bodySnippet ? `\n\nFile body (\`${detail.path}\`):\n\`\`\`\n${bodySnippet}\n\`\`\`` : '');
   assistant.open();
   await assistant.send(interpolated + contextBlock, route.fullPath);
 }
+
+const BODY_INLINE_CAP = 4000;
 
 // Literal-equality `when:` evaluator. Recognizes one form:
 //   <key> == "value"   (or equivalently "value" == <key>)
@@ -424,6 +496,13 @@ async function dispatchAgentPrompt(action: CdfsActionDescriptor, detail: EntityD
 // Anything richer (&&, ||, !=, regex) returns true so the action stays
 // visible and a future evaluator upgrade gates it properly.
 function evaluateWhen(expr: string | null | undefined, detail: EntityDetail): boolean {
+  return evaluateWhenAgainstMetadata(expr, detail.metadataJson);
+}
+
+function evaluateWhenAgainstMetadata(
+  expr: string | null | undefined,
+  metadataJson: string | null | undefined,
+): boolean {
   if (!expr || !expr.trim()) return true;
   const m = expr.match(/^\s*([\w.]+)\s*==\s*"([^"]*)"\s*$/);
   if (!m) {
@@ -431,18 +510,25 @@ function evaluateWhen(expr: string | null | undefined, detail: EntityDetail): bo
     const m2 = expr.match(/^\s*"([^"]*)"\s*==\s*([\w.]+)\s*$/);
     if (!m2) return true;
     const [, value, rawKey] = m2;
-    return readMetadata(detail, rawKey ?? '') === value;
+    return readMetadataValue(metadataJson, rawKey ?? '') === value;
   }
   const [, rawKey, value] = m;
-  return readMetadata(detail, rawKey ?? '') === value;
+  return readMetadataValue(metadataJson, rawKey ?? '') === value;
 }
 
 function readMetadata(detail: EntityDetail, rawKey: string): string | undefined {
+  return readMetadataValue(detail.metadataJson, rawKey);
+}
+
+function readMetadataValue(
+  metadataJson: string | null | undefined,
+  rawKey: string,
+): string | undefined {
   if (!rawKey) return undefined;
   const key = rawKey.startsWith('metadata.') ? rawKey.slice('metadata.'.length) : rawKey;
   let metadata: Record<string, unknown>;
   try {
-    metadata = JSON.parse(detail.metadataJson ?? '{}') as Record<string, unknown>;
+    metadata = JSON.parse(metadataJson ?? '{}') as Record<string, unknown>;
   } catch {
     return undefined;
   }
@@ -759,6 +845,17 @@ watch(
     flex-wrap: wrap;
   }
 }
+
+.cr-cdfs-action-kind {
+  font-family: var(--cr-font-family-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--cr-fg-tertiary);
+  background: var(--cr-bg-elevated);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
 
 .cr-cdfs-refs-unresolved {
   font-size: 10px;

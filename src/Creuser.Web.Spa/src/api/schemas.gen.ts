@@ -1716,7 +1716,7 @@ export const EntityRefSummarySchema = {
 } as const;
 
 export const EntitySummarySchema = {
-  required: ['id', 'kind', 'slug', 'path', 'conventionId', 'contentHash'],
+  required: ['id', 'kind', 'slug', 'path', 'conventionId', 'contentHash', 'metadataJson'],
   type: 'object',
   properties: {
     id: {
@@ -1736,6 +1736,9 @@ export const EntitySummarySchema = {
       type: 'string',
     },
     contentHash: {
+      type: 'string',
+    },
+    metadataJson: {
       type: 'string',
     },
   },

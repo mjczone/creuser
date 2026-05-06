@@ -495,6 +495,7 @@ export type EntitySummary = {
   path: string;
   conventionId: string;
   contentHash: string;
+  metadataJson: string;
 };
 
 export type EnvironmentConfig = {
