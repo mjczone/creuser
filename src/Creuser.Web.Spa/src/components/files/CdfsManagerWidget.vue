@@ -69,6 +69,31 @@
             <q-icon name="article" size="18px" class="cr-cdfs-row-icon" />
             <span class="cr-cdfs-row-name">{{ ent.slug }}</span>
             <span class="cr-cdfs-row-path" :title="ent.path">{{ ent.path }}</span>
+            <q-menu touch-position context-menu auto-close>
+              <q-list dense style="min-width: 200px">
+                <q-item clickable @click="openEntity(ent)">
+                  <q-item-section>Open entity</q-item-section>
+                </q-item>
+                <template v-if="visibleActionsFor(ent).length > 0">
+                  <q-separator />
+                  <q-item-label header>Actions</q-item-label>
+                  <q-item
+                    v-for="action in visibleActionsFor(ent)"
+                    :key="action.id"
+                    clickable
+                    @click="onActionClick(ent, action)"
+                  >
+                    <q-item-section avatar v-if="action.icon">
+                      <q-icon :name="action.icon" size="16px" />
+                    </q-item-section>
+                    <q-item-section>
+                      {{ action.label }}
+                      <q-item-label caption>{{ action.runs.kind }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                </template>
+              </q-list>
+            </q-menu>
           </li>
         </ul>
 
@@ -165,15 +190,24 @@
  */
 import { computed, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
+import { useRoute } from 'vue-router';
 import { Projections } from 'src/api';
-import type { CdfsConventionRow, EntityDetail, EntitySummary } from 'src/api';
+import type {
+  CdfsActionDescriptor,
+  CdfsConventionRow,
+  EntityDetail,
+  EntitySummary,
+} from 'src/api';
 import { useActiveWorkspace } from 'src/composables/useActiveWorkspace';
+import { useAssistantStore } from 'src/stores/assistant';
 
 const props = defineProps<{
   workspaceSlug?: string;
 }>();
 
 const $q = useQuasar();
+const route = useRoute();
+const assistant = useAssistantStore();
 const { slug: activeWorkspaceSlug } = useActiveWorkspace();
 
 const slug = computed(() => props.workspaceSlug ?? activeWorkspaceSlug.value ?? '');
@@ -185,6 +219,9 @@ const entities = ref<EntitySummary[]>([]);
 const selectedEntityId = ref<string | null>(null);
 const entityLoading = ref(false);
 const entityDetail = ref<EntityDetail | null>(null);
+// Detail cache scoped to the active convention. Cleared on convention
+// change + on root return so a stale row's metadata can't gate an action.
+const entityDetailCache = ref(new Map<string, EntityDetail>());
 
 const formattedMetadata = computed(() => {
   if (!entityDetail.value) return '';
@@ -243,6 +280,7 @@ function enterConvention(conv: CdfsConventionRow) {
   entities.value = [];
   selectedEntityId.value = null;
   entityDetail.value = null;
+  entityDetailCache.value.clear();
   void loadEntities(conv);
 }
 
@@ -251,6 +289,7 @@ function enterRoot() {
   entities.value = [];
   selectedEntityId.value = null;
   entityDetail.value = null;
+  entityDetailCache.value.clear();
   if (rows.value.length === 0) void loadConventions();
 }
 
@@ -260,16 +299,199 @@ async function openEntity(ent: EntitySummary) {
   entityDetail.value = null;
   entityLoading.value = true;
   try {
-    const res = await Projections.getEntity({
-      path: { slug: slug.value, kind: ent.kind, entitySlug: ent.slug },
-    });
-    if (res.error) {
-      notifyError(res.error, 'Failed to load entity.');
-      return;
-    }
-    entityDetail.value = res.data?.result ?? null;
+    const detail = await fetchEntityDetail(ent);
+    entityDetail.value = detail;
   } finally {
     entityLoading.value = false;
+  }
+}
+
+async function fetchEntityDetail(ent: EntitySummary): Promise<EntityDetail | null> {
+  if (!slug.value) return null;
+  // Cache one detail per entity id during the session — clicking actions
+  // shortly after opening shouldn't re-fetch. Cleared whenever the active
+  // convention changes.
+  const cached = entityDetailCache.value.get(ent.id);
+  if (cached) return cached;
+  const res = await Projections.getEntity({
+    path: { slug: slug.value, kind: ent.kind, entitySlug: ent.slug },
+  });
+  if (res.error) {
+    notifyError(res.error, 'Failed to load entity.');
+    return null;
+  }
+  const detail = res.data?.result ?? null;
+  if (detail) entityDetailCache.value.set(ent.id, detail);
+  return detail;
+}
+
+function visibleActionsFor(ent: EntitySummary): CdfsActionDescriptor[] {
+  if (!activeConvention.value) return [];
+  const actions = activeConvention.value.actions ?? [];
+  if (actions.length === 0) return [];
+  // `when:` is filtered against the entity's metadata. We need the detail
+  // for that — but the row context-menu is rendered on hover, before any
+  // detail load. For unloaded entities we render every action; the
+  // `when:` filter applies at click time inside `onActionClick` once the
+  // detail is in hand. This avoids a forced N detail loads for a kind
+  // with hundreds of entities.
+  const detail = entityDetailCache.value.get(ent.id);
+  if (!detail) return actions;
+  return actions.filter((a) => evaluateWhen(a.when, detail));
+}
+
+async function onActionClick(ent: EntitySummary, action: CdfsActionDescriptor) {
+  if (!slug.value) return;
+
+  // Make sure we have detail before evaluating `when:` and interpolating
+  // `{path}` / `{slug}` / `{metadata.key}` placeholders.
+  const detail = await fetchEntityDetail(ent);
+  if (!detail) return;
+
+  if (!evaluateWhen(action.when, detail)) {
+    $q.notify({
+      type: 'info',
+      position: 'top',
+      message: `Action "${action.label}" doesn't match this entity (when: ${action.when}).`,
+    });
+    return;
+  }
+
+  if (action.confirm === 'required') {
+    $q.dialog({
+      title: action.label,
+      message:
+        `<p>Run <strong>${action.label}</strong> on <code>${detail.kind}/${detail.slug}</code>?</p>` +
+        `<p class="text-caption">${describeRuns(action)}</p>`,
+      html: true,
+      ok: { label: 'Run', color: 'primary', unelevated: true, noCaps: true },
+      cancel: { flat: true, noCaps: true },
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    }).onOk(async () => {
+      await dispatchAction(action, detail);
+    });
+  } else {
+    await dispatchAction(action, detail);
+  }
+}
+
+async function dispatchAction(action: CdfsActionDescriptor, detail: EntityDetail) {
+  switch (action.runs.kind) {
+    case 'agent-prompt':
+      await dispatchAgentPrompt(action, detail);
+      return;
+    case 'file-mutate':
+    case 'query':
+    case 'job':
+    default:
+      $q.notify({
+        type: 'info',
+        position: 'top',
+        timeout: 5000,
+        message: `Action kind "${action.runs.kind}" isn't dispatched yet — schema is recognized, dispatch arrives in a follow-on commit.`,
+      });
+      return;
+  }
+}
+
+async function dispatchAgentPrompt(action: CdfsActionDescriptor, detail: EntityDetail) {
+  const rawPrompt = action.runs.prompt ?? '';
+  if (!rawPrompt.trim()) {
+    $q.notify({
+      type: 'warning',
+      position: 'top',
+      message: `Action "${action.label}" has no prompt configured.`,
+    });
+    return;
+  }
+  const interpolated = interpolatePrompt(rawPrompt, detail);
+  // Append a compact entity context block so the assistant has the
+  // metadata + path even if the author didn't wire them into the
+  // template explicitly.
+  const contextBlock =
+    `\n\n---\n` +
+    `Entity context:\n` +
+    `- kind: ${detail.kind}\n` +
+    `- slug: ${detail.slug}\n` +
+    `- path: ${detail.path}`;
+  assistant.open();
+  await assistant.send(interpolated + contextBlock, route.fullPath);
+}
+
+// Literal-equality `when:` evaluator. Recognizes one form:
+//   <key> == "value"   (or equivalently "value" == <key>)
+// where <key> is a metadata key like `status` or `metadata.status`.
+// Anything richer (&&, ||, !=, regex) returns true so the action stays
+// visible and a future evaluator upgrade gates it properly.
+function evaluateWhen(expr: string | null | undefined, detail: EntityDetail): boolean {
+  if (!expr || !expr.trim()) return true;
+  const m = expr.match(/^\s*([\w.]+)\s*==\s*"([^"]*)"\s*$/);
+  if (!m) {
+    // Try the inverse order: "value" == key
+    const m2 = expr.match(/^\s*"([^"]*)"\s*==\s*([\w.]+)\s*$/);
+    if (!m2) return true;
+    const [, value, rawKey] = m2;
+    return readMetadata(detail, rawKey ?? '') === value;
+  }
+  const [, rawKey, value] = m;
+  return readMetadata(detail, rawKey ?? '') === value;
+}
+
+function readMetadata(detail: EntityDetail, rawKey: string): string | undefined {
+  if (!rawKey) return undefined;
+  const key = rawKey.startsWith('metadata.') ? rawKey.slice('metadata.'.length) : rawKey;
+  let metadata: Record<string, unknown>;
+  try {
+    metadata = JSON.parse(detail.metadataJson ?? '{}') as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  const parts = key.split('.');
+  let cur: unknown = metadata;
+  for (const p of parts) {
+    if (cur && typeof cur === 'object') {
+      cur = (cur as Record<string, unknown>)[p];
+    } else {
+      return undefined;
+    }
+  }
+  if (typeof cur === 'string') return cur;
+  if (cur == null) return undefined;
+  if (typeof cur === 'number' || typeof cur === 'boolean') return String(cur);
+  // Arrays / nested objects can't equality-match a literal string in v0.1.x
+  // and would stringify as "[object Object]" — return undefined so the
+  // when-clause cleanly fails to match instead.
+  return undefined;
+}
+
+// `{path}`, `{slug}`, `{kind}`, `{metadata.key}` interpolation. Unknown
+// placeholders are left in place so a typo is visible in the chat.
+function interpolatePrompt(template: string, detail: EntityDetail): string {
+  return template.replace(/\{([\w.]+)\}/g, (_full, raw: string) => {
+    if (raw === 'path') return detail.path;
+    if (raw === 'slug') return detail.slug;
+    if (raw === 'kind') return detail.kind;
+    if (raw === 'convention_id') return detail.conventionId;
+    if (raw.startsWith('metadata.')) {
+      return readMetadata(detail, raw) ?? `{${raw}}`;
+    }
+    return readMetadata(detail, raw) ?? `{${raw}}`;
+  });
+}
+
+function describeRuns(action: CdfsActionDescriptor): string {
+  const r = action.runs;
+  switch (r.kind) {
+    case 'agent-prompt':
+      return `Sends a prompt to the chat assistant with this entity as context.`;
+    case 'file-mutate':
+      return `Runs the script "${r.script ?? '(unset)'}" against this entity's file.`;
+    case 'query':
+      return `Invokes the projection tool "${r.tool ?? '(unset)'}".`;
+    case 'job':
+      return `Runs job "${r.jobId ?? '(unset)'}".`;
+    default:
+      return `Dispatches a "${r.kind}" action.`;
   }
 }
 

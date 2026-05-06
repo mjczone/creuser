@@ -310,7 +310,22 @@ public static class ProjectionsEndpoints
                 c.Description,
                 c.Match.Glob,
                 counts.TryGetValue(c.Id, out var n) ? n : 0,
-                Array.Empty<CdfsActionDescriptor>()
+                c.Actions.Select(a => new CdfsActionDescriptor(
+                        a.Id,
+                        a.Label,
+                        a.Icon,
+                        a.When,
+                        a.Confirm,
+                        new CdfsActionRuns(
+                            a.Runs.Kind,
+                            a.Runs.Script,
+                            a.Runs.Prompt,
+                            a.Runs.Tool,
+                            a.Runs.Args,
+                            a.Runs.JobId
+                        )
+                    ))
+                    .ToList()
             ))
             .OrderByDescending(r => r.EntityCount)
             .ThenBy(r => r.Id, StringComparer.Ordinal)

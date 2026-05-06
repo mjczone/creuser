@@ -448,6 +448,34 @@ validation:                  # optional. Declarative rules; failures bubble
   - rule: has_title          # up via \`find_invalid\` and the projection
     expr: metadata.title != null         # report. Expressions evaluate
                                          # against metadata + relationships.
+
+actions:                     # optional. Right-click menu items the CDFS
+                             # widget surfaces per matched entity.
+  - id: summarize            # Required. Stable id; surfaces in telemetry.
+    label: Summarize         # Required. Menu label.
+    icon: auto_awesome       # Optional Material icon name.
+    when: status == "draft"  # Optional gate. v0.1.x supports literal
+                             # equality only: \`<key> == "value"\` on
+                             # metadata keys (\`status\`, \`metadata.status\`).
+    confirm: required        # Optional. \`required\` shows a confirm dialog
+                             # before dispatch. Default = no confirm.
+    runs:
+      kind: agent-prompt     # \`agent-prompt\` (live) | \`file-mutate\` |
+                             # \`query\` | \`job\` (other kinds parse but
+                             # notify "not dispatched yet" until wired).
+      prompt: |              # For agent-prompt: templated prompt sent to
+        Summarize the entity at {path}.    # the chat assistant. Variables:
+        Slug: {slug}                       # {path}, {slug}, {kind},
+        Status: {metadata.status}          # {convention_id}, {metadata.<key>}.
+      # script: my-script    # For file-mutate: job-script slug to run.
+      # tool: find_references  # For query: projection tool to invoke.
+      # job_id: cleanup-job  # For job: workspace job slug to run.
+      # args: { foo: bar }   # Optional kind-specific argument map.
+      output:                # Optional. Where the action's output lands.
+        target: frontmatter.summary    # \`frontmatter.<key>\` | \`body\` |
+                                       # \`comments\`. v0.1.x: chat output
+                                       # only — writeback per target lands
+                                       # in a follow-on commit.
 `;
 
 async function copySchemaReference() {

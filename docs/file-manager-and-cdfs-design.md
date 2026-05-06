@@ -374,22 +374,39 @@ Ships:
 CDFS reuses 80%+ of the FileManagerWidget; only the data adapter
 changes.
 
-### Stage 3 — Convention-declared actions (~2-3 days, blocked on job runner for one path)
+### Stage 3 — Convention-declared actions (schema + agent-prompt dispatch shipped 2026-05-06)
 
-Ships:
-- `Convention.cs` schema additions; `ConventionLoader.cs` parses
-  `actions:`; `ProjectionScanner.cs` propagates them through the
-  per-convention metadata.
-- `CdfsConventionRow.actions` populates from the parsed YAML.
-- Widget right-click menu surfaces per-row actions. Filtering by
-  `when:` happens client-side (each row's metadata is already on hand).
+Status: schema + UI surface + `agent-prompt` dispatch live; remaining
+dispatch paths (`file-mutate`, `query`, `job`) parse and surface but
+notify "not dispatched yet" when invoked. Wiring those is a one-PR
+follow-on per kind.
+
+Ships (live):
+- `Convention.cs` schema additions: `Actions`, `ConventionAction`,
+  `ConventionActionRuns`, `ConventionActionOutput`.
+- `ConventionLoader.cs` parses the optional `actions:` block (extends
+  the `MergeOnto` shallow-merge so a convention can inherit a base's
+  actions and add more).
+- `CdfsConventionRow.actions` populates from the parsed YAML; the
+  CDFS widget's per-row context menu surfaces them.
+- Client-side `when:` evaluator: literal equality only
+  (`status == "draft"` or `metadata.status == "draft"`); unrecognized
+  expressions return true so an action stays visible (fail open) —
+  upgrading the evaluator narrows visibility, never widens it.
 - `confirm: required` shows a Quasar dialog before dispatching.
-- Dispatch paths for `file-mutate` (live today), `agent-prompt`
-  (live today), `query` (live today), `job` (waits on job runner).
+- `agent-prompt` dispatch: opens the chat assistant and sends the
+  templated prompt with `{path}` / `{slug}` / `{kind}` /
+  `{metadata.<key>}` interpolation, plus an automatic entity-context
+  block so the assistant can reason about the entity even if the
+  template author didn't wire every field in.
 
-The `when:` evaluator stays trivially simple in v0.1.x — literal
-equality on string-typed metadata fields, no `&&` / `||` / `!`. Full
-expression language defers to a real consumer.
+Deferred:
+- `file-mutate` dispatch (per-entity scripted change).
+- `query` dispatch (direct projection-tool invocation, no LLM hop).
+- `job` dispatch (waits on the job runner maturing).
+- Output writeback per `runs.output.target` (frontmatter merge / body
+  replace / chat-only). For `agent-prompt`, output today is whatever
+  the assistant says in chat — writeback is the next slice.
 
 ### Stage 4 — Binary uploads + advanced file ops (~1 day, deferred)
 

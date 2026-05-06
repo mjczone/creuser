@@ -164,6 +164,27 @@ public sealed class ConventionLoader : IConventionLoader
                     Expr: v.Expr ?? string.Empty
                 ))
                 .ToList(),
+            Actions: (doc.Actions ?? new List<ActionDoc>())
+                .Where(a => !string.IsNullOrWhiteSpace(a.Id) && a.Runs is not null)
+                .Select(a => new ConventionAction(
+                    Id: a.Id!,
+                    Label: a.Label ?? a.Id!,
+                    Icon: a.Icon,
+                    When: a.When,
+                    Confirm: a.Confirm,
+                    Runs: new ConventionActionRuns(
+                        Kind: a.Runs!.Kind ?? string.Empty,
+                        Script: a.Runs.Script,
+                        Prompt: a.Runs.Prompt,
+                        Tool: a.Runs.Tool,
+                        Args: a.Runs.Args,
+                        JobId: a.Runs.JobId,
+                        Output: a.Runs.Output is null
+                            ? null
+                            : new ConventionActionOutput(a.Runs.Output.Target ?? string.Empty)
+                    )
+                ))
+                .ToList(),
             ContentHash: Sha256(yaml),
             SourcePath: sourcePath
         );
@@ -215,6 +236,7 @@ public sealed class ConventionLoader : IConventionLoader
             Metadata = over.Metadata ?? baseDoc.Metadata,
             Relationships = over.Relationships ?? baseDoc.Relationships,
             Validation = over.Validation ?? baseDoc.Validation,
+            Actions = over.Actions ?? baseDoc.Actions,
         };
     }
 
@@ -239,6 +261,7 @@ public sealed class ConventionLoader : IConventionLoader
         public MetadataDoc? Metadata { get; set; }
         public List<RelationshipDoc>? Relationships { get; set; }
         public List<ValidationDoc>? Validation { get; set; }
+        public List<ActionDoc>? Actions { get; set; }
     }
 
     private sealed class MatchDoc
@@ -274,5 +297,31 @@ public sealed class ConventionLoader : IConventionLoader
     {
         public string? Rule { get; set; }
         public string? Expr { get; set; }
+    }
+
+    private sealed class ActionDoc
+    {
+        public string? Id { get; set; }
+        public string? Label { get; set; }
+        public string? Icon { get; set; }
+        public string? When { get; set; }
+        public string? Confirm { get; set; }
+        public ActionRunsDoc? Runs { get; set; }
+    }
+
+    private sealed class ActionRunsDoc
+    {
+        public string? Kind { get; set; }
+        public string? Script { get; set; }
+        public string? Prompt { get; set; }
+        public string? Tool { get; set; }
+        public Dictionary<string, string>? Args { get; set; }
+        public string? JobId { get; set; }
+        public ActionOutputDoc? Output { get; set; }
+    }
+
+    private sealed class ActionOutputDoc
+    {
+        public string? Target { get; set; }
     }
 }

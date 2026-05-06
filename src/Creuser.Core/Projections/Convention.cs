@@ -33,6 +33,8 @@ public sealed record Convention(
     ConventionMetadataSpec Metadata,
     IReadOnlyList<ConventionRelationship> Relationships,
     IReadOnlyList<ConventionValidationRule> Validation,
+    /// <summary>Right-click actions admins can run against entities of this kind. Surfaced in the CDFS view's per-row menu. Empty when the convention declares none.</summary>
+    IReadOnlyList<ConventionAction> Actions,
     /// <summary>sha256 of the source YAML — propagated into <c>ProjectionReport.ConventionVersions</c> so downstream caches can invalidate.</summary>
     string ContentHash,
     /// <summary>Filesystem path the convention was loaded from (relative to the workspace root). Null for bundled standards.</summary>
@@ -97,3 +99,66 @@ public sealed record ConventionRelationship(
 /// surface in <c>find_invalid</c>.
 /// </summary>
 public sealed record ConventionValidationRule(string Rule, string Expr);
+
+/// <summary>
+/// One right-click action a convention declares for its matched entities.
+/// Surfaced in the CDFS view per-row menu. The action's runs spec
+/// (<see cref="Runs"/>) names which dispatch path the SPA invokes —
+/// <c>file-mutate</c>, <c>agent-prompt</c>, <c>query</c>, <c>job</c>.
+///
+/// <para>
+/// <see cref="When"/> gates visibility per row. v0.1.x supports literal
+/// equality only (e.g. <c>status == "draft"</c>); a richer expression
+/// language defers until a real consumer asks.
+/// </para>
+///
+/// <para>
+/// <see cref="Confirm"/> is either <c>null</c> (dispatch immediately) or
+/// <c>"required"</c> (the SPA shows a confirm dialog first).
+/// </para>
+/// </summary>
+public sealed record ConventionAction(
+    string Id,
+    string Label,
+    string? Icon,
+    string? When,
+    string? Confirm,
+    ConventionActionRuns Runs
+);
+
+/// <summary>
+/// What an action actually does when dispatched. <see cref="Kind"/> picks the
+/// dispatch path; the other fields carry kind-specific payload (left null
+/// when not applicable).
+///
+/// <list type="bullet">
+/// <item><c>file-mutate</c> — <see cref="Script"/> names a job-script slug
+/// the SPA runs against the entity's file. Reuses the file-mutate change
+/// pipeline.</item>
+/// <item><c>agent-prompt</c> — <see cref="Prompt"/> is the templated
+/// prompt the SPA injects into the chat assistant with the entity as
+/// context.</item>
+/// <item><c>query</c> — <see cref="Tool"/> names a projection tool
+/// (e.g. <c>find_references</c>). The SPA invokes it directly with
+/// <see cref="Args"/>.</item>
+/// <item><c>job</c> — <see cref="JobId"/> names a workspace job to run;
+/// the SPA hits <c>POST /jobs/{id}/run</c>.</item>
+/// </list>
+/// </summary>
+public sealed record ConventionActionRuns(
+    string Kind,
+    string? Script,
+    string? Prompt,
+    string? Tool,
+    IReadOnlyDictionary<string, string>? Args,
+    string? JobId,
+    ConventionActionOutput? Output
+);
+
+/// <summary>
+/// Where an action's output lands. <see cref="Target"/> is one of
+/// <c>frontmatter.&lt;key&gt;</c> | <c>body</c> | <c>comments</c>; the SPA
+/// uses this to decide how to writeback (frontmatter merge, body replace,
+/// or chat-only with no writeback).
+/// </summary>
+public sealed record ConventionActionOutput(string Target);
