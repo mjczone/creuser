@@ -311,7 +311,7 @@ public sealed class dashboardsRepository : IDashboardStore
             await conn.QueryAsync<dashboards>(
                 new CommandDefinition(
                     $"""
-                    SELECT id, workspace_id, group_id, slug, name, icon, position
+                    SELECT id, workspace_id, group_id, slug, name, icon, position, is_default
                     FROM {DashTable}
                     WHERE workspace_id = @workspaceId
                     ORDER BY position ASC, created_at ASC
@@ -325,7 +325,7 @@ public sealed class dashboardsRepository : IDashboardStore
         var navItems = dashboardRows
             .Select(d => new
             {
-                Item = new DashboardNavItem(d.slug, d.name, d.icon, d.position),
+                Item = new DashboardNavItem(d.slug, d.name, d.icon, d.position, d.is_default),
                 GroupId = d.group_id,
             })
             .ToList();
@@ -336,7 +336,8 @@ public sealed class dashboardsRepository : IDashboardStore
                 g.name,
                 g.icon,
                 g.position,
-                navItems.Where(n => n.GroupId == g.id).Select(n => n.Item).ToList()
+                navItems.Where(n => n.GroupId == g.id).Select(n => n.Item).ToList(),
+                g.is_default
             ))
             .ToList();
 

@@ -95,6 +95,18 @@ const routes: RouteRecordRaw[] = [
             component: () => import('pages/workspace/WorkspaceSettingsSchedulesPage.vue'),
             meta: { title: 'Schedules', workspaceScoped: true, requiresWorkspaceEditor: true },
           },
+          {
+            path: 'conventions',
+            name: 'workspace-settings-conventions',
+            component: () => import('pages/workspace/WorkspaceSettingsConventionsPage.vue'),
+            meta: { title: 'Conventions', workspaceScoped: true, requiresWorkspaceEditor: true },
+          },
+          {
+            path: 'dashboards',
+            name: 'workspace-settings-dashboards',
+            component: () => import('pages/workspace/WorkspaceSettingsDashboardsPage.vue'),
+            meta: { title: 'Dashboards', workspaceScoped: true, requiresWorkspaceEditor: true },
+          },
         ],
       },
       {

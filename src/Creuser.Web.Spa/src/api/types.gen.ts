@@ -175,6 +175,10 @@ export type ApiResultOfScheduleResult = {
   result: null | ScheduleResult;
 };
 
+export type ApiResultOfStandardConventionsListResult = {
+  result: null | StandardConventionsListResult;
+};
+
 export type ApiResultOfSyncProjectionResult = {
   result: null | SyncProjectionResult;
 };
@@ -183,8 +187,20 @@ export type ApiResultOfUserResult = {
   result: null | UserResult;
 };
 
+export type ApiResultOfWorkspaceChangeResult = {
+  result: null | WorkspaceChangeResult;
+};
+
+export type ApiResultOfWorkspaceCommitResult = {
+  result: null | WorkspaceCommitResult;
+};
+
 export type ApiResultOfWorkspaceConnectionTestResult = {
   result: null | WorkspaceConnectionTestResult;
+};
+
+export type ApiResultOfWorkspaceFileContent = {
+  result: null | WorkspaceFileContent;
 };
 
 export type ApiResultOfWorkspacePluginInfo = {
@@ -205,6 +221,10 @@ export type ApiResultOfWorkspacePushResult = {
 
 export type ApiResultOfWorkspaceResult = {
   result: null | WorkspaceResult;
+};
+
+export type ApiResultOfWorkspaceStatusResult = {
+  result: null | WorkspaceStatusResult;
 };
 
 export type ApiResultOfWorkspaceSyncResult = {
@@ -367,6 +387,7 @@ export type DashboardNavGroup = {
   icon: string;
   position: number | string;
   children: Array<DashboardNavItem>;
+  isDefault?: boolean;
 };
 
 export type DashboardNavItem = {
@@ -374,6 +395,7 @@ export type DashboardNavItem = {
   name: string;
   icon: null | string;
   position: number | string;
+  isDefault?: boolean;
 };
 
 export type DashboardNavTree = {
@@ -462,6 +484,17 @@ export type GitWorkspaceSettingsDto = {
   sourceBranch?: string;
   mode?: string;
   pushFrequency?: string;
+};
+
+export type HttpValidationProblemDetails = {
+  type?: null | string;
+  title?: null | string;
+  status?: null | number | string;
+  detail?: null | string;
+  instance?: null | string;
+  errors?: {
+    [key: string]: Array<string>;
+  };
 };
 
 export type IFormFile = Blob | File;
@@ -660,6 +693,15 @@ export type SmtpConfig = {
   fromName?: null | string;
 };
 
+export type StandardConventionEntry = {
+  reference: string;
+  yaml: string;
+};
+
+export type StandardConventionsListResult = {
+  standards: Array<StandardConventionEntry>;
+};
+
 export type SyncProjectionResult = {
   report: ProjectionReport;
 };
@@ -729,10 +771,60 @@ export type UserResult = {
   lastLoginAt: null | string;
 };
 
+export type WorkspaceCapabilitiesDto = {
+  canWrite: boolean;
+  canCommit: boolean;
+  canPush: boolean;
+  canSync: boolean;
+};
+
+export type WorkspaceChangeRequest = {
+  changes: Array<WorkspaceFileChange>;
+};
+
+export type WorkspaceChangeResult = {
+  ok: boolean;
+  slug: string;
+  latencyMs: number | string;
+  at: string;
+  message: null | string;
+  error: null | string;
+  filesChanged?: number | string;
+};
+
+export type WorkspaceCommitRequest = {
+  commitMessage: string;
+};
+
+export type WorkspaceCommitResult = {
+  ok: boolean;
+  slug: string;
+  commitSha: null | string;
+  latencyMs: number | string;
+  committedAt: string;
+  message: null | string;
+  error: null | string;
+  filesCommitted?: number | string;
+  nothingToCommit?: boolean;
+};
+
 export type WorkspaceConnectionTestResult = {
   ok: boolean;
   latencyMs: number | string;
   error: null | string;
+};
+
+export type WorkspaceFileChange = {
+  path: string;
+  action: string;
+  content?: null | string;
+};
+
+export type WorkspaceFileContent = {
+  path: string;
+  content: string;
+  contentHash: string;
+  sizeBytes: number | string;
 };
 
 export type WorkspacePluginInfo = {
@@ -790,6 +882,15 @@ export type WorkspaceResult = {
   lastPushSha: null | string;
   lastPushStatus: null | string;
   lastPushMessage: null | string;
+};
+
+export type WorkspaceStatusResult = {
+  slug: string;
+  type: string;
+  capabilities: WorkspaceCapabilitiesDto;
+  uncommittedFileCount: number | string;
+  unpushedCommitCount: number | string;
+  workingRootExists: boolean;
 };
 
 export type WorkspaceSyncResult = {
@@ -1292,6 +1393,101 @@ export type PushWorkspaceResponses = {
 };
 
 export type PushWorkspaceResponse = PushWorkspaceResponses[keyof PushWorkspaceResponses];
+
+export type CommitWorkspaceData = {
+  body: WorkspaceCommitRequest;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/commit';
+};
+
+export type CommitWorkspaceErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+};
+
+export type CommitWorkspaceError = CommitWorkspaceErrors[keyof CommitWorkspaceErrors];
+
+export type CommitWorkspaceResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspaceCommitResult;
+};
+
+export type CommitWorkspaceResponse = CommitWorkspaceResponses[keyof CommitWorkspaceResponses];
+
+export type GetWorkspaceStatusData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/status';
+};
+
+export type GetWorkspaceStatusResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspaceStatusResult;
+};
+
+export type GetWorkspaceStatusResponse =
+  GetWorkspaceStatusResponses[keyof GetWorkspaceStatusResponses];
+
+export type ApplyWorkspaceChangesData = {
+  body: WorkspaceChangeRequest;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/changes';
+};
+
+export type ApplyWorkspaceChangesErrors = {
+  /**
+   * Bad Request
+   */
+  400: HttpValidationProblemDetails;
+};
+
+export type ApplyWorkspaceChangesError =
+  ApplyWorkspaceChangesErrors[keyof ApplyWorkspaceChangesErrors];
+
+export type ApplyWorkspaceChangesResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspaceChangeResult;
+};
+
+export type ApplyWorkspaceChangesResponse =
+  ApplyWorkspaceChangesResponses[keyof ApplyWorkspaceChangesResponses];
+
+export type GetWorkspaceFileData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query: {
+    path: string;
+  };
+  url: '/api/workspaces/{slug}/files';
+};
+
+export type GetWorkspaceFileResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfWorkspaceFileContent;
+};
+
+export type GetWorkspaceFileResponse = GetWorkspaceFileResponses[keyof GetWorkspaceFileResponses];
 
 export type ListWorkspacePluginsData = {
   body?: never;
@@ -1936,6 +2132,23 @@ export type ListConventionsResponses = {
 };
 
 export type ListConventionsResponse = ListConventionsResponses[keyof ListConventionsResponses];
+
+export type ListStandardConventionsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/conventions/standard';
+};
+
+export type ListStandardConventionsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfStandardConventionsListResult;
+};
+
+export type ListStandardConventionsResponse =
+  ListStandardConventionsResponses[keyof ListStandardConventionsResponses];
 
 export type QueryEntitiesData = {
   body?: never;

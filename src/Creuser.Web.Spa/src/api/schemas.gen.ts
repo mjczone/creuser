@@ -631,6 +631,23 @@ export const ApiResultOfScheduleResultSchema = {
   },
 } as const;
 
+export const ApiResultOfStandardConventionsListResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/StandardConventionsListResult',
+        },
+      ],
+    },
+  },
+} as const;
+
 export const ApiResultOfSyncProjectionResultSchema = {
   required: ['result'],
   type: 'object',
@@ -665,6 +682,40 @@ export const ApiResultOfUserResultSchema = {
   },
 } as const;
 
+export const ApiResultOfWorkspaceChangeResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/WorkspaceChangeResult',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfWorkspaceCommitResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/WorkspaceCommitResult',
+        },
+      ],
+    },
+  },
+} as const;
+
 export const ApiResultOfWorkspaceConnectionTestResultSchema = {
   required: ['result'],
   type: 'object',
@@ -676,6 +727,23 @@ export const ApiResultOfWorkspaceConnectionTestResultSchema = {
         },
         {
           $ref: '#/components/schemas/WorkspaceConnectionTestResult',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfWorkspaceFileContentSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/WorkspaceFileContent',
         },
       ],
     },
@@ -761,6 +829,23 @@ export const ApiResultOfWorkspaceResultSchema = {
         },
         {
           $ref: '#/components/schemas/WorkspaceResult',
+        },
+      ],
+    },
+  },
+} as const;
+
+export const ApiResultOfWorkspaceStatusResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/WorkspaceStatusResult',
         },
       ],
     },
@@ -1285,6 +1370,10 @@ export const DashboardNavGroupSchema = {
         $ref: '#/components/schemas/DashboardNavItem',
       },
     },
+    isDefault: {
+      type: 'boolean',
+      default: false,
+    },
   },
 } as const;
 
@@ -1305,6 +1394,10 @@ export const DashboardNavItemSchema = {
       pattern: '^-?(?:0|[1-9]\\d*)$',
       type: ['integer', 'string'],
       format: 'int32',
+    },
+    isDefault: {
+      type: 'boolean',
+      default: false,
     },
   },
 } as const;
@@ -1597,6 +1690,38 @@ export const GitWorkspaceSettingsDtoSchema = {
     pushFrequency: {
       type: 'string',
       default: 'every-commit',
+    },
+  },
+} as const;
+
+export const HttpValidationProblemDetailsSchema = {
+  type: 'object',
+  properties: {
+    type: {
+      type: ['null', 'string'],
+    },
+    title: {
+      type: ['null', 'string'],
+    },
+    status: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['null', 'integer', 'string'],
+      format: 'int32',
+    },
+    detail: {
+      type: ['null', 'string'],
+    },
+    instance: {
+      type: ['null', 'string'],
+    },
+    errors: {
+      type: 'object',
+      additionalProperties: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+      },
     },
   },
 } as const;
@@ -2291,6 +2416,32 @@ export const SmtpConfigSchema = {
   },
 } as const;
 
+export const StandardConventionEntrySchema = {
+  required: ['reference', 'yaml'],
+  type: 'object',
+  properties: {
+    reference: {
+      type: 'string',
+    },
+    yaml: {
+      type: 'string',
+    },
+  },
+} as const;
+
+export const StandardConventionsListResultSchema = {
+  required: ['standards'],
+  type: 'object',
+  properties: {
+    standards: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/StandardConventionEntry',
+      },
+    },
+  },
+} as const;
+
 export const SyncProjectionResultSchema = {
   required: ['report'],
   type: 'object',
@@ -2520,6 +2671,123 @@ export const UserResultSchema = {
   },
 } as const;
 
+export const WorkspaceCapabilitiesDtoSchema = {
+  required: ['canWrite', 'canCommit', 'canPush', 'canSync'],
+  type: 'object',
+  properties: {
+    canWrite: {
+      type: 'boolean',
+    },
+    canCommit: {
+      type: 'boolean',
+    },
+    canPush: {
+      type: 'boolean',
+    },
+    canSync: {
+      type: 'boolean',
+    },
+  },
+} as const;
+
+export const WorkspaceChangeRequestSchema = {
+  required: ['changes'],
+  type: 'object',
+  properties: {
+    changes: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/WorkspaceFileChange',
+      },
+    },
+  },
+} as const;
+
+export const WorkspaceChangeResultSchema = {
+  required: ['ok', 'slug', 'latencyMs', 'at', 'message', 'error'],
+  type: 'object',
+  properties: {
+    ok: {
+      type: 'boolean',
+    },
+    slug: {
+      type: 'string',
+    },
+    latencyMs: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int64',
+    },
+    at: {
+      type: 'string',
+      format: 'date-time',
+    },
+    message: {
+      type: ['null', 'string'],
+    },
+    error: {
+      type: ['null', 'string'],
+    },
+    filesChanged: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+      default: 0,
+    },
+  },
+} as const;
+
+export const WorkspaceCommitRequestSchema = {
+  required: ['commitMessage'],
+  type: 'object',
+  properties: {
+    commitMessage: {
+      type: 'string',
+    },
+  },
+} as const;
+
+export const WorkspaceCommitResultSchema = {
+  required: ['ok', 'slug', 'commitSha', 'latencyMs', 'committedAt', 'message', 'error'],
+  type: 'object',
+  properties: {
+    ok: {
+      type: 'boolean',
+    },
+    slug: {
+      type: 'string',
+    },
+    commitSha: {
+      type: ['null', 'string'],
+    },
+    latencyMs: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int64',
+    },
+    committedAt: {
+      type: 'string',
+      format: 'date-time',
+    },
+    message: {
+      type: ['null', 'string'],
+    },
+    error: {
+      type: ['null', 'string'],
+    },
+    filesCommitted: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+      default: 0,
+    },
+    nothingToCommit: {
+      type: 'boolean',
+      default: false,
+    },
+  },
+} as const;
+
 export const WorkspaceConnectionTestResultSchema = {
   required: ['ok', 'latencyMs', 'error'],
   type: 'object',
@@ -2534,6 +2802,43 @@ export const WorkspaceConnectionTestResultSchema = {
     },
     error: {
       type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const WorkspaceFileChangeSchema = {
+  required: ['path', 'action'],
+  type: 'object',
+  properties: {
+    path: {
+      type: 'string',
+    },
+    action: {
+      type: 'string',
+    },
+    content: {
+      type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const WorkspaceFileContentSchema = {
+  required: ['path', 'content', 'contentHash', 'sizeBytes'],
+  type: 'object',
+  properties: {
+    path: {
+      type: 'string',
+    },
+    content: {
+      type: 'string',
+    },
+    contentHash: {
+      type: 'string',
+    },
+    sizeBytes: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int64',
     },
   },
 } as const;
@@ -2762,6 +3067,42 @@ export const WorkspaceResultSchema = {
     },
     lastPushMessage: {
       type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const WorkspaceStatusResultSchema = {
+  required: [
+    'slug',
+    'type',
+    'capabilities',
+    'uncommittedFileCount',
+    'unpushedCommitCount',
+    'workingRootExists',
+  ],
+  type: 'object',
+  properties: {
+    slug: {
+      type: 'string',
+    },
+    type: {
+      type: 'string',
+    },
+    capabilities: {
+      $ref: '#/components/schemas/WorkspaceCapabilitiesDto',
+    },
+    uncommittedFileCount: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    unpushedCommitCount: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    workingRootExists: {
+      type: 'boolean',
     },
   },
 } as const;

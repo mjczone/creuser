@@ -11,6 +11,7 @@ using Creuser.Web.Contracts;
 using Creuser.Web.Contracts.Requests;
 using Creuser.Web.Contracts.Responses;
 using Creuser.Web.Environment;
+using Creuser.Web.Validation;
 using Creuser.Web.Workspaces;
 using FluentValidation;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -81,6 +82,19 @@ public static class WorkspacesEndpoints
             .MapPost("/{slug}/push", (Delegate)Push)
             .RequireAuthorization(p => p.RequireRole(Roles.Admin))
             .WithName("PushWorkspace");
+        group
+            .MapPost("/{slug}/commit", (Delegate)Commit)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("CommitWorkspace");
+        group.MapGet("/{slug}/status", (Delegate)GetStatus).WithName("GetWorkspaceStatus");
+        group
+            .MapPost("/{slug}/changes", (Delegate)Changes)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("ApplyWorkspaceChanges");
+        group
+            .MapGet("/{slug}/files", (Delegate)GetFile)
+            .RequireAuthorization(p => p.RequireRole(Roles.Admin))
+            .WithName("GetWorkspaceFile");
         group.MapGet("/{slug}/plugins", (Delegate)ListPlugins).WithName("ListWorkspacePlugins");
         group
             .MapPut("/{slug}/plugins/{pluginId}", (Delegate)SetPluginEnabled)
@@ -679,17 +693,19 @@ public static class WorkspacesEndpoints
     public sealed record WorkspacePluginSettingsResult(string PluginId, string SettingsJson);
 
     /// <summary>
-    /// Sync the workspace's content. For git: clone (first time) or fetch +
-    /// reset --hard origin/&lt;workingBranch&gt; (subsequent). For local: verify
-    /// the path is still readable. Per-slug serialization via in-memory
-    /// semaphore — concurrent calls for the same slug queue, different slugs
-    /// run in parallel.
+    /// Sync the workspace's content. Provider-dispatched: git workspaces
+    /// fetch + reset --hard, local workspaces verify the path is still
+    /// readable, future providers do whatever they do. Per-slug
+    /// serialization via in-memory semaphore — concurrent calls for the
+    /// same slug queue, different slugs run in parallel. Side effects
+    /// (sync-triggered schedule dispatch + projection-sync continuation)
+    /// fire fire-and-forget after a successful sync.
     /// </summary>
     private static async Task<Results<Ok<ApiResult<WorkspaceSyncResult>>, ProblemHttpResult>> Sync(
         string slug,
         IWorkspaceStore store,
-        SecretsService secrets,
-        WorkspaceFilesystemService fs,
+        IWorkspaceProviderRegistry registry,
+        IWorkspaceStatusBroadcaster broadcaster,
         TimeProvider time,
         ILogger<SyncMarker> logger,
         Creuser.Core.Execution.IScheduleStore scheduleStore,
@@ -697,61 +713,56 @@ public static class WorkspacesEndpoints
         IServiceScopeFactory scopeFactory,
         CancellationToken ct,
         // Two-phase confirmation: a first call with force=false returns
-        // RequiresForce=true (and the dirty count) when the working tree has
-        // uncommitted changes. The SPA confirms with the admin and retries
-        // with force=true to actually discard.
+        // RequiresForce=true (and the dirty + ahead counts) when the working
+        // tree is dirty or the working branch has unpushed commits. The SPA
+        // confirms with the admin and retries with force=true to discard.
         bool force = false
     )
     {
         var existing = await store.FindBySlugAsync(slug);
         if (existing is null)
             return Problems.WorkspaceNotFound(slug);
+        var provider = registry.Resolve(existing);
+        if (!provider.Capabilities.CanSync)
+            return Problems.WorkspaceCapabilityNotSupported(slug, "sync");
 
         var gate = _syncLocks.GetOrAdd(slug, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct);
         try
         {
-            var sw = Stopwatch.StartNew();
-            WorkspaceSyncResult result;
+            SyncOutcome outcome;
             try
             {
-                result = existing.Type switch
-                {
-                    WorkspaceType.Git => await SyncGitAsync(
-                        existing,
-                        secrets,
-                        fs,
-                        time,
-                        sw,
-                        force,
-                        ct
-                    ),
-                    WorkspaceType.Local => SyncLocal(existing, time, sw),
-                    _ => new WorkspaceSyncResult(
-                        Ok: false,
-                        Slug: slug,
-                        Sha: null,
-                        LatencyMs: 0,
-                        SyncedAt: time.GetUtcNow().UtcDateTime,
-                        Message: null,
-                        Error: $"Sync not supported for type '{existing.Type}'."
-                    ),
-                };
+                outcome = await provider.SyncAsync(existing, force, ct);
             }
             catch (Exception ex)
             {
-                sw.Stop();
                 logger.LogError(ex, "Workspace sync failed for {Slug}", slug);
-                result = new WorkspaceSyncResult(
+                outcome = new SyncOutcome(
                     Ok: false,
-                    Slug: slug,
                     Sha: null,
-                    LatencyMs: sw.ElapsedMilliseconds,
-                    SyncedAt: time.GetUtcNow().UtcDateTime,
+                    DirtyCount: 0,
+                    AheadCount: 0,
+                    RequiresForce: false,
                     Message: null,
-                    Error: $"{ex.GetType().Name}: {ex.Message}"
+                    Error: $"{ex.GetType().Name}: {ex.Message}",
+                    LatencyMs: 0,
+                    At: time.GetUtcNow().UtcDateTime
                 );
             }
+
+            var result = new WorkspaceSyncResult(
+                Ok: outcome.Ok,
+                Slug: slug,
+                Sha: outcome.Sha,
+                LatencyMs: outcome.LatencyMs,
+                SyncedAt: outcome.At,
+                Message: outcome.Message,
+                Error: outcome.Error,
+                DirtyCount: outcome.DirtyCount,
+                AheadCount: outcome.AheadCount,
+                RequiresForce: outcome.RequiresForce
+            );
 
             // Persist the sync state regardless of outcome — operators want
             // to see "last attempt failed at <time>" in the UI, not just a
@@ -768,6 +779,15 @@ public static class WorkspacesEndpoints
                     result.Ok ? result.Message : result.Error,
                     ct
                 );
+            }
+
+            // Broadcast fresh status so the SPA's header reflects new
+            // counts (uncommitted, unpushed) without polling. Failure here
+            // is non-fatal — the request still succeeds, the SPA just
+            // misses the push and re-syncs on next interaction.
+            if (!result.RequiresForce)
+            {
+                _ = BroadcastStatusAsync(provider, broadcaster, existing, logger);
             }
 
             // Fire any sync-triggered schedules for this workspace. Inline
@@ -859,389 +879,6 @@ public static class WorkspacesEndpoints
         }
     }
 
-    private static async Task<WorkspaceSyncResult> SyncGitAsync(
-        Workspace ws,
-        SecretsService secrets,
-        WorkspaceFilesystemService fs,
-        TimeProvider time,
-        Stopwatch sw,
-        bool force,
-        CancellationToken ct
-    )
-    {
-        var settings = ParseGitSettings(ws.Settings);
-        if (settings is null)
-            return Failure(ws.Slug, sw, time, "Workspace settings are missing or unreadable.");
-
-        if (string.IsNullOrWhiteSpace(settings.RepositoryUrl))
-            return Failure(ws.Slug, sw, time, "Repository URL is not set.");
-
-        // Resolve the credential up-front so both clone and fetch paths use
-        // the same auth machinery. None mode → null (public repo).
-        string? credential = null;
-        if (settings.AuthMode != GitAuthMode.None)
-        {
-            if (!string.IsNullOrWhiteSpace(settings.AuthSecret))
-                credential = await secrets.ReadInternalAsync(settings.AuthSecret, ct);
-            if (string.IsNullOrWhiteSpace(credential))
-                return Failure(
-                    ws.Slug,
-                    sw,
-                    time,
-                    settings.AuthMode == GitAuthMode.HttpsPat
-                        ? "PAT secret is missing — re-edit the workspace and supply the credential."
-                        : "Private key secret is missing — re-edit the workspace and supply the credential."
-                );
-        }
-
-        var workingTree = fs.GetWorkingTreePath(ws.Slug);
-        var workingBranch = string.IsNullOrWhiteSpace(settings.WorkingBranch)
-            ? "creuser/main"
-            : settings.WorkingBranch;
-        var sourceBranch = string.IsNullOrWhiteSpace(settings.SourceBranch)
-            ? "main"
-            : settings.SourceBranch;
-
-        // SSH key is staged to a chmod-600 temp file and threaded through
-        // GIT_SSH_COMMAND. PAT is supplied via http.extraHeader Basic auth,
-        // which works for every Git host worth supporting (GitHub, GitLab,
-        // Bitbucket, Azure DevOps, Gitea).
-        string? sshKeyPath = null;
-        try
-        {
-            var env = new Dictionary<string, string> { ["GIT_TERMINAL_PROMPT"] = "0" };
-            var configArgs = new List<string>();
-
-            if (settings.AuthMode == GitAuthMode.SshKey)
-            {
-                sshKeyPath = Path.Combine(
-                    Path.GetTempPath(),
-                    $"creuser-sync-key-{Guid.NewGuid():N}.pem"
-                );
-                await File.WriteAllTextAsync(sshKeyPath, credential!.TrimEnd() + "\n", ct);
-                if (
-                    RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                    || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                )
-                {
-                    File.SetUnixFileMode(
-                        sshKeyPath,
-                        UnixFileMode.UserRead | UnixFileMode.UserWrite
-                    );
-                }
-                // LogLevel=ERROR suppresses the "Permanently added 'host' to
-                // the list of known hosts" warning that StrictHostKeyChecking=no
-                // would otherwise emit on every fresh connection — the key is
-                // immediately discarded since UserKnownHostsFile=/dev/null.
-                env["GIT_SSH_COMMAND"] =
-                    $"ssh -i \"{sshKeyPath}\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
-                    + "-o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR";
-            }
-            else if (settings.AuthMode == GitAuthMode.HttpsPat)
-            {
-                var basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"git:{credential}"));
-                configArgs.Add("-c");
-                configArgs.Add($"http.extraHeader=Authorization: Basic {basic}");
-            }
-
-            // Init-then-fetch instead of clone — works whether the working
-            // branch exists on remote or only locally. A single clone command
-            // can't represent "give me <working> if it exists, otherwise
-            // <source>", so we drive the remote interactions directly. Shallow
-            // (--depth 1) keeps the disk footprint small for v1.
-            if (!fs.WorkingTreeExists(ws.Slug))
-            {
-                if (Directory.Exists(workingTree))
-                {
-                    // Stale partial clone (e.g. from a previous failed attempt).
-                    try
-                    {
-                        Directory.Delete(workingTree, recursive: true);
-                    }
-                    catch
-                    {
-                        // Fall through; init below will fail with a clearer error
-                        // if the directory really can't be cleared.
-                    }
-                }
-                Directory.CreateDirectory(workingTree);
-
-                var initRes = await RunGitAsync(
-                    new List<string> { "init", "--quiet" },
-                    env,
-                    workingTree,
-                    ct
-                );
-                if (initRes.ExitCode != 0)
-                    return Failure(ws.Slug, sw, time, ParseGitError(initRes.StdErr, "init"));
-
-                var remoteRes = await RunGitAsync(
-                    new List<string> { "remote", "add", "origin", settings.RepositoryUrl },
-                    env,
-                    workingTree,
-                    ct
-                );
-                if (remoteRes.ExitCode != 0)
-                    return Failure(
-                        ws.Slug,
-                        sw,
-                        time,
-                        ParseGitError(remoteRes.StdErr, "remote add")
-                    );
-            }
-            else
-            {
-                // Working tree already exists. Make sure the remote URL matches
-                // the (possibly edited) workspace setting — the user could have
-                // rotated the URL since the last sync.
-                await RunGitAsync(
-                    new List<string> { "remote", "set-url", "origin", settings.RepositoryUrl },
-                    env,
-                    workingTree,
-                    ct
-                );
-            }
-
-            // Always fetch the source branch — it must exist on the remote;
-            // an error here is a real auth / URL / branch-name problem.
-            var fetchSourceArgs = new List<string>(configArgs)
-            {
-                "fetch",
-                "--depth",
-                "1",
-                "origin",
-                sourceBranch,
-            };
-            var fetchSource = await RunGitAsync(fetchSourceArgs, env, workingTree, ct);
-            if (fetchSource.ExitCode != 0)
-                return Failure(ws.Slug, sw, time, ParseGitError(fetchSource.StdErr, "fetch"));
-
-            // Try to fetch the working branch — best-effort because a fresh
-            // workspace hasn't pushed it yet. Failure here is expected and
-            // means "fall back to source for the local checkout target."
-            var workingOnRemote = workingBranch == sourceBranch;
-            if (!workingOnRemote)
-            {
-                var fetchWorkingArgs = new List<string>(configArgs)
-                {
-                    "fetch",
-                    "--depth",
-                    "1",
-                    "origin",
-                    workingBranch,
-                };
-                var fetchWorking = await RunGitAsync(fetchWorkingArgs, env, workingTree, ct);
-                workingOnRemote = fetchWorking.ExitCode == 0;
-            }
-
-            // Capture any local drift before mirroring: modifications,
-            // additions, deletions, and untracked files. `status --porcelain`
-            // gives one line per dirty path, so the count is the line count.
-            // We ignore exit code: on a fresh init this can fail, in which
-            // case there's nothing to discard anyway.
-            var statusRes = await RunGitAsync(
-                new List<string> { "status", "--porcelain" },
-                env,
-                workingTree,
-                ct
-            );
-            var dirtyCount =
-                statusRes.ExitCode == 0
-                    ? statusRes.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length
-                    : 0;
-
-            // Compute the reset target up-front so the ahead-count check can
-            // measure against the same ref the upcoming `reset --hard` will
-            // use. (The original code derived this lower down; lifting it
-            // here keeps the dirty/ahead gates symmetric.)
-            var target = workingOnRemote ? $"origin/{workingBranch}" : $"origin/{sourceBranch}";
-
-            // Sync's `reset --hard` would silently destroy any local commits
-            // on `workingBranch` that aren't reachable from `target` — the
-            // dirty-count check above only catches working-tree modifications,
-            // not clean-but-unpushed commits. Compute ahead count so the same
-            // RequiresForce gate covers both cases.
-            //
-            // Skip the check if the local branch ref doesn't yet exist (true
-            // first-ever sync — `checkout -B` will create it from `target`,
-            // there's no prior local state to lose).
-            var aheadCount = 0;
-            var localRefRes = await RunGitAsync(
-                new List<string>
-                {
-                    "rev-parse",
-                    "--verify",
-                    "--quiet",
-                    $"refs/heads/{workingBranch}",
-                },
-                env,
-                workingTree,
-                ct
-            );
-            if (localRefRes.ExitCode == 0)
-            {
-                var aheadRes = await RunGitAsync(
-                    new List<string> { "rev-list", "--count", $"{target}..{workingBranch}" },
-                    env,
-                    workingTree,
-                    ct
-                );
-                if (
-                    aheadRes.ExitCode == 0
-                    && int.TryParse(aheadRes.StdOut.Trim(), out var parsedAhead)
-                )
-                    aheadCount = parsedAhead;
-            }
-
-            // Refuse to sync over uncommitted changes OR unpushed commits
-            // unless the caller explicitly opted in. The SPA gates a
-            // confirmation dialog on RequiresForce; CLI / API callers see
-            // the same signal and can pass force=true to retry. The fetch
-            // we already did above stays in object storage — wasted
-            // bandwidth, but small for shallow fetches and means a
-            // confirmation retry doesn't re-fetch.
-            if ((dirtyCount > 0 || aheadCount > 0) && !force)
-            {
-                sw.Stop();
-                var parts = new List<string>(2);
-                if (dirtyCount > 0)
-                    parts.Add(
-                        $"{dirtyCount} uncommitted change{(dirtyCount == 1 ? string.Empty : "s")}"
-                    );
-                if (aheadCount > 0)
-                    parts.Add(
-                        $"{aheadCount} unpushed commit{(aheadCount == 1 ? string.Empty : "s")}"
-                    );
-                return new WorkspaceSyncResult(
-                    Ok: false,
-                    Slug: ws.Slug,
-                    Sha: null,
-                    LatencyMs: sw.ElapsedMilliseconds,
-                    SyncedAt: time.GetUtcNow().UtcDateTime,
-                    Message: null,
-                    Error: $"Working tree has {string.Join(" and ", parts)}. Confirm to discard.",
-                    DirtyCount: dirtyCount,
-                    AheadCount: aheadCount,
-                    RequiresForce: true
-                );
-            }
-
-            // Mirror the working tree to the remote target. Three steps in
-            // sequence because each one alone leaves a gap:
-            //   1. checkout -B moves the branch pointer (creates if needed)
-            //   2. reset --hard forces the index + tracked files to match
-            //      target, which checkout won't do when the branch already
-            //      points at target (the no-op case)
-            //   3. clean -fd removes untracked files / directories so the
-            //      tree is byte-for-byte the remote — no orphaned scratch
-            //      files surviving across syncs. We deliberately omit -x;
-            //      gitignored files (build outputs, .env scratch) are left
-            //      alone since the platform shouldn't reach into them.
-            var checkoutArgs = new List<string> { "checkout", "-B", workingBranch, target };
-            var checkout = await RunGitAsync(checkoutArgs, env, workingTree, ct);
-            if (checkout.ExitCode != 0)
-                return Failure(ws.Slug, sw, time, ParseGitError(checkout.StdErr, "checkout"));
-
-            var resetRes = await RunGitAsync(
-                new List<string> { "reset", "--hard", target },
-                env,
-                workingTree,
-                ct
-            );
-            if (resetRes.ExitCode != 0)
-                return Failure(ws.Slug, sw, time, ParseGitError(resetRes.StdErr, "reset"));
-
-            await RunGitAsync(new List<string> { "clean", "-fd" }, env, workingTree, ct);
-
-            // Resolve the SHA we just landed on.
-            var rev = await RunGitAsync(
-                new List<string> { "rev-parse", "HEAD" },
-                env,
-                workingTree,
-                ct
-            );
-            sw.Stop();
-            var sha = rev.ExitCode == 0 ? rev.StdOut.Trim() : null;
-            var shortSha = sha is null ? null : sha[..Math.Min(7, sha.Length)];
-            var baseMsg = workingOnRemote
-                ? (shortSha is null ? "Sync complete." : $"Synced {workingBranch} to {shortSha}.")
-                : (
-                    shortSha is null
-                        ? $"Synced {workingBranch} from {sourceBranch} (no platform commits yet)."
-                        : $"Synced {workingBranch} from {sourceBranch} to {shortSha} (no platform commits yet)."
-                );
-            var msg =
-                dirtyCount > 0
-                    ? $"{baseMsg} Discarded {dirtyCount} local change{(dirtyCount == 1 ? string.Empty : "s")}."
-                    : baseMsg;
-            return new WorkspaceSyncResult(
-                Ok: true,
-                Slug: ws.Slug,
-                Sha: sha,
-                LatencyMs: sw.ElapsedMilliseconds,
-                SyncedAt: time.GetUtcNow().UtcDateTime,
-                Message: msg,
-                Error: null,
-                DirtyCount: dirtyCount
-            );
-        }
-        finally
-        {
-            if (sshKeyPath is not null && File.Exists(sshKeyPath))
-            {
-                try
-                {
-                    File.Delete(sshKeyPath);
-                }
-                catch
-                {
-                    // best-effort
-                }
-            }
-        }
-    }
-
-    private static WorkspaceSyncResult SyncLocal(Workspace ws, TimeProvider time, Stopwatch sw)
-    {
-        var settings = ParseLocalSettings(ws.Settings);
-        if (settings is null)
-            return Failure(ws.Slug, sw, time, "Workspace settings are missing or unreadable.");
-        if (string.IsNullOrWhiteSpace(settings.Path))
-            return Failure(ws.Slug, sw, time, "Path is not set.");
-        if (!Directory.Exists(settings.Path))
-            return Failure(ws.Slug, sw, time, $"Directory does not exist: {settings.Path}.");
-
-        sw.Stop();
-        return new WorkspaceSyncResult(
-            Ok: true,
-            Slug: ws.Slug,
-            Sha: null,
-            LatencyMs: sw.ElapsedMilliseconds,
-            SyncedAt: time.GetUtcNow().UtcDateTime,
-            Message: $"Path is accessible ({(settings.Writable ? "read-write" : "read-only")}).",
-            Error: null
-        );
-    }
-
-    private static WorkspaceSyncResult Failure(
-        string slug,
-        Stopwatch sw,
-        TimeProvider time,
-        string error
-    )
-    {
-        sw.Stop();
-        return new WorkspaceSyncResult(
-            Ok: false,
-            Slug: slug,
-            Sha: null,
-            LatencyMs: sw.ElapsedMilliseconds,
-            SyncedAt: time.GetUtcNow().UtcDateTime,
-            Message: null,
-            Error: error
-        );
-    }
-
     /// <summary>
     /// Push the working branch to <c>origin</c>. On-demand counterpart to
     /// <see cref="Sync"/>. The platform writes by name to
@@ -1256,8 +893,8 @@ public static class WorkspacesEndpoints
     private static async Task<Results<Ok<ApiResult<WorkspacePushResult>>, ProblemHttpResult>> Push(
         string slug,
         IWorkspaceStore store,
-        SecretsService secrets,
-        WorkspaceFilesystemService fs,
+        IWorkspaceProviderRegistry registry,
+        IWorkspaceStatusBroadcaster broadcaster,
         TimeProvider time,
         ILogger<PushMarker> logger,
         CancellationToken ct
@@ -1266,45 +903,46 @@ public static class WorkspacesEndpoints
         var existing = await store.FindBySlugAsync(slug);
         if (existing is null)
             return Problems.WorkspaceNotFound(slug);
-
-        if (existing.Type != WorkspaceType.Git)
-        {
-            // Local workspaces have no remote and S3 isn't implemented yet —
-            // 400 (rather than 404) because the workspace exists, just
-            // doesn't support this operation.
-            return Problems.WorkspaceTypeNotSupported(slug, existing.Type, "push");
-        }
+        var provider = registry.Resolve(existing);
+        if (!provider.Capabilities.CanPush)
+            return Problems.WorkspaceCapabilityNotSupported(slug, "push");
 
         var gate = _syncLocks.GetOrAdd(slug, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(ct);
         try
         {
-            var sw = Stopwatch.StartNew();
-            WorkspacePushResult result;
+            PushOutcome outcome;
             try
             {
-                result = await PushGitAsync(existing, secrets, fs, time, sw, ct);
+                outcome = await provider.PushAsync(existing, ct);
             }
             catch (Exception ex)
             {
-                sw.Stop();
                 logger.LogError(ex, "Workspace push failed for {Slug}", slug);
-                result = new WorkspacePushResult(
+                outcome = new PushOutcome(
                     Ok: false,
-                    Slug: slug,
                     Sha: null,
-                    LatencyMs: sw.ElapsedMilliseconds,
-                    PushedAt: time.GetUtcNow().UtcDateTime,
+                    CommitsPushed: 0,
+                    NothingToPush: false,
                     Message: null,
-                    Error: $"{ex.GetType().Name}: {ex.Message}"
+                    Error: $"{ex.GetType().Name}: {ex.Message}",
+                    LatencyMs: 0,
+                    At: time.GetUtcNow().UtcDateTime
                 );
             }
 
-            // Persist the push state regardless of outcome — operators want
-            // to see "last attempt failed at <time>" in the UI, not just a
-            // stale "ok" from a week ago. nothing-to-push counts as a
-            // successful no-op and updates LastPushAt so the UI shows the
-            // workspace was checked recently.
+            var result = new WorkspacePushResult(
+                Ok: outcome.Ok,
+                Slug: slug,
+                Sha: outcome.Sha,
+                LatencyMs: outcome.LatencyMs,
+                PushedAt: outcome.At,
+                Message: outcome.Message,
+                Error: outcome.Error,
+                AheadCount: outcome.CommitsPushed,
+                NothingToPush: outcome.NothingToPush
+            );
+
             var status = result.Ok ? (result.NothingToPush ? "nothing-to-push" : "ok") : "failed";
             await store.UpdatePushStatusAsync(
                 existing.Id,
@@ -1315,6 +953,10 @@ public static class WorkspacesEndpoints
                 ct
             );
 
+            // Push changes the unpushed-commit count — broadcast so the
+            // header's Push badge updates in real time.
+            _ = BroadcastStatusAsync(provider, broadcaster, existing, logger);
+
             return TypedResults.Ok(new ApiResult<WorkspacePushResult>(result));
         }
         finally
@@ -1323,375 +965,363 @@ public static class WorkspacesEndpoints
         }
     }
 
-    private static async Task<WorkspacePushResult> PushGitAsync(
-        Workspace ws,
-        SecretsService secrets,
-        WorkspaceFilesystemService fs,
+    private sealed class ChangesMarker { }
+
+    private sealed class CommitMarker { }
+
+    private sealed class StatusMarker { }
+
+    /// <summary>
+    /// Apply a batch of file mutations to a workspace's working surface.
+    /// Provider-dispatched: git workspaces write to the working tree
+    /// without committing; local workspaces write directly to disk.
+    /// Commit and push are <strong>separate</strong> verbs — admins
+    /// batch them at their own cadence via the dedicated endpoints.
+    /// Triggers projection-sync as a fire-and-forget continuation on
+    /// success so the entity graph re-projects against the new content.
+    /// Per-slug serialization via the sync semaphore.
+    /// </summary>
+    private static async Task<
+        Results<Ok<ApiResult<WorkspaceChangeResult>>, ProblemHttpResult, ValidationProblem>
+    > Changes(
+        string slug,
+        WorkspaceChangeRequest request,
+        IValidator<WorkspaceChangeRequest> validator,
+        IWorkspaceStore store,
+        IWorkspaceProviderRegistry registry,
+        IWorkspaceStatusBroadcaster broadcaster,
         TimeProvider time,
-        Stopwatch sw,
+        ILogger<ChangesMarker> logger,
+        IServiceScopeFactory scopeFactory,
         CancellationToken ct
     )
     {
-        var settings = ParseGitSettings(ws.Settings);
-        if (settings is null)
-            return PushFailure(ws.Slug, sw, time, "Workspace settings are missing or unreadable.");
+        var validation = await validator.ValidateAsync(request, ct);
+        if (!validation.IsValid)
+            return TypedResults.ValidationProblem(validation.ToDictionary());
 
-        if (string.IsNullOrWhiteSpace(settings.RepositoryUrl))
-            return PushFailure(ws.Slug, sw, time, "Repository URL is not set.");
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+        var provider = registry.Resolve(existing);
+        if (!provider.Capabilities.CanWrite)
+            return Problems.WorkspaceCapabilityNotSupported(slug, "write");
 
-        // The push relies on a working tree that's already been initialized
-        // by sync — there's no "fresh init" path here because there's no
-        // local content to push when the directory doesn't exist yet.
-        if (!fs.WorkingTreeExists(ws.Slug))
-            return PushFailure(
-                ws.Slug,
-                sw,
-                time,
-                "Working tree doesn't exist yet — sync the workspace first to initialize it."
-            );
-
-        // Resolve the credential up-front. Same machinery as sync — None
-        // mode is fine for "I'm pushing to a public mirror with anonymous
-        // creds preconfigured at the system level," even though that's
-        // unusual.
-        string? credential = null;
-        if (settings.AuthMode != GitAuthMode.None)
-        {
-            if (!string.IsNullOrWhiteSpace(settings.AuthSecret))
-                credential = await secrets.ReadInternalAsync(settings.AuthSecret, ct);
-            if (string.IsNullOrWhiteSpace(credential))
-                return PushFailure(
-                    ws.Slug,
-                    sw,
-                    time,
-                    settings.AuthMode == GitAuthMode.HttpsPat
-                        ? "PAT secret is missing — re-edit the workspace and supply the credential."
-                        : "Private key secret is missing — re-edit the workspace and supply the credential."
-                );
-        }
-
-        var workingTree = fs.GetWorkingTreePath(ws.Slug);
-        var workingBranch = string.IsNullOrWhiteSpace(settings.WorkingBranch)
-            ? "creuser/main"
-            : settings.WorkingBranch;
-
-        string? sshKeyPath = null;
+        var gate = _syncLocks.GetOrAdd(slug, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
         try
         {
-            var env = new Dictionary<string, string> { ["GIT_TERMINAL_PROMPT"] = "0" };
-            var configArgs = new List<string>();
+            // Translate wire DTOs to the provider's neutral file-change
+            // type (same shape, lives in Core so providers don't import
+            // Web contracts).
+            var changes = request
+                .Changes.Select(c => new Creuser.Core.Repositories.WorkspaceFileChange(
+                    c.Path,
+                    c.Action,
+                    c.Content
+                ))
+                .ToList();
 
-            if (settings.AuthMode == GitAuthMode.SshKey)
+            WriteOutcome outcome;
+            try
             {
-                sshKeyPath = Path.Combine(
-                    Path.GetTempPath(),
-                    $"creuser-push-key-{Guid.NewGuid():N}.pem"
-                );
-                await File.WriteAllTextAsync(sshKeyPath, credential!.TrimEnd() + "\n", ct);
-                if (
-                    RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                    || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                )
-                {
-                    File.SetUnixFileMode(
-                        sshKeyPath,
-                        UnixFileMode.UserRead | UnixFileMode.UserWrite
-                    );
-                }
-                env["GIT_SSH_COMMAND"] =
-                    $"ssh -i \"{sshKeyPath}\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
-                    + "-o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR";
+                outcome = await provider.WriteAsync(existing, changes, ct);
             }
-            else if (settings.AuthMode == GitAuthMode.HttpsPat)
+            catch (Exception ex)
             {
-                var basic = Convert.ToBase64String(Encoding.UTF8.GetBytes($"git:{credential}"));
-                configArgs.Add("-c");
-                configArgs.Add($"http.extraHeader=Authorization: Basic {basic}");
-            }
-
-            // Make sure the workspace's currently-configured URL is what
-            // we'll push to (the admin may have rotated the URL since the
-            // last sync).
-            await RunGitAsync(
-                new List<string> { "remote", "set-url", "origin", settings.RepositoryUrl },
-                env,
-                workingTree,
-                ct
-            );
-
-            // Best-effort fetch of the working branch so we can compute an
-            // accurate ahead count. If the remote ref doesn't exist yet
-            // (first push case), the fetch fails benignly and we treat
-            // every local commit as ahead. We do NOT block push on a fetch
-            // failure — we'll find out for sure when push runs.
-            var fetchArgs = new List<string>(configArgs)
-            {
-                "fetch",
-                "--depth",
-                "1",
-                "origin",
-                workingBranch,
-            };
-            var fetchRes = await RunGitAsync(fetchArgs, env, workingTree, ct);
-            var remoteRefExists = fetchRes.ExitCode == 0;
-
-            // Compute ahead count. If the remote ref exists, count commits
-            // local-only relative to origin/<wb>. If not, count every commit
-            // reachable from <wb> — they're all about to be uploaded.
-            var aheadArgs = remoteRefExists
-                ? new List<string>
-                {
-                    "rev-list",
-                    "--count",
-                    $"origin/{workingBranch}..{workingBranch}",
-                }
-                : new List<string> { "rev-list", "--count", workingBranch };
-            var aheadRes = await RunGitAsync(aheadArgs, env, workingTree, ct);
-            var aheadCount = 0;
-            if (aheadRes.ExitCode == 0 && int.TryParse(aheadRes.StdOut.Trim(), out var parsed))
-                aheadCount = parsed;
-
-            // Resolve the current HEAD for the result's Sha (and the
-            // last_push_sha column). Done once up-front so failures still
-            // record what was on HEAD when the push attempt started.
-            var rev = await RunGitAsync(
-                new List<string> { "rev-parse", "HEAD" },
-                env,
-                workingTree,
-                ct
-            );
-            var sha = rev.ExitCode == 0 ? rev.StdOut.Trim() : null;
-            var shortSha = sha is null ? null : sha[..Math.Min(7, sha.Length)];
-
-            if (aheadCount == 0)
-            {
-                // Already in sync. No push attempt needed; success no-op.
-                sw.Stop();
-                return new WorkspacePushResult(
-                    Ok: true,
-                    Slug: ws.Slug,
-                    Sha: sha,
-                    LatencyMs: sw.ElapsedMilliseconds,
-                    PushedAt: time.GetUtcNow().UtcDateTime,
-                    Message: shortSha is null
-                        ? $"Already up-to-date with origin/{workingBranch}."
-                        : $"Already up-to-date with origin/{workingBranch} at {shortSha}.",
-                    Error: null,
-                    AheadCount: 0,
-                    NothingToPush: true
-                );
-            }
-
-            // Push the working branch by name. Git creates the remote ref
-            // on the first push; subsequent pushes fast-forward. We do NOT
-            // pass --force — if the remote diverged the admin should sync
-            // (or rebase out-of-band) and retry. Refusing here is the
-            // safer default for v1.
-            var pushArgs = new List<string>(configArgs)
-            {
-                "push",
-                "origin",
-                $"{workingBranch}:{workingBranch}",
-            };
-            var pushRes = await RunGitAsync(pushArgs, env, workingTree, ct);
-            if (pushRes.ExitCode != 0)
-            {
-                // Custom messaging for the "non-fast-forward" case since
-                // it's the most common push failure and the resolution is
-                // workflow-specific (sync first).
-                var stderr = pushRes.StdErr ?? string.Empty;
-                var nonFf =
-                    stderr.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
-                    || stderr.Contains("rejected", StringComparison.OrdinalIgnoreCase)
-                        && stderr.Contains("fetch first", StringComparison.OrdinalIgnoreCase);
-                var error = nonFf
-                    ? $"Remote rejected push — origin/{workingBranch} has commits we don't have. Sync the workspace and retry."
-                    : ParseGitError(stderr, "push");
-                sw.Stop();
-                return new WorkspacePushResult(
+                logger.LogError(ex, "Workspace write failed for {Slug}", slug);
+                outcome = new WriteOutcome(
                     Ok: false,
-                    Slug: ws.Slug,
-                    Sha: sha,
-                    LatencyMs: sw.ElapsedMilliseconds,
-                    PushedAt: time.GetUtcNow().UtcDateTime,
+                    FilesWritten: 0,
                     Message: null,
-                    Error: error,
-                    AheadCount: aheadCount
+                    Error: $"{ex.GetType().Name}: {ex.Message}",
+                    LatencyMs: 0,
+                    At: time.GetUtcNow().UtcDateTime
                 );
             }
 
-            sw.Stop();
-            var pluralCommit = aheadCount == 1 ? "commit" : "commits";
-            var msg = remoteRefExists
-                ? (
-                    shortSha is null
-                        ? $"Pushed {aheadCount} {pluralCommit} to origin/{workingBranch}."
-                        : $"Pushed {aheadCount} {pluralCommit} to origin/{workingBranch} (now at {shortSha})."
-                )
-                : (
-                    shortSha is null
-                        ? $"Created origin/{workingBranch} with {aheadCount} {pluralCommit}."
-                        : $"Created origin/{workingBranch} at {shortSha} ({aheadCount} {pluralCommit})."
-                );
-            return new WorkspacePushResult(
-                Ok: true,
-                Slug: ws.Slug,
-                Sha: sha,
-                LatencyMs: sw.ElapsedMilliseconds,
-                PushedAt: time.GetUtcNow().UtcDateTime,
-                Message: msg,
-                Error: null,
-                AheadCount: aheadCount
+            var result = new WorkspaceChangeResult(
+                Ok: outcome.Ok,
+                Slug: slug,
+                LatencyMs: outcome.LatencyMs,
+                At: outcome.At,
+                Message: outcome.Message,
+                Error: outcome.Error,
+                FilesChanged: outcome.FilesWritten
             );
+
+            // On successful write, fire projection-sync as a fire-and-forget
+            // continuation — same shape as the post-Sync continuation —
+            // and broadcast updated status so the SPA's Commit badge
+            // increments in real time.
+            if (result.Ok)
+            {
+                _ = BroadcastStatusAsync(provider, broadcaster, existing, logger);
+
+                var workspaceForProjection = existing;
+                _ = Task.Run(
+                    async () =>
+                    {
+                        await using var scope = scopeFactory.CreateAsyncScope();
+                        var sp = scope.ServiceProvider;
+                        var projectionSync =
+                            sp.GetRequiredService<Creuser.Core.Projections.IProjectionSyncService>();
+                        var workingTree =
+                            sp.GetRequiredService<Creuser.Core.Execution.IWorkspaceWorkingTree>();
+                        var projectionLogger = sp.GetRequiredService<ILogger<ChangesMarker>>();
+                        try
+                        {
+                            var path = await workingTree.ResolvePathAsync(
+                                workspaceForProjection,
+                                CancellationToken.None
+                            );
+                            if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
+                                return;
+                            var report = await projectionSync.RunAsync(
+                                workspaceForProjection,
+                                path,
+                                CancellationToken.None
+                            );
+                            projectionLogger.LogInformation(
+                                "Projection sync after write for {Slug}: {Total} entities ({Resolved} refs resolved, {Unresolved} unresolved) in {Ms}ms",
+                                workspaceForProjection.Slug,
+                                report.EntityTotal,
+                                report.RefsResolved,
+                                report.RefsUnresolved,
+                                report.ScanDurationMs
+                            );
+                        }
+                        catch (Exception ex)
+                        {
+                            projectionLogger.LogError(
+                                ex,
+                                "Projection sync failed for {Slug} after write",
+                                workspaceForProjection.Slug
+                            );
+                        }
+                    },
+                    CancellationToken.None
+                );
+            }
+
+            return TypedResults.Ok(new ApiResult<WorkspaceChangeResult>(result));
         }
         finally
         {
-            if (sshKeyPath is not null)
-            {
-                try
-                {
-                    File.Delete(sshKeyPath);
-                }
-                catch
-                {
-                    // best-effort cleanup
-                }
-            }
+            gate.Release();
         }
     }
 
-    private static WorkspacePushResult PushFailure(
+    /// <summary>
+    /// Batch all uncommitted changes in the workspace into one commit.
+    /// Capability-gated — only providers that declare <c>CanCommit</c>
+    /// (git today) implement this; others return 400 with
+    /// <see cref="Problems.WorkspaceCapabilityNotSupported"/>.
+    /// </summary>
+    private static async Task<
+        Results<Ok<ApiResult<WorkspaceCommitResult>>, ProblemHttpResult, ValidationProblem>
+    > Commit(
         string slug,
-        Stopwatch sw,
+        WorkspaceCommitRequest request,
+        IValidator<WorkspaceCommitRequest> validator,
+        IWorkspaceStore store,
+        IWorkspaceProviderRegistry registry,
+        IWorkspaceStatusBroadcaster broadcaster,
         TimeProvider time,
-        string error
-    )
-    {
-        sw.Stop();
-        return new WorkspacePushResult(
-            Ok: false,
-            Slug: slug,
-            Sha: null,
-            LatencyMs: sw.ElapsedMilliseconds,
-            PushedAt: time.GetUtcNow().UtcDateTime,
-            Message: null,
-            Error: error
-        );
-    }
-
-    private sealed record GitProcessResult(int ExitCode, string StdOut, string StdErr);
-
-    private static async Task<GitProcessResult> RunGitAsync(
-        IList<string> args,
-        IDictionary<string, string> env,
-        string? workingDir,
+        ILogger<CommitMarker> logger,
         CancellationToken ct
     )
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "git",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        if (workingDir is not null)
-            psi.WorkingDirectory = workingDir;
-        foreach (var a in args)
-            psi.ArgumentList.Add(a);
-        foreach (var kv in env)
-            psi.Environment[kv.Key] = kv.Value;
+        var validation = await validator.ValidateAsync(request, ct);
+        if (!validation.IsValid)
+            return TypedResults.ValidationProblem(validation.ToDictionary());
 
-        using var proc =
-            Process.Start(psi)
-            ?? throw new InvalidOperationException("Failed to start git process.");
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+        var provider = registry.Resolve(existing);
+        if (!provider.Capabilities.CanCommit)
+            return Problems.WorkspaceCapabilityNotSupported(slug, "commit");
 
-        // Read stdout/stderr concurrently with WaitForExit so very chatty
-        // operations (clone of a big repo) don't deadlock on the pipe buffer.
-        var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
-        var stderrTask = proc.StandardError.ReadToEndAsync(ct);
-
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        // 5-minute ceiling — covers a fresh clone of a moderately-sized repo
-        // over a slow link. If this trips, the repo is too large for v1's
-        // shallow-clone strategy and the admin needs to know.
-        timeoutCts.CancelAfter(TimeSpan.FromMinutes(5));
-
+        var gate = _syncLocks.GetOrAdd(slug, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
         try
         {
-            await proc.WaitForExitAsync(timeoutCts.Token);
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
+            CommitOutcome outcome;
             try
             {
-                proc.Kill(entireProcessTree: true);
+                outcome = await provider.CommitAsync(existing, request.CommitMessage, ct);
             }
-            catch
+            catch (Exception ex)
             {
-                // best-effort
+                logger.LogError(ex, "Workspace commit failed for {Slug}", slug);
+                outcome = new CommitOutcome(
+                    Ok: false,
+                    CommitSha: null,
+                    FilesCommitted: 0,
+                    NothingToCommit: false,
+                    Message: null,
+                    Error: $"{ex.GetType().Name}: {ex.Message}",
+                    LatencyMs: 0,
+                    At: time.GetUtcNow().UtcDateTime
+                );
             }
-            return new GitProcessResult(
-                124,
-                string.Empty,
-                "git process timed out after 5 minutes."
-            );
-        }
 
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
-        return new GitProcessResult(proc.ExitCode, stdout, stderr);
+            var result = new WorkspaceCommitResult(
+                Ok: outcome.Ok,
+                Slug: slug,
+                CommitSha: outcome.CommitSha,
+                LatencyMs: outcome.LatencyMs,
+                CommittedAt: outcome.At,
+                Message: outcome.Message,
+                Error: outcome.Error,
+                FilesCommitted: outcome.FilesCommitted,
+                NothingToCommit: outcome.NothingToCommit
+            );
+
+            // Commit changes counts: uncommitted drops, unpushed rises.
+            _ = BroadcastStatusAsync(provider, broadcaster, existing, logger);
+
+            return TypedResults.Ok(new ApiResult<WorkspaceCommitResult>(result));
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
-    private static string ParseGitError(string stderr, string verb)
+    /// <summary>
+    /// Snapshot of a workspace's pending state plus its provider's
+    /// capabilities. Drives the SPA's header buttons (Commit visibility +
+    /// badge count, Push visibility + badge count) and is also broadcast
+    /// over SignalR after every state-mutating verb so the UI updates
+    /// without polling.
+    /// </summary>
+    private static async Task<
+        Results<Ok<ApiResult<WorkspaceStatusResult>>, ProblemHttpResult>
+    > GetStatus(
+        string slug,
+        IWorkspaceStore store,
+        IWorkspaceProviderRegistry registry,
+        CancellationToken ct
+    )
     {
-        if (string.IsNullOrWhiteSpace(stderr))
-            return $"git {verb} failed (no error message captured).";
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+        var provider = registry.Resolve(existing);
+        var status = await provider.GetStatusAsync(existing, ct);
+        var caps = provider.Capabilities;
 
-        if (stderr.Contains("Authentication failed", StringComparison.OrdinalIgnoreCase))
-            return "Authentication rejected. Re-check the PAT or private key on the workspace.";
-        if (stderr.Contains("Permission denied", StringComparison.OrdinalIgnoreCase))
-            return "Auth rejected. The credential isn't authorized for this repo.";
-        if (stderr.Contains("Could not resolve host", StringComparison.OrdinalIgnoreCase))
-            return "DNS resolution failed. Check the hostname in the URL.";
-        if (
-            stderr.Contains(
-                "Could not read from remote repository",
-                StringComparison.OrdinalIgnoreCase
+        return TypedResults.Ok(
+            new ApiResult<WorkspaceStatusResult>(
+                new WorkspaceStatusResult(
+                    Slug: slug,
+                    Type: existing.Type,
+                    Capabilities: new WorkspaceCapabilitiesDto(
+                        caps.CanWrite,
+                        caps.CanCommit,
+                        caps.CanPush,
+                        caps.CanSync
+                    ),
+                    UncommittedFileCount: status.UncommittedFileCount,
+                    UnpushedCommitCount: status.UnpushedCommitCount,
+                    WorkingRootExists: status.WorkingRootExists
+                )
             )
-        )
-            return "Remote rejected the connection. Either the credential lacks access or the URL is wrong.";
-        if (stderr.Contains("Repository not found", StringComparison.OrdinalIgnoreCase))
-            return "Repository not found at that URL.";
-        if (
-            stderr.Contains("couldn't find remote ref", StringComparison.OrdinalIgnoreCase)
-            || (
-                stderr.Contains("Remote branch", StringComparison.OrdinalIgnoreCase)
-                && stderr.Contains("not found", StringComparison.OrdinalIgnoreCase)
-            )
-        )
-            return "The configured branch doesn't exist on the remote — check the working / source branch names on the workspace.";
+        );
+    }
 
-        // Strip the leading "fatal: " / "error: " prefix that git emits, skip
-        // benign SSH/git warning + hint lines (e.g. host-key auto-add), and
-        // return the first remaining non-empty line.
-        foreach (var raw in stderr.Split('\n'))
+    // ─── Shared helpers ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Pull a fresh status snapshot and broadcast it to the SPA. Called
+    /// after every state-mutating verb so the header surface updates
+    /// without polling. Failures are logged but never propagated — a
+    /// successful operation shouldn't fail because the broadcast hub is
+    /// unavailable.
+    /// </summary>
+    private static async Task BroadcastStatusAsync(
+        IWorkspaceProvider provider,
+        IWorkspaceStatusBroadcaster broadcaster,
+        Workspace workspace,
+        ILogger logger
+    )
+    {
+        try
         {
-            var line = raw.Trim();
-            if (line.Length == 0)
-                continue;
-            if (
-                line.StartsWith("Warning:", StringComparison.OrdinalIgnoreCase)
-                || line.StartsWith("hint:", StringComparison.OrdinalIgnoreCase)
-            )
-                continue;
-            if (line.StartsWith("fatal: ", StringComparison.OrdinalIgnoreCase))
-                line = line["fatal: ".Length..];
-            else if (line.StartsWith("error: ", StringComparison.OrdinalIgnoreCase))
-                line = line["error: ".Length..];
-            return line;
+            var status = await provider.GetStatusAsync(workspace, CancellationToken.None);
+            await broadcaster.BroadcastAsync(workspace.Slug, status, CancellationToken.None);
         }
-        return $"git {verb} failed.";
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Failed to broadcast workspace status for {Slug}",
+                workspace.Slug
+            );
+        }
+    }
+
+    /// <summary>
+    /// Read the raw contents of a single file in a workspace's working
+    /// surface. Provider-dispatched via
+    /// <see cref="IWorkspaceProvider.ResolveRootAsync"/> — git workspaces
+    /// resolve to the platform's managed clone, local workspaces to the
+    /// operator-configured path. The convention editor and any future
+    /// file-editor surface use this to populate Monaco buffers.
+    /// </summary>
+    private static async Task<
+        Results<Ok<ApiResult<WorkspaceFileContent>>, ProblemHttpResult>
+    > GetFile(
+        string slug,
+        string path,
+        IWorkspaceStore store,
+        IWorkspaceProviderRegistry registry,
+        CancellationToken ct
+    )
+    {
+        var existing = await store.FindBySlugAsync(slug);
+        if (existing is null)
+            return Problems.WorkspaceNotFound(slug);
+
+        if (!WorkspaceChangeRequestValidator.IsSafeRelativePath(path))
+            return Problems.WorkspaceFilePathInvalid(slug, path);
+
+        var provider = registry.Resolve(existing);
+        var rootPath = await provider.ResolveRootAsync(existing, ct);
+        if (string.IsNullOrEmpty(rootPath) || !Directory.Exists(rootPath))
+            return Problems.WorkspaceFileNotFound(
+                slug,
+                path,
+                existing.Type == WorkspaceType.Git
+                    ? "Working tree doesn't exist yet — sync the workspace first to initialize it."
+                    : "Workspace root path is missing or not configured."
+            );
+
+        var rootFull = Path.GetFullPath(rootPath);
+        var rel = path.Replace('\\', '/');
+        var abs = Path.GetFullPath(Path.Combine(rootPath, rel));
+        if (!abs.StartsWith(rootFull, StringComparison.Ordinal))
+            return Problems.WorkspaceFilePathInvalid(slug, path);
+
+        if (!File.Exists(abs))
+            return Problems.WorkspaceFileNotFound(slug, path, null);
+
+        var bytes = await File.ReadAllBytesAsync(abs, ct);
+        var content = System.Text.Encoding.UTF8.GetString(bytes);
+        var hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+
+        return TypedResults.Ok(
+            new ApiResult<WorkspaceFileContent>(
+                new WorkspaceFileContent(
+                    Path: rel,
+                    Content: content,
+                    ContentHash: hash,
+                    SizeBytes: bytes.LongLength
+                )
+            )
+        );
     }
 
     private static async Task<Ok<ApiResult<WorkspaceConnectionTestResult>>> TestConnectionCore(

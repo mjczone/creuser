@@ -12,10 +12,16 @@ import type {
   AddWorkspaceMemberResponses,
   AgentChatData,
   AgentChatResponses,
+  ApplyWorkspaceChangesData,
+  ApplyWorkspaceChangesErrors,
+  ApplyWorkspaceChangesResponses,
   ChangePasswordData,
   ChangePasswordResponses,
   CheckAgentHealthData,
   CheckAgentHealthResponses,
+  CommitWorkspaceData,
+  CommitWorkspaceErrors,
+  CommitWorkspaceResponses,
   CreateDashboardData,
   CreateDashboardGroupData,
   CreateDashboardGroupResponses,
@@ -65,9 +71,13 @@ import type {
   GetRunData,
   GetRunResponses,
   GetWorkspaceData,
+  GetWorkspaceFileData,
+  GetWorkspaceFileResponses,
   GetWorkspacePluginSettingsData,
   GetWorkspacePluginSettingsResponses,
   GetWorkspaceResponses,
+  GetWorkspaceStatusData,
+  GetWorkspaceStatusResponses,
   ListConventionsData,
   ListConventionsResponses,
   ListDashboardGroupsData,
@@ -84,6 +94,8 @@ import type {
   ListPlansResponses,
   ListSchedulesData,
   ListSchedulesResponses,
+  ListStandardConventionsData,
+  ListStandardConventionsResponses,
   ListToolsData,
   ListToolsResponses,
   ListUsersData,
@@ -489,6 +501,58 @@ export class Workspaces {
     });
   }
 
+  public static commitWorkspace<ThrowOnError extends boolean = false>(
+    options: Options<CommitWorkspaceData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      CommitWorkspaceResponses,
+      CommitWorkspaceErrors,
+      ThrowOnError
+    >({
+      url: '/api/workspaces/{slug}/commit',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static getWorkspaceStatus<ThrowOnError extends boolean = false>(
+    options: Options<GetWorkspaceStatusData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<GetWorkspaceStatusResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/status',
+      ...options,
+    });
+  }
+
+  public static applyWorkspaceChanges<ThrowOnError extends boolean = false>(
+    options: Options<ApplyWorkspaceChangesData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      ApplyWorkspaceChangesResponses,
+      ApplyWorkspaceChangesErrors,
+      ThrowOnError
+    >({
+      url: '/api/workspaces/{slug}/changes',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static getWorkspaceFile<ThrowOnError extends boolean = false>(
+    options: Options<GetWorkspaceFileData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<GetWorkspaceFileResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/files',
+      ...options,
+    });
+  }
+
   public static listWorkspacePlugins<ThrowOnError extends boolean = false>(
     options: Options<ListWorkspacePluginsData, ThrowOnError>,
   ) {
@@ -868,6 +932,14 @@ export class Projections {
       url: '/api/workspaces/{slug}/conventions',
       ...options,
     });
+  }
+
+  public static listStandardConventions<ThrowOnError extends boolean = false>(
+    options?: Options<ListStandardConventionsData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<ListStandardConventionsResponses, unknown, ThrowOnError>(
+      { url: '/api/conventions/standard', ...options },
+    );
   }
 
   public static queryEntities<ThrowOnError extends boolean = false>(

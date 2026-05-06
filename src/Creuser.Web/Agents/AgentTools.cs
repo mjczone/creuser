@@ -1,4 +1,8 @@
 using System.ComponentModel;
+using System.Text.RegularExpressions;
+using Creuser.Core.Execution;
+using Creuser.Core.Repositories;
+using Creuser.Scripting.ToolLoop;
 using Creuser.Web.Agents.Capabilities;
 using Microsoft.Extensions.AI;
 
@@ -6,37 +10,64 @@ namespace Creuser.Web.Agents;
 
 /// <summary>
 /// Builds the M.E.AI <see cref="AIFunction"/> instances passed to the
-/// in-app assistant. v1 ships two tools — both read-only, both heavily
-/// scoped:
+/// in-app assistant. The chat now bridges three tool layers:
 ///
 /// <list type="bullet">
 ///   <item>
-///     <c>navigate(intent)</c> — match a free-text user intent to a single
-///     <see cref="Capability"/> in the registry. Returns title, description,
-///     route, and the section key the SPA should auto-expand on arrival.
+///     <strong>Navigation</strong> — <c>navigate(intent)</c> +
+///     <c>describe_capabilities(topic?)</c>. Match user intent to an
+///     <see cref="Capability"/> route or list available capabilities.
 ///   </item>
 ///   <item>
-///     <c>describe_capabilities(topic?)</c> — list capabilities, optionally
-///     filtered to a topic (<c>users</c>, <c>branding</c>, etc.). Lets the
-///     LLM answer "what can I do?" without inventing things.
+///     <strong>Content data</strong> — every tool exposed by every
+///     <see cref="IToolLoopToolRegistry"/> registered in DI. Today that
+///     includes <see cref="WorkspaceToolLoopRegistry"/> (file system + git
+///     reads) and <see cref="ProjectionToolLoopRegistry"/> (entity graph
+///     queries: <c>list_kinds</c>, <c>query_entities</c>, <c>get_entity</c>,
+///     <c>find_references</c>, <c>find_orphans</c>, <c>find_unresolved_refs</c>).
+///     Plugins extend this surface — anything they register on
+///     <c>IToolLoopToolRegistry</c> auto-appears here.
+///   </item>
+///   <item>
+///     <strong>Actions</strong> — same registries' mutating tools (when
+///     they have any). The chat treats them the same as the job runner
+///     does; the registry decides whether a tool reads or writes.
 ///   </item>
 /// </list>
 ///
-/// Both tools resolve via <see cref="CapabilityRegistry"/>, which already
-/// filters by user role. The LLM never receives entries the calling user
-/// can't act on, so it can't suggest "go to /settings/users" to a non-admin.
-///
-/// Mutating tools (<c>call_api</c>, etc.) are deliberately not in this v1
-/// — they require a UI confirmation step before firing, which is the next
-/// pass of work.
+/// Workspace-scoped tools require a <see cref="StepContext"/>. We
+/// synthesize one per chat turn from the user's current SPA route — when
+/// they're on <c>/w/&lt;slug&gt;/...</c> we resolve the workspace, build
+/// the working-tree path, and pass that into every registry's
+/// <see cref="IToolLoopToolRegistry.BuildTools"/>. Off a workspace
+/// route, only the navigation tools are exposed.
 /// </summary>
 public sealed class AgentTools
 {
-    private readonly CapabilityRegistry _registry;
+    private static readonly Regex WorkspaceRouteRegex = new(
+        @"^/w/(?<slug>[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)(/|$)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
 
-    public AgentTools(CapabilityRegistry registry)
+    private readonly CapabilityRegistry _registry;
+    private readonly IEnumerable<IToolLoopToolRegistry> _toolRegistries;
+    private readonly IWorkspaceStore _workspaces;
+    private readonly IWorkspaceWorkingTree _workingTree;
+    private readonly ILoggerFactory _loggerFactory;
+
+    public AgentTools(
+        CapabilityRegistry registry,
+        IEnumerable<IToolLoopToolRegistry> toolRegistries,
+        IWorkspaceStore workspaces,
+        IWorkspaceWorkingTree workingTree,
+        ILoggerFactory loggerFactory
+    )
     {
         _registry = registry;
+        _toolRegistries = toolRegistries;
+        _workspaces = workspaces;
+        _workingTree = workingTree;
+        _loggerFactory = loggerFactory;
     }
 
     /// <summary>
@@ -44,7 +75,10 @@ public sealed class AgentTools
     /// <see cref="CapabilityContext"/> so each tool invocation knows who's
     /// asking and filters results accordingly.
     /// </summary>
-    public IList<AITool> BuildToolsForContext(CapabilityContext ctx)
+    public async Task<IList<AITool>> BuildToolsForContextAsync(
+        CapabilityContext ctx,
+        CancellationToken ct = default
+    )
     {
         var registry = _registry;
 
@@ -133,7 +167,91 @@ public sealed class AgentTools
                 + "or browsing for ideas. Don't list every capability in your reply — summarize and offer to drill in."
         );
 
-        return new List<AITool> { navigate, describe };
+        var tools = new List<AITool> { navigate, describe };
+
+        // Bridge: every workspace-scoped tool registry's full surface
+        // becomes part of the chat's tool list when the user is on a
+        // /w/<slug>/... route. Off a workspace route there's no working
+        // tree to operate against, so the chat only gets navigation +
+        // describe_capabilities — explaining the limitation in the
+        // system prompt would be the right way to surface this.
+        var workspaceSlug = ParseWorkspaceSlug(ctx.CurrentScreen);
+        if (!string.IsNullOrEmpty(workspaceSlug))
+        {
+            try
+            {
+                var workspace = await _workspaces.FindBySlugAsync(workspaceSlug, ct);
+                if (workspace is not null)
+                {
+                    var workingTreePath =
+                        await _workingTree.ResolvePathAsync(workspace, ct) ?? string.Empty;
+                    var stepCtx = new StepContext(
+                        RunId: Guid.NewGuid(),
+                        WorkspaceId: workspace.Id,
+                        WorkspaceSlug: workspace.Slug,
+                        WorkingTreePath: workingTreePath,
+                        StepId: Guid.NewGuid(),
+                        StepName: "chat",
+                        Budgets: new StepBudgets(),
+                        Logger: _loggerFactory.CreateLogger("Creuser.Web.Agents.Chat")
+                    );
+                    var sink = new ToolLogSink();
+
+                    foreach (var toolRegistry in _toolRegistries)
+                    {
+                        var names = toolRegistry.AvailableTools;
+                        if (names.Count == 0)
+                            continue;
+                        try
+                        {
+                            var built = toolRegistry.BuildTools(names, stepCtx, sink);
+                            foreach (var fn in built)
+                                tools.Add(fn);
+                        }
+                        catch (ToolLoopException ex)
+                        {
+                            // One registry failing to materialize shouldn't
+                            // kill the whole chat surface — log and skip.
+                            _loggerFactory
+                                .CreateLogger<AgentTools>()
+                                .LogWarning(
+                                    ex,
+                                    "Skipping tool registry {Registry} for chat — BuildTools threw.",
+                                    toolRegistry.GetType().Name
+                                );
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Workspace lookup or working-tree resolution failed; log
+                // and fall through to the navigation-only chat.
+                _loggerFactory
+                    .CreateLogger<AgentTools>()
+                    .LogWarning(
+                        ex,
+                        "Failed to resolve workspace context for chat (slug={Slug}); chat will run with navigation tools only.",
+                        workspaceSlug
+                    );
+            }
+        }
+
+        return tools;
+    }
+
+    /// <summary>
+    /// Pull the workspace slug from a SPA route like
+    /// <c>/w/foo/settings/conventions</c>. Returns <c>null</c> when the
+    /// route isn't workspace-scoped (e.g. <c>/settings/branding</c>,
+    /// <c>/login</c>).
+    /// </summary>
+    private static string? ParseWorkspaceSlug(string? currentScreen)
+    {
+        if (string.IsNullOrWhiteSpace(currentScreen))
+            return null;
+        var match = WorkspaceRouteRegex.Match(currentScreen);
+        return match.Success ? match.Groups["slug"].Value : null;
     }
 
     private static string BuildLinkUrl(string route, string? expandSection)

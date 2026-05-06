@@ -154,6 +154,50 @@ public static class Problems
             }
         );
 
+    public static ProblemHttpResult WorkspaceCapabilityNotSupported(
+        string identifier,
+        string capability
+    ) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "workspace-capability-not-supported",
+                Title = "Operation not supported for this workspace",
+                Status = StatusCodes.Status400BadRequest,
+                Detail =
+                    $"Workspace '{identifier}' does not support the '{capability}' operation. Check the workspace's provider capabilities.",
+            }
+        );
+
+    public static ProblemHttpResult WorkspaceFilePathInvalid(string identifier, string path) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "workspace-file-path-invalid",
+                Title = "Invalid workspace file path",
+                Status = StatusCodes.Status400BadRequest,
+                Detail =
+                    $"Path '{path}' must be relative, must not start with '/' or contain '..' segments, and must not target the workspace's `.git/` directory.",
+            }
+        );
+
+    public static ProblemHttpResult WorkspaceFileNotFound(
+        string identifier,
+        string path,
+        string? hint
+    ) =>
+        TypedResults.Problem(
+            new ProblemDetails
+            {
+                Type = TypeBase + "workspace-file-not-found",
+                Title = "Workspace file not found",
+                Status = StatusCodes.Status404NotFound,
+                Detail = string.IsNullOrEmpty(hint)
+                    ? $"No file at '{path}' in workspace '{identifier}'."
+                    : $"No file at '{path}' in workspace '{identifier}'. {hint}",
+            }
+        );
+
     public static ProblemHttpResult SlugAlreadyExists(string slug) =>
         TypedResults.Problem(
             new ProblemDetails

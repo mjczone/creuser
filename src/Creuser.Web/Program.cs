@@ -168,6 +168,16 @@ builder
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
 builder.Services.AddScoped<IWorkspaceWorkingTree, WorkspaceWorkingTree>();
+
+// Per-provider workspace verbs — git/local today, s3 forward-looking. Each
+// provider declares its capabilities (write/commit/push/sync) so the
+// endpoint layer dispatches by type without switching, and the SPA's
+// header surface hides Commit/Push buttons for providers that don't
+// support them.
+builder.Services.AddKeyedScoped<IWorkspaceProvider, GitWorkspaceProvider>(WorkspaceType.Git);
+builder.Services.AddKeyedScoped<IWorkspaceProvider, LocalWorkspaceProvider>(WorkspaceType.Local);
+builder.Services.AddScoped<IWorkspaceProviderRegistry, WorkspaceProviderRegistry>();
+builder.Services.AddSingleton<IWorkspaceStatusBroadcaster, WorkspaceStatusBroadcaster>();
 builder.Services.AddSingleton<IToolCatalog, BaselineToolCatalog>();
 
 // Marten event store + Wolverine durable saga executor.

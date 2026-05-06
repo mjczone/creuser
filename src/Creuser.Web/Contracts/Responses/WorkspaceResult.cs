@@ -78,3 +78,76 @@ public sealed record WorkspacePushResult(
     /// <summary>True when the working branch was already in sync with origin and the push was a no-op. <see cref="Ok"/>=true in this case.</summary>
     bool NothingToPush = false
 );
+
+/// <summary>
+/// Raw contents of a single file in a workspace's working tree, plus
+/// the metadata an editor surface needs to drive optimistic-concurrency
+/// dirty checks (<see cref="ContentHash"/>) and size-aware UI
+/// affordances. Read counterpart to <see cref="WorkspaceChangeResult"/>.
+/// </summary>
+public sealed record WorkspaceFileContent(
+    string Path,
+    string Content,
+    /// <summary>SHA-256 of <see cref="Content"/> at read time. Editor surfaces can compare this against a re-fetch before save to detect concurrent edits.</summary>
+    string ContentHash,
+    long SizeBytes
+);
+
+/// <summary>
+/// Result of a batch of file writes against a workspace's working
+/// surface. Write-only — there is no commit step inside this verb.
+/// Commit (where supported) is a separate endpoint that batches all
+/// uncommitted writes into one commit at the admin's discretion.
+/// </summary>
+public sealed record WorkspaceChangeResult(
+    bool Ok,
+    string Slug,
+    long LatencyMs,
+    DateTime At,
+    string? Message,
+    string? Error,
+    int FilesChanged = 0
+);
+
+/// <summary>
+/// Result of a manual commit. Mirror of <see cref="WorkspacePushResult"/>'s
+/// shape — capability-gated providers (git today) implement; others
+/// would never reach this endpoint due to the capability check.
+/// </summary>
+public sealed record WorkspaceCommitResult(
+    bool Ok,
+    string Slug,
+    string? CommitSha,
+    long LatencyMs,
+    DateTime CommittedAt,
+    string? Message,
+    string? Error,
+    int FilesCommitted = 0,
+    bool NothingToCommit = false
+);
+
+/// <summary>
+/// Snapshot of a workspace's pending state plus the provider's
+/// capability flags. Returned by <c>GET /api/workspaces/{slug}/status</c>
+/// and broadcast over SignalR on every state-mutating verb so the SPA
+/// surfaces fresh counts in the header without polling.
+/// </summary>
+public sealed record WorkspaceStatusResult(
+    string Slug,
+    string Type,
+    WorkspaceCapabilitiesDto Capabilities,
+    int UncommittedFileCount,
+    int UnpushedCommitCount,
+    bool WorkingRootExists
+);
+
+/// <summary>
+/// Wire-shape mirror of <c>Creuser.Core.Repositories.WorkspaceCapabilities</c>.
+/// Drives the SPA's UI affordances (Commit/Push button visibility, etc.).
+/// </summary>
+public sealed record WorkspaceCapabilitiesDto(
+    bool CanWrite,
+    bool CanCommit,
+    bool CanPush,
+    bool CanSync
+);

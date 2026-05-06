@@ -59,7 +59,16 @@ public sealed record DashboardNavGroup(
     string Name,
     string Icon,
     int Position,
-    IReadOnlyList<DashboardNavItem> Children
+    IReadOnlyList<DashboardNavItem> Children,
+    /// <summary>True for groups the platform seeds during workspace creation. Settings UIs use this to gate destructive actions (delete refused server-side; SPA disables the button).</summary>
+    bool IsDefault = false
 );
 
-public sealed record DashboardNavItem(string Slug, string Name, string? Icon, int Position);
+public sealed record DashboardNavItem(
+    string Slug,
+    string Name,
+    string? Icon,
+    int Position,
+    /// <summary>True for the platform's seeded "Home" dashboard (and any future seeded dashboards). Settings UIs use this to gate destructive actions.</summary>
+    bool IsDefault = false
+);

@@ -89,10 +89,15 @@ const items = computed<NavItem[]>(() => {
     },
     {
       icon: 'transform',
-      label: 'Parsers',
-      caption: 'Projection rules into cr.entities',
-      route: `${base}/parsers`,
-      disabled: true,
+      label: 'Conventions',
+      caption: 'Map files into typed entities',
+      route: `${base}/conventions`,
+    },
+    {
+      icon: 'dashboard',
+      label: 'Dashboards',
+      caption: 'Manage groups, dashboards, ordering',
+      route: `${base}/dashboards`,
     },
     {
       icon: 'warning',

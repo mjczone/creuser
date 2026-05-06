@@ -888,6 +888,174 @@
         }
       }
     },
+    "/api/workspaces/{slug}/commit": {
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "CommitWorkspace",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceCommitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspaceCommitResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/status": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "GetWorkspaceStatus",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspaceStatusResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/changes": {
+      "post": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "ApplyWorkspaceChanges",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspaceChangeResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/files": {
+      "get": {
+        "tags": [
+          "Workspaces"
+        ],
+        "operationId": "GetWorkspaceFile",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfWorkspaceFileContent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{slug}/plugins": {
       "get": {
         "tags": [
@@ -2177,6 +2345,26 @@
         }
       }
     },
+    "/api/conventions/standard": {
+      "get": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "ListStandardConventions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfStandardConventionsListResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{slug}/entities": {
       "get": {
         "tags": [
@@ -3228,6 +3416,24 @@
           }
         }
       },
+      "ApiResultOfStandardConventionsListResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StandardConventionsListResult"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfSyncProjectionResult": {
         "required": [
           "result"
@@ -3264,6 +3470,42 @@
           }
         }
       },
+      "ApiResultOfWorkspaceChangeResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceChangeResult"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfWorkspaceCommitResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceCommitResult"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfWorkspaceConnectionTestResult": {
         "required": [
           "result"
@@ -3277,6 +3519,24 @@
               },
               {
                 "$ref": "#/components/schemas/WorkspaceConnectionTestResult"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfWorkspaceFileContent": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceFileContent"
               }
             ]
           }
@@ -3367,6 +3627,24 @@
               },
               {
                 "$ref": "#/components/schemas/WorkspaceResult"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfWorkspaceStatusResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/WorkspaceStatusResult"
               }
             ]
           }
@@ -4084,6 +4362,10 @@
             "items": {
               "$ref": "#/components/schemas/DashboardNavItem"
             }
+          },
+          "isDefault": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -4115,6 +4397,10 @@
               "string"
             ],
             "format": "int32"
+          },
+          "isDefault": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -4460,6 +4746,53 @@
           "pushFrequency": {
             "type": "string",
             "default": "every-commit"
+          }
+        }
+      },
+      "HttpValidationProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -5329,6 +5662,35 @@
           }
         }
       },
+      "StandardConventionEntry": {
+        "required": [
+          "reference",
+          "yaml"
+        ],
+        "type": "object",
+        "properties": {
+          "reference": {
+            "type": "string"
+          },
+          "yaml": {
+            "type": "string"
+          }
+        }
+      },
+      "StandardConventionsListResult": {
+        "required": [
+          "standards"
+        ],
+        "type": "object",
+        "properties": {
+          "standards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StandardConventionEntry"
+            }
+          }
+        }
+      },
       "SyncProjectionResult": {
         "required": [
           "report"
@@ -5629,6 +5991,169 @@
           }
         }
       },
+      "WorkspaceCapabilitiesDto": {
+        "required": [
+          "canWrite",
+          "canCommit",
+          "canPush",
+          "canSync"
+        ],
+        "type": "object",
+        "properties": {
+          "canWrite": {
+            "type": "boolean"
+          },
+          "canCommit": {
+            "type": "boolean"
+          },
+          "canPush": {
+            "type": "boolean"
+          },
+          "canSync": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WorkspaceChangeRequest": {
+        "required": [
+          "changes"
+        ],
+        "type": "object",
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceFileChange"
+            }
+          }
+        }
+      },
+      "WorkspaceChangeResult": {
+        "required": [
+          "ok",
+          "slug",
+          "latencyMs",
+          "at",
+          "message",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "latencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "filesChanged": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
+          }
+        }
+      },
+      "WorkspaceCommitRequest": {
+        "required": [
+          "commitMessage"
+        ],
+        "type": "object",
+        "properties": {
+          "commitMessage": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkspaceCommitResult": {
+        "required": [
+          "ok",
+          "slug",
+          "commitSha",
+          "latencyMs",
+          "committedAt",
+          "message",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "commitSha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "latencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "committedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "message": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "filesCommitted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
+          },
+          "nothingToCommit": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
       "WorkspaceConnectionTestResult": {
         "required": [
           "ok",
@@ -5653,6 +6178,55 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "WorkspaceFileChange": {
+        "required": [
+          "path",
+          "action"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "content": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "WorkspaceFileContent": {
+        "required": [
+          "path",
+          "content",
+          "contentHash",
+          "sizeBytes"
+        ],
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "contentHash": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
           }
         }
       },
@@ -5947,6 +6521,47 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "WorkspaceStatusResult": {
+        "required": [
+          "slug",
+          "type",
+          "capabilities",
+          "uncommittedFileCount",
+          "unpushedCommitCount",
+          "workingRootExists"
+        ],
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/WorkspaceCapabilitiesDto"
+          },
+          "uncommittedFileCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "unpushedCommitCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "workingRootExists": {
+            "type": "boolean"
           }
         }
       },

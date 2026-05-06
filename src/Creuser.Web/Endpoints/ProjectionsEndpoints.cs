@@ -59,6 +59,20 @@ public sealed record EntityRefSummary(
 public sealed record SyncProjectionResult(ProjectionReport Report);
 
 /// <summary>
+/// One entry in the bundled <c>creuser:standard/*</c> library returned by
+/// <c>GET /api/conventions/standard</c>. <see cref="Reference"/> is the
+/// full id used in <c>extends:</c> (e.g. <c>creuser:standard/adr</c>).
+/// <see cref="Yaml"/> is the raw YAML body — the same string the loader
+/// merges in. Exposing it lets admins see exactly what they're inheriting
+/// before they extend it.
+/// </summary>
+public sealed record StandardConventionEntry(string Reference, string Yaml);
+
+public sealed record StandardConventionsListResult(
+    IReadOnlyList<StandardConventionEntry> Standards
+);
+
+/// <summary>
 /// Read + sync endpoints for the workspace projection layer. Conventions
 /// list / validate live here, entity browsing lives here, and the
 /// manual-sync trigger that mirrors the post-sync hook lives here.
@@ -77,6 +91,17 @@ public static class ProjectionsEndpoints
             .WithTags("Projections")
             .RequireAuthorization();
         conventions.MapGet("/", (Delegate)ListConventions).WithName("ListConventions");
+
+        // Static, workspace-agnostic library of bundled `creuser:standard/*`
+        // conventions. Auth-required (any signed-in user) so admins can
+        // browse the library when authoring workspace-local conventions
+        // that `extends:` one of these. No mutation surface.
+        var standards = app.MapGroup("/api/conventions/standard")
+            .WithTags("Projections")
+            .RequireAuthorization();
+        standards
+            .MapGet("/", (Delegate)ListStandardConventions)
+            .WithName("ListStandardConventions");
 
         var entities = app.MapGroup("/api/workspaces/{slug}/entities")
             .WithTags("Projections")
@@ -153,6 +178,32 @@ public static class ProjectionsEndpoints
         return TypedResults.Ok(
             new ApiResult<ConventionsListResult>(
                 new ConventionsListResult(summaries, loadResult.Errors)
+            )
+        );
+    }
+
+    [AiCapability(
+        "projections.standards",
+        "projections",
+        "Bundled convention library",
+        "List the bundled `creuser:standard/*` convention library — ADR / RFC / skill / markdown-doc / migration-sql / business-rule. Each entry exposes the raw YAML so admins can see exactly what they'll inherit when they reference it via `extends:` in a workspace-local convention.",
+        "list standard conventions",
+        "what standard conventions are bundled",
+        "show creuser standard library",
+        Route = "/w/:slug/settings/conventions",
+        RequiresRole = Roles.User
+    )]
+    private static Task<Ok<ApiResult<StandardConventionsListResult>>> ListStandardConventions()
+    {
+        var entries = StandardConventions
+            .Library.Select(kv => new StandardConventionEntry(kv.Key, kv.Value))
+            .OrderBy(e => e.Reference, StringComparer.Ordinal)
+            .ToList();
+        return Task.FromResult(
+            TypedResults.Ok(
+                new ApiResult<StandardConventionsListResult>(
+                    new StandardConventionsListResult(entries)
+                )
             )
         );
     }

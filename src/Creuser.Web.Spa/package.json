@@ -25,6 +25,7 @@
     "@fontsource-variable/source-sans-3": "^5.2.9",
     "@formkit/tempo": "^1.0.0",
     "@guolao/vue-monaco-editor": "^1.6.0",
+    "@microsoft/signalr": "^10.0.0",
     "@quasar/extras": "^1.16.4",
     "@vueuse/core": "^14.3.0",
     "@vueuse/gesture": "^2.0.0",

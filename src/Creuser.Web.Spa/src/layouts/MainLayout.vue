@@ -43,6 +43,7 @@
         <WorkspacePicker v-if="auth.isAuthenticated" />
         <q-space />
         <!-- TODO: global Cmd+K command palette. Lands once /api/search is implemented. -->
+        <WorkspaceActions v-if="auth.isAuthenticated" />
         <q-btn
           flat
           dense
@@ -299,9 +300,12 @@ import { useAssistantStore } from 'stores/assistant';
 import { useAuthStore } from 'stores/auth';
 import { useBrandingStore } from 'stores/branding';
 import { useDashboardsStore } from 'stores/dashboards';
+import { useWorkspaceStatusStore } from 'stores/workspaceStatus';
+import { useActiveWorkspace } from 'src/composables/useActiveWorkspace';
 import AssistantPanel from 'components/AssistantPanel.vue';
 import ThemeModeToggle from 'components/ThemeModeToggle.vue';
 import WorkspacePicker from 'components/WorkspacePicker.vue';
+import WorkspaceActions from 'components/workspace/WorkspaceActions.vue';
 import CreateDashboardDialog from 'components/CreateDashboardDialog.vue';
 import CreateDashboardGroupDialog from 'components/CreateDashboardGroupDialog.vue';
 
@@ -311,7 +315,22 @@ const router = useRouter();
 const auth = useAuthStore();
 const branding = useBrandingStore();
 const assistant = useAssistantStore();
+const workspaceStatus = useWorkspaceStatusStore();
+const { slug: activeWorkspaceSlug } = useActiveWorkspace();
 const drawer = ref(false);
+
+// Keep the workspace-status store synced to whichever workspace the
+// route is currently scoped to. Drives the header's Commit/Push buttons
+// (visibility + badges) and is fed live updates via SignalR by the
+// store itself. When the user leaves a workspace-scoped route, slug
+// becomes null and the store tears down its subscription.
+watch(
+  activeWorkspaceSlug,
+  (next) => {
+    void workspaceStatus.setActive(next);
+  },
+  { immediate: true },
+);
 
 const productName = computed(() => branding.productName);
 const logoUrl = computed(() => branding.effectiveLogoUrl);
