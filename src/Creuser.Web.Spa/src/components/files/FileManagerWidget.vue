@@ -750,8 +750,7 @@ function onRenameFolder(folderPath: string) {
     prompt: {
       model: folderPath,
       type: 'text',
-      isValid: (v: string) =>
-        v.trim().length > 0 && !v.includes('..') && v.trim() !== folderPath,
+      isValid: (v: string) => v.trim().length > 0 && !v.includes('..') && v.trim() !== folderPath,
       autofocus: true,
     },
     ok: { label: 'Rename', color: 'primary', unelevated: true, noCaps: true },

@@ -29,8 +29,8 @@
         @click="onResync"
       >
         <q-tooltip>
-          Re-scan the working tree (runs projection-sync), then reload. Use this when files
-          changed on disk — direct writes don't auto-sync.
+          Re-scan the working tree (runs projection-sync), then reload. Use this when files changed
+          on disk — direct writes don't auto-sync.
         </q-tooltip>
       </q-btn>
       <q-btn
@@ -117,8 +117,8 @@
         </ul>
 
         <div v-else class="cr-cdfs-empty">
-          No entities matched this convention. The glob may not match anything in
-          the working tree, or the projection may need a re-sync.
+          No entities matched this convention. The glob may not match anything in the working tree,
+          or the projection may need a re-sync.
         </div>
       </aside>
 
@@ -211,12 +211,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 import { Projections, Workspaces } from 'src/api';
-import type {
-  CdfsActionDescriptor,
-  CdfsConventionRow,
-  EntityDetail,
-  EntitySummary,
-} from 'src/api';
+import type { CdfsActionDescriptor, CdfsConventionRow, EntityDetail, EntitySummary } from 'src/api';
 import { useActiveWorkspace } from 'src/composables/useActiveWorkspace';
 import { useAssistantStore } from 'src/stores/assistant';
 
@@ -470,10 +465,11 @@ async function dispatchAgentPrompt(action: CdfsActionDescriptor, detail: EntityD
     });
     const content = fileRes.data?.result?.content;
     if (typeof content === 'string') {
-      bodySnippet = content.length > BODY_INLINE_CAP
-        ? content.slice(0, BODY_INLINE_CAP) +
-          `\n\n…(truncated; ${content.length - BODY_INLINE_CAP} chars omitted)`
-        : content;
+      bodySnippet =
+        content.length > BODY_INLINE_CAP
+          ? content.slice(0, BODY_INLINE_CAP) +
+            `\n\n…(truncated; ${content.length - BODY_INLINE_CAP} chars omitted)`
+          : content;
     }
   }
 
@@ -855,7 +851,6 @@ watch(
   padding: 1px 4px;
   border-radius: 3px;
 }
-
 
 .cr-cdfs-refs-unresolved {
   font-size: 10px;
