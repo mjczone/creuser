@@ -1,1 +1,23 @@
 npx lint-staged
+
+# Verify the SPA's package-lock.json is in sync with package.json — catches
+# the @emnapi-style top-level-entry drift that `npm install`-incremental
+# leaves dangling (local npm tolerates it; GitHub Actions' `npm ci --strict`
+# rejects it). Only runs when one of those two files is staged so most
+# commits pay zero cost.
+if git diff --cached --name-only --diff-filter=ACMR \
+    | grep -qE '^src/Creuser\.Web\.Spa/package(-lock)?\.json$'; then
+  echo "→ Verifying src/Creuser.Web.Spa/package-lock.json is in sync…"
+  if ! npm --prefix src/Creuser.Web.Spa ci --dry-run --no-audit --no-fund \
+       >/dev/null 2>&1; then
+    echo
+    echo "✗ src/Creuser.Web.Spa/package-lock.json is out of sync with package.json."
+    echo "  GitHub Actions' \`npm ci\` will reject this. Fix locally:"
+    echo
+    echo "    rm -rf src/Creuser.Web.Spa/node_modules src/Creuser.Web.Spa/package-lock.json"
+    echo "    npm --prefix src/Creuser.Web.Spa install --no-audit --no-fund"
+    echo "    git add src/Creuser.Web.Spa/package-lock.json"
+    echo
+    exit 1
+  fi
+fi
