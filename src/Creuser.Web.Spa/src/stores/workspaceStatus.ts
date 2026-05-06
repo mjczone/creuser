@@ -51,8 +51,7 @@ export const useWorkspaceStatusStore = defineStore('workspaceStatus', () => {
       uncommittedFileCount.value = p.uncommittedFileCount;
     if (typeof p.unpushedCommitCount === 'number')
       unpushedCommitCount.value = p.unpushedCommitCount;
-    if (typeof p.workingRootExists === 'boolean')
-      workingRootExists.value = p.workingRootExists;
+    if (typeof p.workingRootExists === 'boolean') workingRootExists.value = p.workingRootExists;
     if (p.capabilities && typeof p.capabilities === 'object')
       capabilities.value = p.capabilities as WorkspaceCapabilitiesDto;
     if (typeof p.type === 'string') type.value = p.type;

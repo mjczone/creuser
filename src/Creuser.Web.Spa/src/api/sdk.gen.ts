@@ -78,6 +78,8 @@ import type {
   GetWorkspaceResponses,
   GetWorkspaceStatusData,
   GetWorkspaceStatusResponses,
+  ListCdfsConventionsData,
+  ListCdfsConventionsResponses,
   ListConventionsData,
   ListConventionsResponses,
   ListDashboardGroupsData,
@@ -976,6 +978,15 @@ export class Projections {
   ) {
     return (options.client ?? client).post<SyncProjectionResponses, unknown, ThrowOnError>({
       url: '/api/workspaces/{slug}/projections/sync',
+      ...options,
+    });
+  }
+
+  public static listCdfsConventions<ThrowOnError extends boolean = false>(
+    options: Options<ListCdfsConventionsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<ListCdfsConventionsResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/cdfs/conventions',
       ...options,
     });
   }

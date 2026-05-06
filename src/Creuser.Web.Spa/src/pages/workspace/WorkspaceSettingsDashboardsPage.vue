@@ -4,22 +4,14 @@
       <div>
         <h1 class="text-h6 q-ma-none">Dashboards</h1>
         <p class="cr-dash-settings-subhead">
-          Manage dashboard groups and the dashboards inside them. Standalone dashboards live at
-          the top level of the icon bar; grouped dashboards collapse under a group's icon and
-          surface in the sub-sidebar. Reorder with the up/down arrows. Renaming changes the label
-          everywhere; the slug stays stable.
+          Manage dashboard groups and the dashboards inside them. Standalone dashboards live at the
+          top level of the icon bar; grouped dashboards collapse under a group's icon and surface in
+          the sub-sidebar. Reorder with the up/down arrows. Renaming changes the label everywhere;
+          the slug stays stable.
         </p>
       </div>
       <q-space />
-      <q-btn
-        flat
-        dense
-        no-caps
-        icon="refresh"
-        size="sm"
-        :loading="loading"
-        @click="reload"
-      >
+      <q-btn flat dense no-caps icon="refresh" size="sm" :loading="loading" @click="reload">
         <q-tooltip>Reload</q-tooltip>
       </q-btn>
       <q-btn
@@ -67,11 +59,7 @@
             class="cr-dash-row"
             :class="{ 'cr-dash-row--default': dash.isDefault }"
           >
-            <q-icon
-              :name="dash.icon || 'space_dashboard'"
-              size="18px"
-              class="cr-dash-row-icon"
-            />
+            <q-icon :name="dash.icon || 'space_dashboard'" size="18px" class="cr-dash-row-icon" />
             <div class="cr-dash-row-name">
               {{ dash.name }}
               <span v-if="dash.isDefault" class="cr-dash-row-pill">default</span>
@@ -120,9 +108,7 @@
               :aria-label="`Delete ${dash.name}`"
               @click="onDeleteDashboard(dash)"
             >
-              <q-tooltip v-if="dash.isDefault">
-                The default dashboard can't be deleted.
-              </q-tooltip>
+              <q-tooltip v-if="dash.isDefault"> The default dashboard can't be deleted. </q-tooltip>
               <q-tooltip v-else>Delete</q-tooltip>
             </q-btn>
           </li>
@@ -137,11 +123,7 @@
         :class="{ 'cr-dash-card--default': group.isDefault }"
       >
         <header class="cr-dash-card-header">
-          <q-icon
-            :name="group.icon || 'folder'"
-            size="18px"
-            class="cr-dash-card-icon"
-          />
+          <q-icon :name="group.icon || 'folder'" size="18px" class="cr-dash-card-icon" />
           <h2 class="cr-dash-card-title">
             {{ group.name }}
             <span v-if="group.isDefault" class="cr-dash-row-pill">default</span>
@@ -191,9 +173,7 @@
             :aria-label="`Delete group ${group.name}`"
             @click="onDeleteGroup(group)"
           >
-            <q-tooltip v-if="group.isDefault">
-              The default group can't be deleted.
-            </q-tooltip>
+            <q-tooltip v-if="group.isDefault"> The default group can't be deleted. </q-tooltip>
             <q-tooltip v-else-if="group.children.length > 0">
               Move or delete the {{ group.children.length }} dashboard{{
                 group.children.length === 1 ? '' : 's'
@@ -225,11 +205,7 @@
             class="cr-dash-row"
             :class="{ 'cr-dash-row--default': dash.isDefault }"
           >
-            <q-icon
-              :name="dash.icon || 'space_dashboard'"
-              size="18px"
-              class="cr-dash-row-icon"
-            />
+            <q-icon :name="dash.icon || 'space_dashboard'" size="18px" class="cr-dash-row-icon" />
             <div class="cr-dash-row-name">
               {{ dash.name }}
               <span v-if="dash.isDefault" class="cr-dash-row-pill">default</span>
@@ -254,14 +230,7 @@
               :disable="i === group.children.length - 1"
               @click="moveDashboard(group.children, i, 1)"
             />
-            <q-btn
-              flat
-              dense
-              round
-              size="sm"
-              icon="edit"
-              @click="onRenameDashboard(dash)"
-            />
+            <q-btn flat dense round size="sm" icon="edit" @click="onRenameDashboard(dash)" />
             <q-btn
               flat
               dense
@@ -339,7 +308,6 @@ function onCreateGroup() {
     },
     ok: { label: 'Next', color: 'primary', unelevated: true, noCaps: true },
     cancel: { flat: true, noCaps: true },
-     
   }).onOk((slug: string) => {
     $q.dialog({
       title: `Group "${slug.trim()}"`,
@@ -477,7 +445,6 @@ function onCreateDashboard(groupSlug: string | null) {
     },
     ok: { label: 'Next', color: 'primary', unelevated: true, noCaps: true },
     cancel: { flat: true, noCaps: true },
-     
   }).onOk((slug: string) => {
     $q.dialog({
       title: `Dashboard "${slug.trim()}"`,

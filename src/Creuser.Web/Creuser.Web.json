@@ -2541,6 +2541,36 @@
         }
       }
     },
+    "/api/workspaces/{slug}/cdfs/conventions": {
+      "get": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "ListCdfsConventions",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfCdfsConventionsListResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{slug}/plans": {
       "get": {
         "tags": [
@@ -2976,6 +3006,24 @@
               },
               {
                 "$ref": "#/components/schemas/BrandingConfig"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfCdfsConventionsListResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CdfsConventionsListResult"
               }
             ]
           }
@@ -3904,6 +3952,147 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "CdfsActionDescriptor": {
+        "required": [
+          "id",
+          "label",
+          "icon",
+          "when",
+          "confirm",
+          "runs"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "when": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "confirm": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "runs": {
+            "$ref": "#/components/schemas/CdfsActionRuns"
+          }
+        }
+      },
+      "CdfsActionRuns": {
+        "required": [
+          "kind",
+          "script",
+          "prompt",
+          "tool",
+          "args",
+          "jobId"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "script": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prompt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tool": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "args": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "jobId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CdfsConventionRow": {
+        "required": [
+          "id",
+          "description",
+          "matchGlob",
+          "entityCount",
+          "actions"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "matchGlob": {
+            "type": "string"
+          },
+          "entityCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CdfsActionDescriptor"
+            }
+          }
+        }
+      },
+      "CdfsConventionsListResult": {
+        "required": [
+          "conventions"
+        ],
+        "type": "object",
+        "properties": {
+          "conventions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CdfsConventionRow"
+            }
           }
         }
       },

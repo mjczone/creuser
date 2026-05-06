@@ -73,6 +73,54 @@ public sealed record StandardConventionsListResult(
 );
 
 /// <summary>
+/// One row in the CDFS (Convention-Driven File System) view's root listing.
+/// Each convention becomes a top-level "folder"; clicking it drills into
+/// the entities matched by that convention via the existing
+/// <c>QueryEntities</c> endpoint.
+///
+/// <para>
+/// <see cref="EntityCount"/> is computed at request time so the UI doesn't
+/// need a second round-trip per row. <see cref="Actions"/> always returns
+/// an empty array in v0.1.x; convention-declared right-click actions are
+/// the Stage 3 slice of the file-manager design.
+/// </para>
+/// </summary>
+public sealed record CdfsConventionRow(
+    string Id,
+    string? Description,
+    string MatchGlob,
+    int EntityCount,
+    IReadOnlyList<CdfsActionDescriptor> Actions
+);
+
+/// <summary>
+/// Forward-compatible shape for convention-declared actions. Empty in v0.1.x;
+/// Stage 3 of the file-manager design fills this in from
+/// <c>Convention.Actions</c> (not yet a field on the Core record). Keeping
+/// the field on the response shape now keeps the SPA contract stable across
+/// the upgrade.
+/// </summary>
+public sealed record CdfsActionDescriptor(
+    string Id,
+    string Label,
+    string? Icon,
+    string? When,
+    string? Confirm,
+    CdfsActionRuns Runs
+);
+
+public sealed record CdfsActionRuns(
+    string Kind,
+    string? Script,
+    string? Prompt,
+    string? Tool,
+    IReadOnlyDictionary<string, string>? Args,
+    string? JobId
+);
+
+public sealed record CdfsConventionsListResult(IReadOnlyList<CdfsConventionRow> Conventions);
+
+/// <summary>
 /// Read + sync endpoints for the workspace projection layer. Conventions
 /// list / validate live here, entity browsing lives here, and the
 /// manual-sync trigger that mirrors the post-sync hook lives here.
@@ -118,6 +166,11 @@ public static class ProjectionsEndpoints
             .MapPost("/sync", (Delegate)SyncProjection)
             .RequireAuthorization(p => p.RequireRole(Roles.Admin))
             .WithName("SyncProjection");
+
+        var cdfs = app.MapGroup("/api/workspaces/{slug}/cdfs")
+            .WithTags("Projections")
+            .RequireAuthorization();
+        cdfs.MapGet("/conventions", (Delegate)ListCdfsConventions).WithName("ListCdfsConventions");
 
         return app;
     }
@@ -205,6 +258,66 @@ public static class ProjectionsEndpoints
                     new StandardConventionsListResult(entries)
                 )
             )
+        );
+    }
+
+    [AiCapability(
+        "projections.cdfs",
+        "projections",
+        "CDFS root rows",
+        "Root listing for the Convention-Driven File System view: one row per workspace convention with its entity count and any declared right-click actions. The CDFS view answers 'what does the projection actually see?' — orphan files, mis-globbed paths, and missing metadata all surface here. Drill into a row to query entities of that kind via the existing entities endpoint.",
+        "show CDFS root",
+        "list CDFS conventions",
+        "what does the projection see",
+        Route = "/w/:slug/cdfs",
+        RequiresRole = Roles.User
+    )]
+    private static async Task<
+        Results<Ok<ApiResult<CdfsConventionsListResult>>, ProblemHttpResult>
+    > ListCdfsConventions(
+        string slug,
+        IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
+        IConventionLoader loader,
+        IEntityStore store,
+        IWorkspaceWorkingTree tree,
+        HttpContext http,
+        CancellationToken ct
+    )
+    {
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
+            return Problems.WorkspaceNotFound(slug);
+        var ws = access.Workspace;
+
+        var path = await tree.ResolvePathAsync(ws, ct);
+        IReadOnlyList<Convention> convs = string.IsNullOrEmpty(path)
+            ? Array.Empty<Convention>()
+            : (await loader.LoadAsync(ws, path, ct)).Conventions;
+
+        // One projection list, group locally — saves N count round-trips for
+        // workspaces with many conventions. The projection table is bounded
+        // by the workspace's matched-file count, which the existing CDFS
+        // mental model assumes is "small enough to enumerate."
+        var entities = await store.ListByWorkspaceAsync(ws.Id, ct);
+        var counts = entities
+            .GroupBy(e => e.Kind, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+
+        var rows = convs
+            .Select(c => new CdfsConventionRow(
+                c.Id,
+                c.Description,
+                c.Match.Glob,
+                counts.TryGetValue(c.Id, out var n) ? n : 0,
+                Array.Empty<CdfsActionDescriptor>()
+            ))
+            .OrderByDescending(r => r.EntityCount)
+            .ThenBy(r => r.Id, StringComparer.Ordinal)
+            .ToList();
+
+        return TypedResults.Ok(
+            new ApiResult<CdfsConventionsListResult>(new CdfsConventionsListResult(rows))
         );
     }
 

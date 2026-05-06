@@ -222,6 +222,23 @@ export const ApiResultOfBrandingConfigSchema = {
   },
 } as const;
 
+export const ApiResultOfCdfsConventionsListResultSchema = {
+  required: ['result'],
+  type: 'object',
+  properties: {
+    result: {
+      oneOf: [
+        {
+          type: 'null',
+        },
+        {
+          $ref: '#/components/schemas/CdfsConventionsListResult',
+        },
+      ],
+    },
+  },
+} as const;
+
 export const ApiResultOfConventionsListResultSchema = {
   required: ['result'],
   type: 'object',
@@ -1005,6 +1022,99 @@ export const BrandPaletteSchema = {
     },
     darkPage: {
       type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const CdfsActionDescriptorSchema = {
+  required: ['id', 'label', 'icon', 'when', 'confirm', 'runs'],
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+    },
+    label: {
+      type: 'string',
+    },
+    icon: {
+      type: ['null', 'string'],
+    },
+    when: {
+      type: ['null', 'string'],
+    },
+    confirm: {
+      type: ['null', 'string'],
+    },
+    runs: {
+      $ref: '#/components/schemas/CdfsActionRuns',
+    },
+  },
+} as const;
+
+export const CdfsActionRunsSchema = {
+  required: ['kind', 'script', 'prompt', 'tool', 'args', 'jobId'],
+  type: 'object',
+  properties: {
+    kind: {
+      type: 'string',
+    },
+    script: {
+      type: ['null', 'string'],
+    },
+    prompt: {
+      type: ['null', 'string'],
+    },
+    tool: {
+      type: ['null', 'string'],
+    },
+    args: {
+      type: ['null', 'object'],
+      additionalProperties: {
+        type: 'string',
+      },
+    },
+    jobId: {
+      type: ['null', 'string'],
+    },
+  },
+} as const;
+
+export const CdfsConventionRowSchema = {
+  required: ['id', 'description', 'matchGlob', 'entityCount', 'actions'],
+  type: 'object',
+  properties: {
+    id: {
+      type: 'string',
+    },
+    description: {
+      type: ['null', 'string'],
+    },
+    matchGlob: {
+      type: 'string',
+    },
+    entityCount: {
+      pattern: '^-?(?:0|[1-9]\\d*)$',
+      type: ['integer', 'string'],
+      format: 'int32',
+    },
+    actions: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/CdfsActionDescriptor',
+      },
+    },
+  },
+} as const;
+
+export const CdfsConventionsListResultSchema = {
+  required: ['conventions'],
+  type: 'object',
+  properties: {
+    conventions: {
+      type: 'array',
+      items: {
+        $ref: '#/components/schemas/CdfsConventionRow',
+      },
     },
   },
 } as const;

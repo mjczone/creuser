@@ -48,7 +48,10 @@
     <div class="cr-fm-body">
       <aside class="cr-fm-list">
         <div v-if="loading && !listing" class="cr-fm-empty">Loading…</div>
-        <div v-else-if="listing && listing.folders.length === 0 && listing.files.length === 0" class="cr-fm-empty">
+        <div
+          v-else-if="listing && listing.folders.length === 0 && listing.files.length === 0"
+          class="cr-fm-empty"
+        >
           Empty folder.
         </div>
         <ul v-else-if="listing" class="cr-fm-rows">
@@ -65,6 +68,9 @@
               <q-list dense style="min-width: 180px">
                 <q-item clickable @click="navigate(folder.path)">
                   <q-item-section>Open folder</q-item-section>
+                </q-item>
+                <q-item clickable @click="onRenameFolder(folder.path)">
+                  <q-item-section>Rename folder…</q-item-section>
                 </q-item>
                 <q-separator />
                 <q-item clickable class="text-negative" @click="onDeleteFolder(folder.path)">
@@ -87,6 +93,18 @@
               <q-list dense style="min-width: 180px">
                 <q-item clickable @click="openFile(file)">
                   <q-item-section>Open</q-item-section>
+                </q-item>
+                <q-item
+                  clickable
+                  :disable="file.contentKind !== 'text'"
+                  @click="onRenameFile(file)"
+                >
+                  <q-item-section>
+                    Rename…
+                    <q-item-label v-if="file.contentKind !== 'text'" caption>
+                      Binary rename arrives in Stage 4.
+                    </q-item-label>
+                  </q-item-section>
                 </q-item>
                 <q-separator />
                 <q-item clickable class="text-negative" @click="onDeleteFile(file)">
@@ -206,7 +224,6 @@
         </template>
       </main>
     </div>
-
   </div>
 </template>
 
@@ -613,6 +630,235 @@ async function collectFilesUnder(workspaceSlug: string, root: string): Promise<s
   }
   await walk(root);
   return out;
+}
+
+// Like collectFilesUnder, but returns full file entries so the caller can
+// decide what to do based on contentKind (rename refuses binary because
+// applyWorkspaceChanges only carries string content in v0.1.x).
+async function collectFileEntriesUnder(
+  workspaceSlug: string,
+  root: string,
+): Promise<WorkspaceFileEntry[]> {
+  const out: WorkspaceFileEntry[] = [];
+  async function walk(p: string) {
+    const res = await Workspaces.listWorkspaceFolder({
+      path: { slug: workspaceSlug },
+      query: { path: p },
+    });
+    const result = res.data?.result;
+    if (!result) return;
+    for (const f of result.files) out.push(f);
+    for (const sub of result.folders) await walk(sub.path);
+  }
+  await walk(root);
+  return out;
+}
+
+function onRenameFile(file: WorkspaceFileEntry) {
+  if (!slug.value) return;
+  if (file.contentKind !== 'text') {
+    $q.notify({
+      type: 'warning',
+      position: 'top',
+      message: 'Binary file rename arrives in Stage 4.',
+    });
+    return;
+  }
+  $q.dialog({
+    title: 'Rename file',
+    message: `Move <code>${file.path}</code> to a new path. Subfolders allowed; missing parents are created.`,
+    html: true,
+    prompt: {
+      model: file.path,
+      type: 'text',
+      isValid: (v: string) => v.trim().length > 0 && !v.includes('..') && v.trim() !== file.path,
+      autofocus: true,
+    },
+    ok: { label: 'Rename', color: 'primary', unelevated: true, noCaps: true },
+    cancel: { flat: true, noCaps: true },
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+  }).onOk(async (rawTarget: string) => {
+    if (!slug.value) return;
+    const target = rawTarget.trim().replace(/\/+/g, '/');
+    saving.value = true;
+    try {
+      // Fetch current content so the new path lands with the same body.
+      const readRes = await Workspaces.getWorkspaceFile({
+        path: { slug: slug.value },
+        query: { path: file.path },
+      });
+      if (readRes.error || !readRes.data?.result) {
+        $q.notify({
+          type: 'negative',
+          position: 'top',
+          message: problemMessage(readRes.error) ?? 'Could not read source file.',
+        });
+        return;
+      }
+      const content = readRes.data.result.content ?? '';
+
+      const res = await Workspaces.applyWorkspaceChanges({
+        path: { slug: slug.value },
+        body: {
+          changes: [
+            { path: file.path, action: 'delete' },
+            { path: target, action: 'write', content },
+          ],
+        },
+      });
+      if (res.error) {
+        $q.notify({
+          type: 'negative',
+          position: 'top',
+          message: problemMessage(res.error) ?? 'Rename failed.',
+        });
+        return;
+      }
+      const result = res.data?.result;
+      if (!result?.ok) {
+        $q.notify({
+          type: 'negative',
+          position: 'top',
+          message: result?.error ?? 'Rename failed.',
+          timeout: 8000,
+        });
+        return;
+      }
+      $q.notify({ type: 'positive', position: 'top', message: `Renamed → ${target}.` });
+      // If the renamed file was the open one, drop the editor selection.
+      if (selected.value?.path === file.path) {
+        selected.value = null;
+        editing.value = false;
+        editingContent.value = '';
+        baseline.value = '';
+      }
+      await reload();
+    } finally {
+      saving.value = false;
+    }
+  });
+}
+
+function onRenameFolder(folderPath: string) {
+  if (!slug.value) return;
+  $q.dialog({
+    title: 'Rename folder',
+    message:
+      `<p>Move <code>${folderPath}</code> and its contents to a new path. Subfolders allowed; missing parents are created.</p>` +
+      `<p>For git workspaces this stages a delete+write for each file under the folder; click Commit in the header to record them.</p>`,
+    html: true,
+    prompt: {
+      model: folderPath,
+      type: 'text',
+      isValid: (v: string) =>
+        v.trim().length > 0 && !v.includes('..') && v.trim() !== folderPath,
+      autofocus: true,
+    },
+    ok: { label: 'Rename', color: 'primary', unelevated: true, noCaps: true },
+    cancel: { flat: true, noCaps: true },
+    persistent: true,
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+  }).onOk(async (rawTarget: string) => {
+    if (!slug.value) return;
+    const target = rawTarget.trim().replace(/\/+/g, '/').replace(/\/$/, '');
+    saving.value = true;
+    try {
+      const entries = await collectFileEntriesUnder(slug.value, folderPath);
+      if (entries.length === 0) {
+        $q.notify({
+          type: 'info',
+          position: 'top',
+          message: 'Folder is empty — nothing to rename.',
+        });
+        return;
+      }
+      const binary = entries.find((e) => e.contentKind !== 'text');
+      if (binary) {
+        $q.notify({
+          type: 'warning',
+          position: 'top',
+          timeout: 6000,
+          message: `Folder contains a non-text file (${binary.path}). Binary-safe folder rename arrives in Stage 4.`,
+        });
+        return;
+      }
+
+      // Read every file's content in parallel so the batched write carries
+      // identical bodies. For folders with hundreds of files this is the
+      // slow path; v0.1.x trades that for "no new endpoint surface."
+      const reads = await Promise.all(
+        entries.map(async (e) => {
+          const r = await Workspaces.getWorkspaceFile({
+            path: { slug: slug.value as string },
+            query: { path: e.path },
+          });
+          return { entry: e, content: r.data?.result?.content ?? '', error: r.error };
+        }),
+      );
+      const failed = reads.find((r) => r.error);
+      if (failed) {
+        $q.notify({
+          type: 'negative',
+          position: 'top',
+          message: problemMessage(failed.error) ?? `Could not read ${failed.entry.path}.`,
+        });
+        return;
+      }
+
+      const prefix = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+      const changes = [
+        ...reads.map((r) => ({ path: r.entry.path, action: 'delete' as const })),
+        ...reads.map((r) => {
+          const rel = r.entry.path.startsWith(prefix)
+            ? r.entry.path.slice(prefix.length)
+            : r.entry.path;
+          return {
+            path: `${target}/${rel}`,
+            action: 'write' as const,
+            content: r.content,
+          };
+        }),
+      ];
+
+      const res = await Workspaces.applyWorkspaceChanges({
+        path: { slug: slug.value },
+        body: { changes },
+      });
+      if (res.error) {
+        $q.notify({
+          type: 'negative',
+          position: 'top',
+          message: problemMessage(res.error) ?? 'Rename failed.',
+        });
+        return;
+      }
+      const result = res.data?.result;
+      if (!result?.ok) {
+        $q.notify({
+          type: 'negative',
+          position: 'top',
+          message: result?.error ?? 'Rename failed.',
+          timeout: 8000,
+        });
+        return;
+      }
+      $q.notify({
+        type: 'positive',
+        position: 'top',
+        message: `Renamed folder → ${target} (${entries.length} file${entries.length === 1 ? '' : 's'}).`,
+      });
+      // If the open file lived under the renamed folder, drop the selection.
+      if (selected.value && selected.value.path.startsWith(prefix)) {
+        selected.value = null;
+        editing.value = false;
+        editingContent.value = '';
+        baseline.value = '';
+      }
+      await reload();
+    } finally {
+      saving.value = false;
+    }
+  });
 }
 
 function iconForKind(kind: string): string {

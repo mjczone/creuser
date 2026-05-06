@@ -67,6 +67,10 @@ export type ApiResultOfBrandingConfig = {
   result: null | BrandingConfig;
 };
 
+export type ApiResultOfCdfsConventionsListResult = {
+  result: null | CdfsConventionsListResult;
+};
+
 export type ApiResultOfConventionsListResult = {
   result: null | ConventionsListResult;
 };
@@ -270,6 +274,38 @@ export type BrandPalette = {
   warning?: null | string;
   dark?: null | string;
   darkPage?: null | string;
+};
+
+export type CdfsActionDescriptor = {
+  id: string;
+  label: string;
+  icon: null | string;
+  when: null | string;
+  confirm: null | string;
+  runs: CdfsActionRuns;
+};
+
+export type CdfsActionRuns = {
+  kind: string;
+  script: null | string;
+  prompt: null | string;
+  tool: null | string;
+  args: null | {
+    [key: string]: string;
+  };
+  jobId: null | string;
+};
+
+export type CdfsConventionRow = {
+  id: string;
+  description: null | string;
+  matchGlob: string;
+  entityCount: number | string;
+  actions: Array<CdfsActionDescriptor>;
+};
+
+export type CdfsConventionsListResult = {
+  conventions: Array<CdfsConventionRow>;
 };
 
 export type ChangePasswordRequest = {
@@ -2255,6 +2291,25 @@ export type SyncProjectionResponses = {
 };
 
 export type SyncProjectionResponse = SyncProjectionResponses[keyof SyncProjectionResponses];
+
+export type ListCdfsConventionsData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/cdfs/conventions';
+};
+
+export type ListCdfsConventionsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfCdfsConventionsListResult;
+};
+
+export type ListCdfsConventionsResponse =
+  ListCdfsConventionsResponses[keyof ListCdfsConventionsResponses];
 
 export type ListPlansData = {
   body?: never;

@@ -4,8 +4,8 @@
       <div>
         <h1 class="text-h6 q-ma-none">Conventions</h1>
         <p class="cr-conv-subhead">
-          YAML files under <code>.creuser/conventions/</code> in your workspace's working tree.
-          Each convention maps a file pattern (plus frontmatter shape) into typed entities for the
+          YAML files under <code>.creuser/conventions/</code> in your workspace's working tree. Each
+          convention maps a file pattern (plus frontmatter shape) into typed entities for the
           projection. Edits save as a single git commit on the working branch and re-fire
           projection-sync automatically.
         </p>
@@ -81,8 +81,8 @@
         <details class="cr-conv-help">
           <summary>Schema reference (all options)</summary>
           <p class="cr-conv-help-intro">
-            Every field a convention can declare, with inline comments. Most are optional —
-            the smallest valid file is just <code>id</code> + <code>match.glob</code>.
+            Every field a convention can declare, with inline comments. Most are optional — the
+            smallest valid file is just <code>id</code> + <code>match.glob</code>.
           </p>
           <pre class="cr-conv-std-yaml cr-conv-schema-yaml">{{ schemaReference }}</pre>
           <div class="cr-conv-std-actions">
@@ -101,9 +101,9 @@
         <details class="cr-conv-help">
           <summary>Bundled standard library</summary>
           <p class="cr-conv-help-intro">
-            Workspace conventions can <code>extends:</code> any of these to inherit its match
-            globs, slug derivation, metadata source, and relationships. Click an entry to expand
-            its full YAML.
+            Workspace conventions can <code>extends:</code> any of these to inherit its match globs,
+            slug derivation, metadata source, and relationships. Click an entry to expand its full
+            YAML.
           </p>
           <div v-if="standardsLoading" class="cr-conv-help-empty">Loading…</div>
           <div v-else-if="standards.length === 0" class="cr-conv-help-empty">
@@ -245,11 +245,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { copyToClipboard, useQuasar } from 'quasar';
 import { Projections, Workspaces } from 'src/api';
-import type {
-  ConventionLoadError,
-  ConventionSummary,
-  StandardConventionEntry,
-} from 'src/api';
+import type { ConventionLoadError, ConventionSummary, StandardConventionEntry } from 'src/api';
 import { useActiveWorkspace } from 'src/composables/useActiveWorkspace';
 
 const $q = useQuasar();
@@ -473,7 +469,7 @@ function newFromStandard(entry: StandardConventionEntry) {
   // location (e.g., `creuser:standard/adr` → `.creuser/conventions/adr.yaml`).
   // Falls back to a placeholder when the id can't be parsed.
   const idMatch = entry.yaml.match(/^\s*id:\s*([\w-]+)/m);
-  const baseId = idMatch ? idMatch[1] : entry.reference.split('/').pop() ?? 'my-convention';
+  const baseId = idMatch ? idMatch[1] : (entry.reference.split('/').pop() ?? 'my-convention');
   const path = `.creuser/conventions/${baseId}.yaml`;
 
   isNew.value = true;

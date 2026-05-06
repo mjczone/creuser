@@ -1398,9 +1398,14 @@ public static class WorkspacesEndpoints
             // combined total. Sort within each group alphabetically
             // (case-insensitive) so the widget renders a stable order
             // without per-call client-side sorting.
+            // Hide only the version-control metadata dirs and the canonical
+            // dependency caches — both are huge, neither is user-edited.
+            // Editing inside `.git/` is path-safety-blocked anyway. Other
+            // dot-folders (.agents, .github, .vscode, .claude, .creuser …)
+            // are real workspace content and stay visible to admins.
             var dirInfos = new DirectoryInfo(abs)
                 .EnumerateDirectories()
-                .Where(d => !d.Name.StartsWith('.') || d.Name == ".creuser")
+                .Where(d => d.Name is not (".git" or ".svn" or ".hg" or "node_modules"))
                 .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             var fileInfos = new DirectoryInfo(abs)

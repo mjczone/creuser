@@ -3,11 +3,11 @@
     <header class="cr-fmpage-header">
       <h1 class="text-h6 q-ma-none">Files</h1>
       <p class="cr-fmpage-subhead">
-        Browse the workspace's working tree. Open text files in Monaco; edit and save with the
-        usual write pipeline (uncommitted changes show in the header's Commit badge for git
-        workspaces). Right-click a row to delete; toolbar's <strong>New file</strong> creates a
-        text file at any path under the current folder (subfolders auto-created). Binary uploads
-        and drag-drop land later.
+        Browse the workspace's working tree. Open text files in Monaco; edit and save with the usual
+        write pipeline (uncommitted changes show in the header's Commit badge for git workspaces).
+        Right-click a row to delete; toolbar's <strong>New file</strong> creates a text file at any
+        path under the current folder (subfolders auto-created). Binary uploads and drag-drop land
+        later.
       </p>
     </header>
     <div class="cr-fmpage-frame">
