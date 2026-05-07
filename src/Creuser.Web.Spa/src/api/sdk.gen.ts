@@ -8,6 +8,9 @@ import {
 } from './client';
 import { client } from './client.gen';
 import type {
+  AddConventionRelationshipData,
+  AddConventionRelationshipErrors,
+  AddConventionRelationshipResponses,
   AddWorkspaceMemberData,
   AddWorkspaceMemberResponses,
   AgentChatData,
@@ -56,11 +59,17 @@ import type {
   FireScheduleResponses,
   GetBrandingData,
   GetBrandingResponses,
+  GetConventionCapabilitiesData,
+  GetConventionCapabilitiesResponses,
+  GetConventionSchemaData,
+  GetConventionSchemaResponses,
   GetCurrentUserData,
   GetCurrentUserResponses,
   GetDashboardData,
   GetDashboardResponses,
   GetEntityData,
+  GetEntityRelationshipsData,
+  GetEntityRelationshipsResponses,
   GetEntityResponses,
   GetEnvironmentData,
   GetEnvironmentResponses,
@@ -122,6 +131,9 @@ import type {
   PushWorkspaceResponses,
   QueryEntitiesData,
   QueryEntitiesResponses,
+  RemoveConventionRelationshipData,
+  RemoveConventionRelationshipErrors,
+  RemoveConventionRelationshipResponses,
   RemoveWorkspaceMemberData,
   RemoveWorkspaceMemberResponses,
   ResetUserPasswordData,
@@ -142,10 +154,15 @@ import type {
   SyncProjectionResponses,
   SyncWorkspaceData,
   SyncWorkspaceResponses,
+  TestConventionData,
+  TestConventionResponses,
   TestWorkspaceConnectionData,
   TestWorkspaceConnectionResponses,
   UpdateBrandingData,
   UpdateBrandingResponses,
+  UpdateConventionRelationshipData,
+  UpdateConventionRelationshipErrors,
+  UpdateConventionRelationshipResponses,
   UpdateDashboardData,
   UpdateDashboardGroupData,
   UpdateDashboardGroupResponses,
@@ -162,6 +179,8 @@ import type {
   UpdateWorkspaceResponses,
   UploadLogoData,
   UploadLogoResponses,
+  ValidateConventionData,
+  ValidateConventionResponses,
 } from './types.gen';
 
 export type Options<
@@ -181,6 +200,17 @@ export type Options<
    */
   meta?: Record<string, unknown>;
 };
+
+export class Schemas {
+  public static getConventionSchema<ThrowOnError extends boolean = false>(
+    options?: Options<GetConventionSchemaData, ThrowOnError>,
+  ) {
+    return (options?.client ?? client).get<GetConventionSchemaResponses, unknown, ThrowOnError>({
+      url: '/schemas/conventions/v1.json',
+      ...options,
+    });
+  }
+}
 
 export class Auth {
   public static login<ThrowOnError extends boolean = false>(
@@ -973,6 +1003,15 @@ export class Projections {
     });
   }
 
+  public static getEntityRelationships<ThrowOnError extends boolean = false>(
+    options: Options<GetEntityRelationshipsData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<GetEntityRelationshipsResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/entities/{kind}/{entitySlug}/relationships',
+      ...options,
+    });
+  }
+
   public static syncProjection<ThrowOnError extends boolean = false>(
     options: Options<SyncProjectionData, ThrowOnError>,
   ) {
@@ -988,6 +1027,86 @@ export class Projections {
     return (options.client ?? client).get<ListCdfsConventionsResponses, unknown, ThrowOnError>({
       url: '/api/workspaces/{slug}/cdfs/conventions',
       ...options,
+    });
+  }
+
+  public static getConventionCapabilities<ThrowOnError extends boolean = false>(
+    options: Options<GetConventionCapabilitiesData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).get<
+      GetConventionCapabilitiesResponses,
+      unknown,
+      ThrowOnError
+    >({ url: '/api/workspaces/{slug}/conventions/capabilities', ...options });
+  }
+
+  public static validateConvention<ThrowOnError extends boolean = false>(
+    options: Options<ValidateConventionData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<ValidateConventionResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/conventions/validate',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static testConvention<ThrowOnError extends boolean = false>(
+    options: Options<TestConventionData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<TestConventionResponses, unknown, ThrowOnError>({
+      url: '/api/workspaces/{slug}/conventions/{id}/test',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static addConventionRelationship<ThrowOnError extends boolean = false>(
+    options: Options<AddConventionRelationshipData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).post<
+      AddConventionRelationshipResponses,
+      AddConventionRelationshipErrors,
+      ThrowOnError
+    >({
+      url: '/api/workspaces/{slug}/conventions/{id}/relationships',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+
+  public static removeConventionRelationship<ThrowOnError extends boolean = false>(
+    options: Options<RemoveConventionRelationshipData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).delete<
+      RemoveConventionRelationshipResponses,
+      RemoveConventionRelationshipErrors,
+      ThrowOnError
+    >({ url: '/api/workspaces/{slug}/conventions/{id}/relationships/{kind}', ...options });
+  }
+
+  public static updateConventionRelationship<ThrowOnError extends boolean = false>(
+    options: Options<UpdateConventionRelationshipData, ThrowOnError>,
+  ) {
+    return (options.client ?? client).put<
+      UpdateConventionRelationshipResponses,
+      UpdateConventionRelationshipErrors,
+      ThrowOnError
+    >({
+      url: '/api/workspaces/{slug}/conventions/{id}/relationships/{kind}',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
     });
   }
 }

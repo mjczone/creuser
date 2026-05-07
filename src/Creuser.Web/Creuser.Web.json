@@ -5,6 +5,19 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/schemas/conventions/v1.json": {
+      "get": {
+        "tags": [
+          "Schemas"
+        ],
+        "operationId": "GetConventionSchema",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [
@@ -2511,6 +2524,52 @@
         }
       }
     },
+    "/api/workspaces/{slug}/entities/{kind}/{entitySlug}/relationships": {
+      "get": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "GetEntityRelationships",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entitySlug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfEntityRelationshipsResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{slug}/projections/sync": {
       "post": {
         "tags": [
@@ -2564,6 +2623,302 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResultOfCdfsConventionsListResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/conventions/capabilities": {
+      "get": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "GetConventionCapabilities",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfConventionCapabilitiesResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/conventions/validate": {
+      "post": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "ValidateConvention",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateConventionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfValidateConventionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/conventions/{id}/test": {
+      "post": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "TestConvention",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestConventionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfTestConventionResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/conventions/{id}/relationships": {
+      "post": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "AddConventionRelationship",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelationshipEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRelationshipEditResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRelationshipEditResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{slug}/conventions/{id}/relationships/{kind}": {
+      "put": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "UpdateConventionRelationship",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelationshipEditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRelationshipEditResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRelationshipEditResultDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Projections"
+        ],
+        "operationId": "RemoveConventionRelationship",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRelationshipEditResultDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfRelationshipEditResultDto"
                 }
               }
             }
@@ -2721,6 +3076,50 @@
   },
   "components": {
     "schemas": {
+      "AccessorFieldDto": {
+        "required": [
+          "name",
+          "description",
+          "returnType"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "returnType": {
+            "type": "string"
+          }
+        }
+      },
+      "AccessorNamespaceDto": {
+        "required": [
+          "namespace",
+          "description",
+          "fields"
+        ],
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessorFieldDto"
+            }
+          }
+        }
+      },
       "AddMemberRequest": {
         "required": [
           "userId",
@@ -3029,6 +3428,24 @@
           }
         }
       },
+      "ApiResultOfConventionCapabilitiesResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConventionCapabilitiesResult"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfConventionsListResult": {
         "required": [
           "result"
@@ -3150,6 +3567,24 @@
               },
               {
                 "$ref": "#/components/schemas/EntityDetail"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfEntityRelationshipsResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EntityRelationshipsResult"
               }
             ]
           }
@@ -3483,6 +3918,24 @@
           }
         }
       },
+      "ApiResultOfRelationshipEditResultDto": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RelationshipEditResultDto"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfScheduleResult": {
         "required": [
           "result"
@@ -3537,6 +3990,24 @@
           }
         }
       },
+      "ApiResultOfTestConventionResultDto": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TestConventionResultDto"
+              }
+            ]
+          }
+        }
+      },
       "ApiResultOfUserResult": {
         "required": [
           "result"
@@ -3550,6 +4021,24 @@
               },
               {
                 "$ref": "#/components/schemas/UserResult"
+              }
+            ]
+          }
+        }
+      },
+      "ApiResultOfValidateConventionResult": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ValidateConventionResult"
               }
             ]
           }
@@ -4201,6 +4690,86 @@
           }
         }
       },
+      "CommonPatternDto": {
+        "required": [
+          "id",
+          "description",
+          "yamlSnippet"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "yamlSnippet": {
+            "type": "string"
+          }
+        }
+      },
+      "ConventionCapabilitiesResult": {
+        "required": [
+          "schemaUrl",
+          "schemaVersion",
+          "schema",
+          "accessors",
+          "workspaceKinds",
+          "interpretModes",
+          "refSourceKinds",
+          "filterKinds",
+          "commonPatterns"
+        ],
+        "type": "object",
+        "properties": {
+          "schemaUrl": {
+            "type": "string"
+          },
+          "schemaVersion": {
+            "type": "string"
+          },
+          "schema": {
+            "$ref": "#/components/schemas/JsonObject"
+          },
+          "accessors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessorNamespaceDto"
+            }
+          },
+          "workspaceKinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "interpretModes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "refSourceKinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RefSourceKindDto"
+            }
+          },
+          "filterKinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilterKindDto"
+            }
+          },
+          "commonPatterns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommonPatternDto"
+            }
+          }
+        }
+      },
       "ConventionLoadError": {
         "required": [
           "source",
@@ -4216,6 +4785,125 @@
           },
           "message": {
             "type": "string"
+          }
+        }
+      },
+      "ConventionRelationshipSummary": {
+        "required": [
+          "kind",
+          "name",
+          "icon",
+          "description",
+          "order",
+          "sourceKind",
+          "sourceKey",
+          "sourceLiterals",
+          "filterKind",
+          "filterPattern",
+          "interpret",
+          "targetKindAny",
+          "targetKindAllowed",
+          "inverse",
+          "inverseName",
+          "inverseIcon",
+          "metadata"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "order": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "sourceKind": {
+            "type": "string"
+          },
+          "sourceKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sourceLiterals": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "filterKind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "filterPattern": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "interpret": {
+            "type": "string"
+          },
+          "targetKindAny": {
+            "type": "boolean"
+          },
+          "targetKindAllowed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inverse": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inverseName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inverseIcon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "metadata": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         }
       },
@@ -4248,7 +4936,8 @@
           "glob",
           "extends",
           "contentHash",
-          "sourcePath"
+          "sourcePath",
+          "relationships"
         ],
         "type": "object",
         "properties": {
@@ -4286,6 +4975,12 @@
               "null",
               "string"
             ]
+          },
+          "relationships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConventionRelationshipSummary"
+            }
           }
         }
       },
@@ -4864,6 +5559,147 @@
           }
         }
       },
+      "EntityRelationshipFolder": {
+        "required": [
+          "kind",
+          "name",
+          "icon",
+          "description",
+          "order",
+          "direction",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "order": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityRelationshipItem"
+            }
+          }
+        }
+      },
+      "EntityRelationshipItem": {
+        "required": [
+          "entityId",
+          "kind",
+          "slug",
+          "path",
+          "metadataKind",
+          "url",
+          "raw",
+          "expandedFrom"
+        ],
+        "type": "object",
+        "properties": {
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "slug": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "path": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "metadataKind": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "raw": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expandedFrom": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "EntityRelationshipsResult": {
+        "required": [
+          "entityId",
+          "kind",
+          "slug",
+          "path",
+          "folders"
+        ],
+        "type": "object",
+        "properties": {
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityRelationshipFolder"
+            }
+          }
+        }
+      },
       "EntitySummary": {
         "required": [
           "id",
@@ -4934,6 +5770,28 @@
             "additionalProperties": {
               "type": "boolean"
             }
+          }
+        }
+      },
+      "FilterKindDto": {
+        "required": [
+          "kind",
+          "description",
+          "patternExample"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "patternExample": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -5346,6 +6204,9 @@
         }
       },
       "JsonElement": { },
+      "JsonObject": {
+        "type": "object"
+      },
       "LocalProviderConfig": {
         "type": "object",
         "properties": {
@@ -5710,6 +6571,165 @@
           }
         }
       },
+      "RefSourceKindDto": {
+        "required": [
+          "kind",
+          "description",
+          "example"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "example": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RelationshipEditRequest": {
+        "required": [
+          "kind",
+          "name",
+          "icon",
+          "description",
+          "order",
+          "source",
+          "filter",
+          "interpret",
+          "targetKind",
+          "inverse",
+          "inverseName",
+          "inverseIcon",
+          "metadata"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "icon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "order": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "filter": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "interpret": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetKind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "inverse": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inverseName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inverseIcon": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "metadata": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RelationshipEditResultDto": {
+        "required": [
+          "conventionId",
+          "resultingYaml",
+          "relationshipCount"
+        ],
+        "type": "object",
+        "properties": {
+          "conventionId": {
+            "type": "string"
+          },
+          "resultingYaml": {
+            "type": "string"
+          },
+          "relationshipCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "ResetPasswordRequest": {
         "type": "object",
         "properties": {
@@ -5947,6 +6967,53 @@
         "properties": {
           "report": {
             "$ref": "#/components/schemas/ProjectionReport"
+          }
+        }
+      },
+      "TestConventionRequest": {
+        "required": [
+          "againstPath"
+        ],
+        "type": "object",
+        "properties": {
+          "againstPath": {
+            "type": "string"
+          }
+        }
+      },
+      "TestConventionResultDto": {
+        "required": [
+          "matched",
+          "entity",
+          "refs",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "matched": {
+            "type": "boolean"
+          },
+          "entity": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EntitySummary"
+              }
+            ]
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityRefSummary"
+            }
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -6236,6 +7303,46 @@
               "string"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "ValidateConventionRequest": {
+        "required": [
+          "yaml"
+        ],
+        "type": "object",
+        "properties": {
+          "yaml": {
+            "type": "string"
+          }
+        }
+      },
+      "ValidateConventionResult": {
+        "required": [
+          "isValid",
+          "convention",
+          "errors"
+        ],
+        "type": "object",
+        "properties": {
+          "isValid": {
+            "type": "boolean"
+          },
+          "convention": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConventionSummary"
+              }
+            ]
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConventionLoadError"
+            }
           }
         }
       },
@@ -6965,6 +8072,9 @@
     }
   },
   "tags": [
+    {
+      "name": "Schemas"
+    },
     {
       "name": "Auth"
     },

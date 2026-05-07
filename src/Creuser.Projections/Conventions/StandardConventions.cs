@@ -120,11 +120,24 @@ public static class StandardConventions
               source: frontmatter
             relationships:
               - kind: parent
+                name: Parent
+                icon: folder
+                description: The directory's index.md, treated as the parent rule.
+                order: 10
                 select_path: "{file_dir}/index.md"
                 target_kind: business_rule
+                inverse: children
+                inverse_name: Children
+                inverse_icon: folder
               - kind: references
+                name: References
+                icon: link
+                description: Other business rules this rule cites.
+                order: 20
                 select_frontmatter: references
                 target_kind: business_rule
+                inverse: referenced_by
+                inverse_name: Referenced by
             """;
         return d;
     }

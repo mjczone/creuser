@@ -152,39 +152,59 @@
               <pre class="cr-cdfs-meta">{{ formattedMetadata }}</pre>
             </section>
 
-            <section v-if="entityDetail.refsOut.length > 0" class="cr-cdfs-section">
-              <h3 class="cr-cdfs-section-title">
-                Outbound references ({{ entityDetail.refsOut.length }})
-              </h3>
-              <ul class="cr-cdfs-refs">
-                <li v-for="r in entityDetail.refsOut" :key="r.id">
-                  <code>{{ r.relationship }}</code>
-                  <span v-if="r.targetKind">
-                    → <code>{{ r.targetKind }}</code>
-                  </span>
-                  <span v-if="r.targetSlug">
-                    /<code>{{ r.targetSlug }}</code>
-                  </span>
-                  <span v-if="!r.toEntityId" class="cr-cdfs-refs-unresolved">unresolved</span>
-                </li>
-              </ul>
-            </section>
-
-            <section v-if="entityDetail.refsIn.length > 0" class="cr-cdfs-section">
-              <h3 class="cr-cdfs-section-title">
-                Inbound references ({{ entityDetail.refsIn.length }})
-              </h3>
-              <ul class="cr-cdfs-refs">
-                <li v-for="r in entityDetail.refsIn" :key="r.id">
-                  <code>{{ r.relationship }}</code>
-                  <span v-if="r.targetKind">
-                    ← <code>{{ r.targetKind }}</code>
-                  </span>
-                  <span v-if="r.targetSlug">
-                    /<code>{{ r.targetSlug }}</code>
-                  </span>
-                </li>
-              </ul>
+            <section
+              v-if="relationshipFolders.length > 0"
+              class="cr-cdfs-section cr-cdfs-section--rels"
+            >
+              <h3 class="cr-cdfs-section-title">Relationships</h3>
+              <div class="cr-cdfs-rel-folders">
+                <div
+                  v-for="folder in relationshipFolders"
+                  :key="folder.direction + ':' + folder.kind"
+                  class="cr-cdfs-rel-folder"
+                >
+                  <div class="cr-cdfs-rel-folder-header">
+                    <q-icon
+                      :name="folder.icon || folderFallbackIcon(folder.direction)"
+                      size="14px"
+                      class="cr-cdfs-rel-folder-icon"
+                    />
+                    <span class="cr-cdfs-rel-folder-name">{{ folder.name }}</span>
+                    <span class="cr-cdfs-rel-folder-count">{{ folder.items.length }}</span>
+                    <span class="cr-cdfs-rel-folder-dir">{{
+                      folder.direction === 'in' ? '←' : '→'
+                    }}</span>
+                    <q-tooltip v-if="folder.description" anchor="top middle" self="bottom middle">
+                      {{ folder.description }}
+                    </q-tooltip>
+                  </div>
+                  <ul class="cr-cdfs-rel-items">
+                    <li
+                      v-for="(item, i) in folder.items"
+                      :key="folder.kind + ':' + i"
+                      class="cr-cdfs-rel-item"
+                      :class="`cr-cdfs-rel-item--${item.metadataKind}`"
+                    >
+                      <q-icon :name="itemIcon(item)" size="13px" class="cr-cdfs-rel-item-icon" />
+                      <span class="cr-cdfs-rel-item-label">{{ itemLabel(item) }}</span>
+                      <span
+                        v-if="item.kind && item.metadataKind === 'entity'"
+                        class="cr-cdfs-rel-item-kind"
+                        >{{ item.kind }}</span
+                      >
+                      <span
+                        v-if="item.expandedFrom"
+                        class="cr-cdfs-rel-item-glob"
+                        :title="`expanded from ${item.expandedFrom}`"
+                        >glob</span
+                      >
+                      <span v-if="item.metadataKind !== 'entity'" class="cr-cdfs-rel-item-status"
+                        >unresolved</span
+                      >
+                    </li>
+                  </ul>
+                </div>
+              </div>
             </section>
           </div>
         </template>
@@ -211,7 +231,14 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 import { Projections, Workspaces } from 'src/api';
-import type { CdfsActionDescriptor, CdfsConventionRow, EntityDetail, EntitySummary } from 'src/api';
+import type {
+  CdfsActionDescriptor,
+  CdfsConventionRow,
+  EntityDetail,
+  EntityRelationshipFolder,
+  EntityRelationshipItem,
+  EntitySummary,
+} from 'src/api';
 import { useActiveWorkspace } from 'src/composables/useActiveWorkspace';
 import { useAssistantStore } from 'src/stores/assistant';
 
@@ -234,9 +261,11 @@ const entities = ref<EntitySummary[]>([]);
 const selectedEntityId = ref<string | null>(null);
 const entityLoading = ref(false);
 const entityDetail = ref<EntityDetail | null>(null);
+const relationshipFolders = ref<EntityRelationshipFolder[]>([]);
 // Detail cache scoped to the active convention. Cleared on convention
 // change + on root return so a stale row's metadata can't gate an action.
 const entityDetailCache = ref(new Map<string, EntityDetail>());
+const relationshipsCache = ref(new Map<string, EntityRelationshipFolder[]>());
 
 const formattedMetadata = computed(() => {
   if (!entityDetail.value) return '';
@@ -284,6 +313,7 @@ async function onResync() {
       if (stillThere) {
         activeConvention.value = stillThere;
         entityDetailCache.value.clear();
+        relationshipsCache.value.clear();
         await loadEntities(stillThere);
       } else {
         enterRoot();
@@ -332,7 +362,9 @@ function enterConvention(conv: CdfsConventionRow) {
   entities.value = [];
   selectedEntityId.value = null;
   entityDetail.value = null;
+  relationshipFolders.value = [];
   entityDetailCache.value.clear();
+  relationshipsCache.value.clear();
   void loadEntities(conv);
 }
 
@@ -341,7 +373,9 @@ function enterRoot() {
   entities.value = [];
   selectedEntityId.value = null;
   entityDetail.value = null;
+  relationshipFolders.value = [];
   entityDetailCache.value.clear();
+  relationshipsCache.value.clear();
   if (rows.value.length === 0) void loadConventions();
 }
 
@@ -349,13 +383,61 @@ async function openEntity(ent: EntitySummary) {
   if (!slug.value) return;
   selectedEntityId.value = ent.id;
   entityDetail.value = null;
+  relationshipFolders.value = [];
   entityLoading.value = true;
   try {
-    const detail = await fetchEntityDetail(ent);
+    const [detail, folders] = await Promise.all([
+      fetchEntityDetail(ent),
+      fetchEntityRelationships(ent),
+    ]);
     entityDetail.value = detail;
+    relationshipFolders.value = folders;
   } finally {
     entityLoading.value = false;
   }
+}
+
+async function fetchEntityRelationships(ent: EntitySummary): Promise<EntityRelationshipFolder[]> {
+  if (!slug.value) return [];
+  const cacheKey = `${ent.kind}/${ent.slug}`;
+  const cached = relationshipsCache.value.get(cacheKey);
+  if (cached) return cached;
+  const res = await Projections.getEntityRelationships({
+    path: { slug: slug.value, kind: ent.kind, entitySlug: ent.slug },
+  });
+  if (res.error) {
+    notifyError(res.error, 'Failed to load relationships.');
+    return [];
+  }
+  const folders = res.data?.result?.folders ?? [];
+  relationshipsCache.value.set(cacheKey, folders);
+  return folders;
+}
+
+function folderFallbackIcon(direction: string): string {
+  return direction === 'in' ? 'subdirectory_arrow_left' : 'subdirectory_arrow_right';
+}
+
+function itemIcon(item: EntityRelationshipItem): string {
+  switch (item.metadataKind) {
+    case 'url':
+      return 'open_in_new';
+    case 'file':
+      return 'description';
+    case 'slug':
+      return 'help_outline';
+    default:
+      return 'article';
+  }
+}
+
+function itemLabel(item: EntityRelationshipItem): string {
+  if (item.metadataKind === 'url') return item.url ?? item.raw ?? '(url)';
+  if (item.metadataKind === 'entity') {
+    return item.slug ?? item.path ?? '(entity)';
+  }
+  if (item.metadataKind === 'file') return item.path ?? item.raw ?? '(file)';
+  return item.raw ?? item.slug ?? '(item)';
 }
 
 async function fetchEntityDetail(ent: EntitySummary): Promise<EntityDetail | null> {
@@ -606,6 +688,9 @@ watch(
       entities.value = [];
       selectedEntityId.value = null;
       entityDetail.value = null;
+      relationshipFolders.value = [];
+      entityDetailCache.value.clear();
+      relationshipsCache.value.clear();
       void loadConventions();
     }
   },
@@ -862,5 +947,125 @@ watch(
   padding: 1px 5px;
   border-radius: 3px;
   margin-left: 4px;
+}
+
+.cr-cdfs-rel-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cr-cdfs-rel-folder {
+  border: 1px solid var(--cr-border-subtle);
+  border-radius: 4px;
+  background: var(--cr-bg-surface);
+}
+
+.cr-cdfs-rel-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--cr-border-faint);
+  background: var(--cr-bg-elevated);
+  font-size: 11px;
+}
+
+.cr-cdfs-rel-folder-icon {
+  color: var(--cr-fg-secondary);
+}
+
+.cr-cdfs-rel-folder-name {
+  flex: 1;
+  font-weight: 500;
+  color: var(--cr-fg-primary);
+}
+
+.cr-cdfs-rel-folder-count {
+  font-family: var(--cr-font-family-mono);
+  font-size: 10px;
+  color: var(--cr-fg-tertiary);
+  background: var(--cr-bg-surface);
+  padding: 1px 5px;
+  border-radius: 8px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.cr-cdfs-rel-folder-dir {
+  font-family: var(--cr-font-family-mono);
+  color: var(--cr-fg-tertiary);
+  font-size: 11px;
+}
+
+.cr-cdfs-rel-items {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.cr-cdfs-rel-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--cr-fg-primary);
+
+  &:hover {
+    background: var(--cr-bg-hover);
+  }
+}
+
+.cr-cdfs-rel-item-icon {
+  color: var(--cr-fg-secondary);
+  flex-shrink: 0;
+}
+
+.cr-cdfs-rel-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--cr-font-family-mono);
+}
+
+.cr-cdfs-rel-item-kind {
+  font-family: var(--cr-font-family-mono);
+  font-size: 9px;
+  color: var(--cr-fg-tertiary);
+  background: var(--cr-bg-elevated);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.cr-cdfs-rel-item-glob {
+  font-family: var(--cr-font-family-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--cr-fg-tertiary);
+  background: var(--cr-bg-elevated);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.cr-cdfs-rel-item-status {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--cr-status-warning);
+  background: var(--cr-bg-elevated);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.cr-cdfs-rel-item--url .cr-cdfs-rel-item-icon {
+  color: var(--cr-status-info, var(--cr-fg-secondary));
+}
+
+.cr-cdfs-rel-item--file .cr-cdfs-rel-item-icon {
+  color: var(--cr-fg-tertiary);
 }
 </style>

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Creuser.Cli</RootNamespace>
+    <AssemblyName>creuser</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Creuser.Core\Creuser.Core.csproj" />
+    <ProjectReference Include="..\Creuser.Projections\Creuser.Projections.csproj" />
+  </ItemGroup>
+</Project>

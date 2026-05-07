@@ -217,6 +217,19 @@
             </template>
           </vue-monaco-editor>
 
+          <div v-if="selectedConvention && !isNew" class="cr-conv-side-panels">
+            <ConventionRelationshipsPanel
+              :workspace-slug="workspaceSlug ?? ''"
+              :convention-id="selectedConvention.id"
+              :relationships="selectedConvention.relationships"
+              @changed="onRelationshipsChanged"
+            />
+            <ConventionTestPanel
+              :workspace-slug="workspaceSlug ?? ''"
+              :convention-id="selectedConvention.id"
+            />
+          </div>
+
           <footer v-if="dirty" class="cr-conv-editor-dirty">
             <q-icon name="edit" size="14px" />
             Unsaved changes — Save commits to the working branch and re-fires projection-sync.
@@ -247,6 +260,8 @@ import { copyToClipboard, useQuasar } from 'quasar';
 import { Projections, Workspaces } from 'src/api';
 import type { ConventionLoadError, ConventionSummary, StandardConventionEntry } from 'src/api';
 import { useActiveWorkspace } from 'src/composables/useActiveWorkspace';
+import ConventionRelationshipsPanel from 'src/components/conventions/ConventionRelationshipsPanel.vue';
+import ConventionTestPanel from 'src/components/conventions/ConventionTestPanel.vue';
 
 const $q = useQuasar();
 const { slug: workspaceSlug } = useActiveWorkspace();
@@ -274,6 +289,26 @@ const saving = ref(false);
 const deleting = ref(false);
 
 const dirty = computed(() => editingContent.value !== baseline.value);
+
+const selectedConvention = computed<ConventionSummary | null>(() => {
+  if (!selectedPath.value) return null;
+  return (
+    conventions.value.find((c) => c.sourcePath !== null && c.sourcePath === selectedPath.value) ??
+    null
+  );
+});
+
+async function onRelationshipsChanged() {
+  // Refresh conventions list so the relationships panel reflects the new state
+  // and re-load the YAML so the Monaco editor matches what was just persisted.
+  await loadConventions();
+  if (selectedPath.value) {
+    const conv = conventions.value.find((c) => c.sourcePath === selectedPath.value);
+    if (conv) {
+      await selectConvention(conv);
+    }
+  }
+}
 
 const editorOptions = {
   automaticLayout: true,
@@ -503,7 +538,7 @@ function newFromStandard(entry: StandardConventionEntry) {
   isNew.value = true;
   selectedPath.value = path;
   editingPath.value = path;
-  editingContent.value = `id: ${baseId}\nextends: ${entry.reference}\n# Override match.glob, slug, metadata, etc. as needed.\n# The full bundled YAML for ${entry.reference} is shown in the help panel.\n`;
+  editingContent.value = `${SCHEMA_HEADER}id: ${baseId}\nextends: ${entry.reference}\n# Override match.glob, slug, metadata, etc. as needed.\n# The full bundled YAML for ${entry.reference} is shown in the help panel.\n`;
   baseline.value = '';
 }
 
@@ -511,9 +546,14 @@ function onNewConvention() {
   isNew.value = true;
   selectedPath.value = '.creuser/conventions/';
   editingPath.value = '.creuser/conventions/';
-  editingContent.value = `id: my-convention\nmatch:\n  glob: "docs/**/*.md"\nslug:\n  from: filename\nmetadata:\n  source: frontmatter\n`;
+  editingContent.value = `${SCHEMA_HEADER}id: my-convention\nmatch:\n  glob: "docs/**/*.md"\nslug:\n  from: filename\nmetadata:\n  source: frontmatter\n`;
   baseline.value = '';
 }
+
+// Authors who open the convention in any modern editor (VS Code / Cursor /
+// JetBrains) get autocomplete + validation via yaml-language-server when
+// this header points at the workspace's published JSON Schema.
+const SCHEMA_HEADER = '# yaml-language-server: $schema=/schemas/conventions/v1.json\n';
 
 function discardChanges() {
   editingContent.value = baseline.value;
@@ -982,6 +1022,17 @@ onMounted(() => {
 .cr-conv-monaco {
   flex: 1;
   min-height: 300px;
+}
+
+.cr-conv-side-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid var(--cr-border-subtle);
+  background: var(--cr-bg-page);
+  max-height: 460px;
+  overflow-y: auto;
 }
 
 .cr-conv-monaco-loading {

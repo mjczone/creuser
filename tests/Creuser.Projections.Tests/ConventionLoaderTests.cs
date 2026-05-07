@@ -177,6 +177,126 @@ public class ConventionLoaderTests : IAsyncLifetime
         Assert.Equal(first.Conventions[0].ContentHash, second.Conventions[0].ContentHash);
     }
 
+    [Fact]
+    public async Task Load_RelationshipWithDisplayFields_PreservesAll()
+    {
+        await WriteConvention(
+            "doc.yaml",
+            """
+            id: doc
+            match:
+              glob: "docs/**/*.md"
+            slug:
+              from: filename
+            relationships:
+              - kind: supersedes
+                name: Supersedes
+                icon: arrow-up
+                description: Older docs this one replaces.
+                order: 30
+                select_frontmatter: supersedes
+                target_kind: doc
+                inverse: superseded_by
+                inverse_name: Superseded by
+                inverse_icon: arrow-down
+            """
+        );
+
+        var loader = new ConventionLoader();
+        var result = await loader.LoadAsync(_workspace, _root, CancellationToken.None);
+        Assert.Single(result.Conventions);
+        var rel = result.Conventions[0].Relationships[0];
+        Assert.Equal("supersedes", rel.Kind);
+        Assert.Equal("Supersedes", rel.Name);
+        Assert.Equal("arrow-up", rel.Icon);
+        Assert.Equal("Older docs this one replaces.", rel.Description);
+        Assert.Equal(30, rel.Order);
+        Assert.Equal("superseded_by", rel.Inverse);
+        Assert.Equal("Superseded by", rel.InverseName);
+        Assert.Equal("arrow-down", rel.InverseIcon);
+    }
+
+    [Fact]
+    public async Task Load_RelationshipWithoutName_HumanizesFromKind()
+    {
+        await WriteConvention(
+            "doc.yaml",
+            """
+            id: doc
+            match:
+              glob: "docs/**/*.md"
+            slug:
+              from: filename
+            relationships:
+              - kind: related_adrs
+                select_frontmatter: related_adrs
+                target_kind: adr
+            """
+        );
+
+        var loader = new ConventionLoader();
+        var result = await loader.LoadAsync(_workspace, _root, CancellationToken.None);
+        var rel = result.Conventions[0].Relationships[0];
+        Assert.Equal("Related Adrs", rel.Name);
+        Assert.Equal(100, rel.Order); // default
+        Assert.Null(rel.Inverse);
+        Assert.Null(rel.InverseName);
+    }
+
+    [Fact]
+    public async Task Load_SymmetricInverse_DefaultsInverseNameToName()
+    {
+        await WriteConvention(
+            "doc.yaml",
+            """
+            id: doc
+            match:
+              glob: "docs/**/*.md"
+            slug:
+              from: filename
+            relationships:
+              - kind: related
+                name: Related
+                select_frontmatter: related
+                target_kind: doc
+                inverse: related
+            """
+        );
+
+        var loader = new ConventionLoader();
+        var result = await loader.LoadAsync(_workspace, _root, CancellationToken.None);
+        var rel = result.Conventions[0].Relationships[0];
+        Assert.Equal("related", rel.Inverse);
+        Assert.Equal("Related", rel.InverseName); // mirrored from Name
+    }
+
+    [Fact]
+    public async Task Load_AsymmetricInverseWithoutInverseName_HumanizesFromInverseKind()
+    {
+        await WriteConvention(
+            "doc.yaml",
+            """
+            id: doc
+            match:
+              glob: "docs/**/*.md"
+            slug:
+              from: filename
+            relationships:
+              - kind: verified_by
+                name: Verified by
+                select_frontmatter: verified_by
+                target_kind: checklist
+                inverse: verifies
+            """
+        );
+
+        var loader = new ConventionLoader();
+        var result = await loader.LoadAsync(_workspace, _root, CancellationToken.None);
+        var rel = result.Conventions[0].Relationships[0];
+        Assert.Equal("verifies", rel.Inverse);
+        Assert.Equal("Verifies", rel.InverseName); // humanized from Inverse kind
+    }
+
     private async Task WriteConvention(string fileName, string yaml) =>
         await File.WriteAllTextAsync(
             Path.Combine(_root, ".creuser", "conventions", fileName),

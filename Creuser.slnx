@@ -10,6 +10,7 @@
     <Project Path="src/Creuser.Auth.Core/Creuser.Auth.Core.csproj" />
     <Project Path="src/Creuser.Auth.Providers.Google/Creuser.Auth.Providers.Google.csproj" />
     <Project Path="src/Creuser.Auth.Providers.Local/Creuser.Auth.Providers.Local.csproj" />
+    <Project Path="src/Creuser.Cli/Creuser.Cli.csproj" />
     <Project Path="src/Creuser.Core/Creuser.Core.csproj" />
     <Project Path="src/Creuser.Git/Creuser.Git.csproj" />
     <Project Path="src/Creuser.Persistence/Creuser.Persistence.csproj" />

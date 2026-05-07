@@ -4,6 +4,18 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AccessorFieldDto = {
+  name: string;
+  description: string;
+  returnType: string;
+};
+
+export type AccessorNamespaceDto = {
+  namespace: string;
+  description: null | string;
+  fields: Array<AccessorFieldDto>;
+};
+
 export type AddMemberRequest = {
   userId: string;
   role: string;
@@ -71,6 +83,10 @@ export type ApiResultOfCdfsConventionsListResult = {
   result: null | CdfsConventionsListResult;
 };
 
+export type ApiResultOfConventionCapabilitiesResult = {
+  result: null | ConventionCapabilitiesResult;
+};
+
 export type ApiResultOfConventionsListResult = {
   result: null | ConventionsListResult;
 };
@@ -97,6 +113,10 @@ export type ApiResultOfEchoResponse = {
 
 export type ApiResultOfEntityDetail = {
   result: null | EntityDetail;
+};
+
+export type ApiResultOfEntityRelationshipsResult = {
+  result: null | EntityRelationshipsResult;
 };
 
 export type ApiResultOfEnvironmentConfigView = {
@@ -175,6 +195,10 @@ export type ApiResultOfPlanDetail = {
   result: null | PlanDetail;
 };
 
+export type ApiResultOfRelationshipEditResultDto = {
+  result: null | RelationshipEditResultDto;
+};
+
 export type ApiResultOfScheduleResult = {
   result: null | ScheduleResult;
 };
@@ -187,8 +211,16 @@ export type ApiResultOfSyncProjectionResult = {
   result: null | SyncProjectionResult;
 };
 
+export type ApiResultOfTestConventionResultDto = {
+  result: null | TestConventionResultDto;
+};
+
 export type ApiResultOfUserResult = {
   result: null | UserResult;
+};
+
+export type ApiResultOfValidateConventionResult = {
+  result: null | ValidateConventionResult;
 };
 
 export type ApiResultOfWorkspaceChangeResult = {
@@ -333,9 +365,49 @@ export type ChromeTokens = {
   borderStrong?: null | string;
 };
 
+export type CommonPatternDto = {
+  id: string;
+  description: string;
+  yamlSnippet: string;
+};
+
+export type ConventionCapabilitiesResult = {
+  schemaUrl: string;
+  schemaVersion: string;
+  schema: JsonObject;
+  accessors: Array<AccessorNamespaceDto>;
+  workspaceKinds: Array<string>;
+  interpretModes: Array<string>;
+  refSourceKinds: Array<RefSourceKindDto>;
+  filterKinds: Array<FilterKindDto>;
+  commonPatterns: Array<CommonPatternDto>;
+};
+
 export type ConventionLoadError = {
   source: null | string;
   message: string;
+};
+
+export type ConventionRelationshipSummary = {
+  kind: string;
+  name: string;
+  icon: null | string;
+  description: null | string;
+  order: number | string;
+  sourceKind: string;
+  sourceKey: null | string;
+  sourceLiterals: null | Array<string>;
+  filterKind: null | string;
+  filterPattern: null | string;
+  interpret: string;
+  targetKindAny: boolean;
+  targetKindAllowed: Array<string>;
+  inverse: null | string;
+  inverseName: null | string;
+  inverseIcon: null | string;
+  metadata: null | {
+    [key: string]: string;
+  };
 };
 
 export type ConventionsListResult = {
@@ -351,6 +423,7 @@ export type ConventionSummary = {
   extends: null | string;
   contentHash: string;
   sourcePath: null | string;
+  relationships: Array<ConventionRelationshipSummary>;
 };
 
 export type CreateDashboardGroupRequest = {
@@ -488,6 +561,35 @@ export type EntityRefSummary = {
   targetSlug: null | string;
 };
 
+export type EntityRelationshipFolder = {
+  kind: string;
+  name: string;
+  icon: null | string;
+  description: null | string;
+  order: number | string;
+  direction: string;
+  items: Array<EntityRelationshipItem>;
+};
+
+export type EntityRelationshipItem = {
+  entityId: null | string;
+  kind: null | string;
+  slug: null | string;
+  path: null | string;
+  metadataKind: string;
+  url: null | string;
+  raw: null | string;
+  expandedFrom: null | string;
+};
+
+export type EntityRelationshipsResult = {
+  entityId: string;
+  kind: string;
+  slug: string;
+  path: string;
+  folders: Array<EntityRelationshipFolder>;
+};
+
 export type EntitySummary = {
   id: string;
   kind: string;
@@ -509,6 +611,12 @@ export type EnvironmentConfigView = {
   secretsPresent: {
     [key: string]: boolean;
   };
+};
+
+export type FilterKindDto = {
+  kind: string;
+  description: string;
+  patternExample: null | string;
 };
 
 export type GeneralConfig = {
@@ -598,6 +706,10 @@ export type JobScriptResult = {
 
 export type JsonElement = unknown;
 
+export type JsonObject = {
+  [key: string]: unknown;
+};
+
 export type LocalProviderConfig = {
   baseUrl?: null | string;
   defaultModel?: null | string;
@@ -680,6 +792,36 @@ export type ProjectionReport = {
   };
 };
 
+export type RefSourceKindDto = {
+  kind: string;
+  description: string;
+  example: null | string;
+};
+
+export type RelationshipEditRequest = {
+  kind: string;
+  name: null | string;
+  icon: null | string;
+  description: null | string;
+  order: null | number | string;
+  source: null | JsonElement;
+  filter: null | JsonElement;
+  interpret: null | string;
+  targetKind: null | JsonElement;
+  inverse: null | string;
+  inverseName: null | string;
+  inverseIcon: null | string;
+  metadata: null | {
+    [key: string]: string;
+  };
+};
+
+export type RelationshipEditResultDto = {
+  conventionId: string;
+  resultingYaml: string;
+  relationshipCount: number | string;
+};
+
 export type ResetPasswordRequest = {
   temporaryPassword?: null | string;
 };
@@ -747,6 +889,17 @@ export type SyncProjectionResult = {
   report: ProjectionReport;
 };
 
+export type TestConventionRequest = {
+  againstPath: string;
+};
+
+export type TestConventionResultDto = {
+  matched: boolean;
+  entity: null | EntitySummary;
+  refs: Array<EntityRefSummary>;
+  error: null | string;
+};
+
 export type TestWorkspaceConnectionRequest = {
   type: string;
   gitSettings?: null | GitWorkspaceSettingsDto;
@@ -810,6 +963,16 @@ export type UserResult = {
   isActive: boolean;
   mustChangePassword: boolean;
   lastLoginAt: null | string;
+};
+
+export type ValidateConventionRequest = {
+  yaml: string;
+};
+
+export type ValidateConventionResult = {
+  isValid: boolean;
+  convention: null | ConventionSummary;
+  errors: Array<ConventionLoadError>;
 };
 
 export type WorkspaceCapabilitiesDto = {
@@ -965,6 +1128,20 @@ export type WorkspaceSyncResult = {
   dirtyCount?: number | string;
   aheadCount?: number | string;
   requiresForce?: boolean;
+};
+
+export type GetConventionSchemaData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/schemas/conventions/v1.json';
+};
+
+export type GetConventionSchemaResponses = {
+  /**
+   * OK
+   */
+  200: unknown;
 };
 
 export type LoginData = {
@@ -2275,6 +2452,27 @@ export type GetEntityResponses = {
 
 export type GetEntityResponse = GetEntityResponses[keyof GetEntityResponses];
 
+export type GetEntityRelationshipsData = {
+  body?: never;
+  path: {
+    slug: string;
+    kind: string;
+    entitySlug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/entities/{kind}/{entitySlug}/relationships';
+};
+
+export type GetEntityRelationshipsResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfEntityRelationshipsResult;
+};
+
+export type GetEntityRelationshipsResponse =
+  GetEntityRelationshipsResponses[keyof GetEntityRelationshipsResponses];
+
 export type SyncProjectionData = {
   body?: never;
   path: {
@@ -2311,6 +2509,155 @@ export type ListCdfsConventionsResponses = {
 
 export type ListCdfsConventionsResponse =
   ListCdfsConventionsResponses[keyof ListCdfsConventionsResponses];
+
+export type GetConventionCapabilitiesData = {
+  body?: never;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/conventions/capabilities';
+};
+
+export type GetConventionCapabilitiesResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfConventionCapabilitiesResult;
+};
+
+export type GetConventionCapabilitiesResponse =
+  GetConventionCapabilitiesResponses[keyof GetConventionCapabilitiesResponses];
+
+export type ValidateConventionData = {
+  body: ValidateConventionRequest;
+  path: {
+    slug: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/conventions/validate';
+};
+
+export type ValidateConventionResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfValidateConventionResult;
+};
+
+export type ValidateConventionResponse =
+  ValidateConventionResponses[keyof ValidateConventionResponses];
+
+export type TestConventionData = {
+  body: TestConventionRequest;
+  path: {
+    slug: string;
+    id: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/conventions/{id}/test';
+};
+
+export type TestConventionResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfTestConventionResultDto;
+};
+
+export type TestConventionResponse = TestConventionResponses[keyof TestConventionResponses];
+
+export type AddConventionRelationshipData = {
+  body: RelationshipEditRequest;
+  path: {
+    slug: string;
+    id: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/conventions/{id}/relationships';
+};
+
+export type AddConventionRelationshipErrors = {
+  /**
+   * Bad Request
+   */
+  400: ApiResultOfRelationshipEditResultDto;
+};
+
+export type AddConventionRelationshipError =
+  AddConventionRelationshipErrors[keyof AddConventionRelationshipErrors];
+
+export type AddConventionRelationshipResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfRelationshipEditResultDto;
+};
+
+export type AddConventionRelationshipResponse =
+  AddConventionRelationshipResponses[keyof AddConventionRelationshipResponses];
+
+export type RemoveConventionRelationshipData = {
+  body?: never;
+  path: {
+    slug: string;
+    id: string;
+    kind: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/conventions/{id}/relationships/{kind}';
+};
+
+export type RemoveConventionRelationshipErrors = {
+  /**
+   * Bad Request
+   */
+  400: ApiResultOfRelationshipEditResultDto;
+};
+
+export type RemoveConventionRelationshipError =
+  RemoveConventionRelationshipErrors[keyof RemoveConventionRelationshipErrors];
+
+export type RemoveConventionRelationshipResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfRelationshipEditResultDto;
+};
+
+export type RemoveConventionRelationshipResponse =
+  RemoveConventionRelationshipResponses[keyof RemoveConventionRelationshipResponses];
+
+export type UpdateConventionRelationshipData = {
+  body: RelationshipEditRequest;
+  path: {
+    slug: string;
+    id: string;
+    kind: string;
+  };
+  query?: never;
+  url: '/api/workspaces/{slug}/conventions/{id}/relationships/{kind}';
+};
+
+export type UpdateConventionRelationshipErrors = {
+  /**
+   * Bad Request
+   */
+  400: ApiResultOfRelationshipEditResultDto;
+};
+
+export type UpdateConventionRelationshipError =
+  UpdateConventionRelationshipErrors[keyof UpdateConventionRelationshipErrors];
+
+export type UpdateConventionRelationshipResponses = {
+  /**
+   * OK
+   */
+  200: ApiResultOfRelationshipEditResultDto;
+};
+
+export type UpdateConventionRelationshipResponse =
+  UpdateConventionRelationshipResponses[keyof UpdateConventionRelationshipResponses];
 
 export type ListPlansData = {
   body?: never;

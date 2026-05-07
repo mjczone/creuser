@@ -82,16 +82,110 @@ public sealed record ConventionMetadataSpec(
 /// <summary>
 /// One typed edge between entities. The <c>relationship</c> column on
 /// <c>cr.entity_refs</c> takes <see cref="Kind"/> verbatim.
+///
+/// <para>
+/// The display fields (<see cref="Name"/>, <see cref="Icon"/>, <see cref="Description"/>,
+/// <see cref="Order"/>) are consumed by the CDFS file manager: each rule renders
+/// as one navigable folder under every matching entity. The
+/// <see cref="Inverse"/> + <see cref="InverseName"/> pair lets a rule declare its
+/// reverse edge (folder shown on the *target* side) — symmetric for `related`,
+/// directional for pairs like `supersedes` / `superseded_by`.
+/// </para>
+///
+/// <para>
+/// Resolution is expressed as <see cref="Source"/> (where values come from)
+/// + <see cref="Filter"/> (which items this rule consumes) + <see cref="Interpret"/>
+/// (how each consumed value becomes a target) + <see cref="TargetKind"/>
+/// (kind whitelist or <c>any</c>). The legacy
+/// <c>select_path</c> / <c>select_frontmatter</c> YAML keys still parse —
+/// the loader translates them into the equivalent <see cref="Source"/>
+/// + <see cref="Interpret"/> pair.
+/// </para>
 /// </summary>
 public sealed record ConventionRelationship(
+    /// <summary>Machine-readable edge label; written verbatim to <c>entity_refs.relationship</c>. Snake_case by convention.</summary>
     string Kind,
-    /// <summary>Path-template resolution: interpolate variables, look up the entity at the resulting path. Mutually exclusive with <see cref="SelectFrontmatter"/>.</summary>
-    string? SelectPath,
-    /// <summary>Frontmatter-key resolution: read the named key, resolve each value to an entity by <c>(target_kind, slug)</c>.</summary>
-    string? SelectFrontmatter,
-    /// <summary>Entity kind to resolve against. Required when both endpoints exist.</summary>
-    string? TargetKind
+    /// <summary>CDFS folder name. Required at the schema level; the loader synthesizes from <see cref="Kind"/> when YAML omits it.</summary>
+    string Name,
+    /// <summary>Optional icon key for the CDFS folder. Matches the workspace icon registry.</summary>
+    string? Icon,
+    /// <summary>Optional tooltip / docs string for the rule.</summary>
+    string? Description,
+    /// <summary>Sort order in the per-entity CDFS folder list. Lower comes first. Default 100.</summary>
+    int Order,
+    /// <summary>Where the rule reads its values from.</summary>
+    ConventionRefSource Source,
+    /// <summary>Optional value-level filter; only items matching are consumed by this rule. Multiple rules over the same source carve a flat list into typed CDFS folders.</summary>
+    ConventionRefFilter? Filter,
+    /// <summary>How each consumed value is interpreted into a target.</summary>
+    ConventionRefInterpret Interpret,
+    /// <summary>Kind whitelist (or <c>any</c>) for slug / path lookups.</summary>
+    ConventionRefTargetKind TargetKind,
+    /// <summary>Per-edge metadata template; merged into <c>entity_refs.metadata</c> jsonb alongside the structured ref-shape envelope.</summary>
+    IReadOnlyDictionary<string, string>? Metadata,
+    /// <summary>Optional reverse edge label. Auto-creates a mirrored edge during the second pass so graph queries work both ways without duplicating frontmatter. Symmetric edges set <see cref="Inverse"/> = <see cref="Kind"/>.</summary>
+    string? Inverse,
+    /// <summary>CDFS folder name for the reverse edge. Defaults to <see cref="Name"/> when <see cref="Inverse"/> matches <see cref="Kind"/> (symmetric). Required (after defaulting) whenever <see cref="Inverse"/> is set.</summary>
+    string? InverseName,
+    /// <summary>Optional icon for the reverse-edge folder.</summary>
+    string? InverseIcon
 );
+
+/// <summary>
+/// Where a relationship rule reads values. <see cref="Kind"/> picks the
+/// extractor; <see cref="Key"/> carries its argument (frontmatter field name,
+/// path template, glob expression). For <c>literal</c>, <see cref="Literals"/>
+/// holds the static list and <see cref="Key"/> is unused.
+/// </summary>
+public sealed record ConventionRefSource(
+    /// <summary><c>frontmatter</c> | <c>path-template</c> | <c>glob</c> | <c>body-links</c> | <c>body-code-refs</c> | <c>literal</c>.</summary>
+    string Kind,
+    string? Key,
+    IReadOnlyList<string>? Literals
+);
+
+/// <summary>
+/// Optional per-rule filter applied to each yielded source value. Only items
+/// matching are consumed by this rule. Lets one frontmatter field dispatch
+/// into many CDFS folders.
+/// </summary>
+public sealed record ConventionRefFilter(
+    /// <summary><c>glob</c> | <c>regex</c> | <c>type</c>. <c>type</c> filters by the post-classification ref kind: <c>path</c>, <c>glob</c>, <c>url</c>, <c>slug</c>.</summary>
+    string Kind,
+    string Pattern
+);
+
+/// <summary>
+/// How a yielded source value becomes a target.
+///
+/// <list type="bullet">
+/// <item><c>auto</c> — sniff the value (URL → glob → path → slug).</item>
+/// <item><c>path</c> — relative path; look up entity by path, fall back to a file ref.</item>
+/// <item><c>slug</c> — bare slug; look up entity by <c>(target_kind, slug)</c>.</item>
+/// <item><c>glob</c> — glob expression; expand against the working tree.</item>
+/// <item><c>url</c> — external URL; preserved unresolved.</item>
+/// <item><c>ref-object</c> — value is a structured object like <c>{path, kind, role}</c>. Stage F.</item>
+/// </list>
+/// </summary>
+public enum ConventionRefInterpret
+{
+    Auto,
+    Path,
+    Slug,
+    Glob,
+    Url,
+    RefObject,
+}
+
+/// <summary>
+/// Target-kind whitelist for slug/path resolution. <see cref="Any"/> means
+/// kind-agnostic (resolve against all entities; ambiguity surfaces in the
+/// scan report). Otherwise <see cref="Allowed"/> lists the permitted kinds.
+/// </summary>
+public sealed record ConventionRefTargetKind(bool Any, IReadOnlyList<string> Allowed)
+{
+    public static readonly ConventionRefTargetKind AnyKind = new(true, Array.Empty<string>());
+}
 
 /// <summary>
 /// One declarative validation rule. <see cref="Expr"/> is evaluated by the

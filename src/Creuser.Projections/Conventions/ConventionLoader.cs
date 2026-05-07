@@ -151,12 +151,7 @@ public sealed class ConventionLoader : IConventionLoader
             Slug: BuildSlugSpec(doc.Slug),
             Metadata: BuildMetadataSpec(doc.Metadata),
             Relationships: (doc.Relationships ?? new List<RelationshipDoc>())
-                .Select(r => new ConventionRelationship(
-                    Kind: r.Kind ?? string.Empty,
-                    SelectPath: r.SelectPath,
-                    SelectFrontmatter: r.SelectFrontmatter,
-                    TargetKind: r.TargetKind
-                ))
+                .Select(r => BuildRelationship(r))
                 .ToList(),
             Validation: (doc.Validation ?? new List<ValidationDoc>())
                 .Select(v => new ConventionValidationRule(
@@ -189,6 +184,218 @@ public sealed class ConventionLoader : IConventionLoader
             SourcePath: sourcePath
         );
         return (convention, null);
+    }
+
+    private static ConventionRelationship BuildRelationship(RelationshipDoc r)
+    {
+        var kind = r.Kind ?? string.Empty;
+        var name = !string.IsNullOrWhiteSpace(r.Name) ? r.Name! : Humanize(kind);
+        var inverse = r.Inverse;
+        string? inverseName;
+        if (!string.IsNullOrWhiteSpace(r.InverseName))
+            inverseName = r.InverseName;
+        else if (string.IsNullOrWhiteSpace(inverse))
+            inverseName = null;
+        else if (string.Equals(inverse, kind, StringComparison.Ordinal))
+            inverseName = name; // symmetric edge: reverse folder mirrors the forward folder
+        else
+            inverseName = Humanize(inverse!);
+
+        var (source, defaultInterpret) = BuildSource(r);
+        var interpret = ParseInterpret(r.Interpret) ?? defaultInterpret;
+        var filter = BuildFilter(r.Filter);
+        var targetKind = BuildTargetKind(r.TargetKind);
+
+        return new ConventionRelationship(
+            Kind: kind,
+            Name: name,
+            Icon: r.Icon,
+            Description: r.Description,
+            Order: r.Order ?? 100,
+            Source: source,
+            Filter: filter,
+            Interpret: interpret,
+            TargetKind: targetKind,
+            Metadata: r.Metadata,
+            Inverse: inverse,
+            InverseName: inverseName,
+            InverseIcon: r.InverseIcon
+        );
+    }
+
+    /// <summary>
+    /// Build the <see cref="ConventionRefSource"/> from YAML, accepting both
+    /// shorthand forms (<c>source: frontmatter.related</c>) and the legacy
+    /// <c>select_path</c> / <c>select_frontmatter</c> keys. Returns the
+    /// default <see cref="ConventionRefInterpret"/> implied by the source kind
+    /// so legacy rules keep their original semantics.
+    /// </summary>
+    private static (
+        ConventionRefSource Source,
+        ConventionRefInterpret DefaultInterpret
+    ) BuildSource(RelationshipDoc r)
+    {
+        // Legacy: select_path → path-template source, Path interpretation.
+        if (!string.IsNullOrWhiteSpace(r.SelectPath))
+        {
+            return (
+                new ConventionRefSource("path-template", r.SelectPath, null),
+                ConventionRefInterpret.Path
+            );
+        }
+        // Legacy: select_frontmatter → frontmatter source, Slug interpretation.
+        if (!string.IsNullOrWhiteSpace(r.SelectFrontmatter))
+        {
+            return (
+                new ConventionRefSource("frontmatter", r.SelectFrontmatter, null),
+                ConventionRefInterpret.Slug
+            );
+        }
+        // New shape: source as string shorthand (e.g. `frontmatter.related`, `glob:packages/db/**`).
+        if (r.Source is string s && !string.IsNullOrWhiteSpace(s))
+        {
+            var (kind, key) = ParseSourceShorthand(s);
+            return (new ConventionRefSource(kind, key, null), ConventionRefInterpret.Auto);
+        }
+        // New shape: source as object {kind, key, literals}.
+        if (r.Source is IDictionary<object, object?> map)
+        {
+            var kind = map.TryGetValue("kind", out var k) ? k?.ToString() : null;
+            var key = map.TryGetValue("key", out var v) ? v?.ToString() : null;
+            IReadOnlyList<string>? literals = null;
+            if (
+                map.TryGetValue("literals", out var litRaw)
+                && litRaw is IEnumerable<object?> litList
+            )
+            {
+                literals = litList.Where(x => x is not null).Select(x => x!.ToString()!).ToList();
+            }
+            return (
+                new ConventionRefSource(kind ?? string.Empty, key, literals),
+                ConventionRefInterpret.Auto
+            );
+        }
+        // Empty / no source declared. Yield an inert frontmatter source so the
+        // resolver simply produces no edges for this rule.
+        return (new ConventionRefSource("frontmatter", null, null), ConventionRefInterpret.Auto);
+    }
+
+    /// <summary>
+    /// <c>frontmatter.related</c> → (frontmatter, related); <c>glob:packages/db/**</c>
+    /// → (glob, packages/db/**); <c>body.links</c> → (body-links, null);
+    /// <c>literal</c> → (literal, null).
+    /// </summary>
+    private static (string Kind, string? Key) ParseSourceShorthand(string s)
+    {
+        s = s.Trim();
+        // Colon-prefix forms: glob:..., path-template:..., literal:...
+        var colon = s.IndexOf(':');
+        if (colon > 0 && colon < s.Length - 1)
+        {
+            var prefix = s[..colon];
+            if (
+                prefix.Equals("glob", StringComparison.OrdinalIgnoreCase)
+                || prefix.Equals("path-template", StringComparison.OrdinalIgnoreCase)
+                || prefix.Equals("literal", StringComparison.OrdinalIgnoreCase)
+            )
+            {
+                return (prefix.ToLowerInvariant(), s[(colon + 1)..].Trim());
+            }
+        }
+        // Dotted forms: frontmatter.<key>, body.<sub>, etc.
+        var dot = s.IndexOf('.');
+        if (dot > 0)
+        {
+            var prefix = s[..dot];
+            var rest = s[(dot + 1)..].Trim();
+            if (prefix.Equals("frontmatter", StringComparison.OrdinalIgnoreCase))
+                return ("frontmatter", rest);
+            if (prefix.Equals("body", StringComparison.OrdinalIgnoreCase))
+                return ($"body-{rest.Replace('_', '-')}", null);
+        }
+        // Bare token: treat as a frontmatter key.
+        return ("frontmatter", s);
+    }
+
+    private static ConventionRefInterpret? ParseInterpret(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+        return raw.Trim().ToLowerInvariant() switch
+        {
+            "auto" => ConventionRefInterpret.Auto,
+            "path" => ConventionRefInterpret.Path,
+            "slug" => ConventionRefInterpret.Slug,
+            "glob" => ConventionRefInterpret.Glob,
+            "url" => ConventionRefInterpret.Url,
+            "ref-object" or "ref_object" or "refobject" => ConventionRefInterpret.RefObject,
+            _ => null,
+        };
+    }
+
+    private static ConventionRefFilter? BuildFilter(object? raw)
+    {
+        if (raw is null)
+            return null;
+        if (raw is IDictionary<object, object?> map)
+        {
+            var kind = map.TryGetValue("kind", out var k) ? k?.ToString() : null;
+            var pattern = map.TryGetValue("pattern", out var p) ? p?.ToString() : null;
+            if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(pattern))
+                return null;
+            return new ConventionRefFilter(kind!.ToLowerInvariant(), pattern!);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Accepts: <c>any</c>, a single kind id (<c>adr</c>), or a list
+    /// (<c>[adr, plan]</c>). Legacy YAML wrote a single nullable string;
+    /// null/empty translates to a typed-allowed list with one empty entry —
+    /// preserved so legacy slug lookups against <c>(target_kind="", slug)</c>
+    /// remain unchanged for now.
+    /// </summary>
+    private static ConventionRefTargetKind BuildTargetKind(object? raw)
+    {
+        if (raw is null)
+            return ConventionRefTargetKind.AnyKind;
+        if (raw is string s)
+        {
+            s = s.Trim();
+            if (string.IsNullOrEmpty(s) || s.Equals("any", StringComparison.OrdinalIgnoreCase))
+                return ConventionRefTargetKind.AnyKind;
+            return new ConventionRefTargetKind(false, new[] { s });
+        }
+        if (raw is IEnumerable<object?> list)
+        {
+            var allowed = list.Where(x => x is not null)
+                .Select(x => x!.ToString()!.Trim())
+                .Where(x => !string.IsNullOrEmpty(x))
+                .ToList();
+            if (allowed.Count == 0)
+                return ConventionRefTargetKind.AnyKind;
+            return new ConventionRefTargetKind(false, allowed);
+        }
+        return ConventionRefTargetKind.AnyKind;
+    }
+
+    /// <summary>
+    /// Snake_case kind → Title Case display name. <c>related_adrs</c> → <c>Related Adrs</c>.
+    /// Authors who want a different casing override <c>name:</c> in YAML; this only fires
+    /// when the field is omitted.
+    /// </summary>
+    private static string Humanize(string kind)
+    {
+        if (string.IsNullOrWhiteSpace(kind))
+            return string.Empty;
+        var parts = kind.Split(
+            new[] { '_', '-' },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        );
+        return string.Join(
+            ' ',
+            parts.Select(p => p.Length == 0 ? p : char.ToUpperInvariant(p[0]) + p[1..])
+        );
     }
 
     private static ConventionSlugSpec BuildSlugSpec(SlugDoc? d)
@@ -288,9 +495,26 @@ public sealed class ConventionLoader : IConventionLoader
     private sealed class RelationshipDoc
     {
         public string? Kind { get; set; }
+        public string? Name { get; set; }
+        public string? Icon { get; set; }
+        public string? Description { get; set; }
+        public int? Order { get; set; }
+
+        // New shape — accept string shorthand or object form. YamlDotNet
+        // deserializes both into `object?` (string vs Dictionary<object,object?>).
+        public object? Source { get; set; }
+        public object? Filter { get; set; }
+        public string? Interpret { get; set; }
+        public object? TargetKind { get; set; }
+        public Dictionary<string, string>? Metadata { get; set; }
+
+        // Legacy shape — translated to Source/Interpret in BuildRelationship.
         public string? SelectPath { get; set; }
         public string? SelectFrontmatter { get; set; }
-        public string? TargetKind { get; set; }
+
+        public string? Inverse { get; set; }
+        public string? InverseName { get; set; }
+        public string? InverseIcon { get; set; }
     }
 
     private sealed class ValidationDoc

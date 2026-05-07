@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Creuser.Auth.Abstractions;
 using Creuser.Auth.Core;
 using Creuser.Core.Execution;
@@ -18,7 +19,34 @@ public sealed record ConventionSummary(
     string Glob,
     string? Extends,
     string ContentHash,
-    string? SourcePath
+    string? SourcePath,
+    /// <summary>Flat relationship rules on this convention. Empty when none declared. Lets the SPA convention editor render a structured list without re-parsing YAML.</summary>
+    IReadOnlyList<ConventionRelationshipSummary> Relationships
+);
+
+/// <summary>
+/// Flat wire-shape for a single relationship rule. Mirrors the YAML 1:1 with
+/// the structured fields exploded so client editors don't need to interpret
+/// the underlying records (<c>Source</c>, <c>Filter</c>, <c>TargetKind</c>).
+/// </summary>
+public sealed record ConventionRelationshipSummary(
+    string Kind,
+    string Name,
+    string? Icon,
+    string? Description,
+    int Order,
+    string SourceKind,
+    string? SourceKey,
+    IReadOnlyList<string>? SourceLiterals,
+    string? FilterKind,
+    string? FilterPattern,
+    string Interpret,
+    bool TargetKindAny,
+    IReadOnlyList<string> TargetKindAllowed,
+    string? Inverse,
+    string? InverseName,
+    string? InverseIcon,
+    IReadOnlyDictionary<string, string>? Metadata
 );
 
 public sealed record ConventionsListResult(
@@ -56,6 +84,49 @@ public sealed record EntityRefSummary(
     string Relationship,
     string? TargetKind,
     string? TargetSlug
+);
+
+/// <summary>
+/// One CDFS-style folder under an entity, derived from a convention's
+/// <c>relationship</c> rule. Folders for outgoing edges read display info
+/// from the <em>current</em> entity's convention; folders for incoming edges
+/// read display info from the <em>source</em> convention's
+/// <c>inverse_name</c>/<c>inverse_icon</c>.
+/// </summary>
+public sealed record EntityRelationshipFolder(
+    string Kind,
+    string Name,
+    string? Icon,
+    string? Description,
+    int Order,
+    /// <summary><c>out</c> when the current entity is the source; <c>in</c> when it's the target.</summary>
+    string Direction,
+    IReadOnlyList<EntityRelationshipItem> Items
+);
+
+/// <summary>
+/// One target inside a relationship folder. Resolved entity references include
+/// kind/slug/path; unresolved targets carry <c>metadata.kind</c> = <c>file</c>
+/// or <c>url</c> with the raw value preserved.
+/// </summary>
+public sealed record EntityRelationshipItem(
+    Guid? EntityId,
+    string? Kind,
+    string? Slug,
+    string? Path,
+    /// <summary><c>entity</c> | <c>file</c> | <c>url</c>.</summary>
+    string MetadataKind,
+    string? Url,
+    string? Raw,
+    string? ExpandedFrom
+);
+
+public sealed record EntityRelationshipsResult(
+    Guid EntityId,
+    string Kind,
+    string Slug,
+    string Path,
+    IReadOnlyList<EntityRelationshipFolder> Folders
 );
 
 public sealed record SyncProjectionResult(ProjectionReport Report);
@@ -160,6 +231,9 @@ public static class ProjectionsEndpoints
         entities
             .MapGet("/{kind}/{entitySlug}", (Delegate)GetEntityByKindSlug)
             .WithName("GetEntity");
+        entities
+            .MapGet("/{kind}/{entitySlug}/relationships", (Delegate)GetEntityRelationships)
+            .WithName("GetEntityRelationships");
 
         var projections = app.MapGroup("/api/workspaces/{slug}/projections")
             .WithTags("Projections")
@@ -227,7 +301,8 @@ public static class ProjectionsEndpoints
                 c.Match.Glob,
                 c.Extends,
                 c.ContentHash,
-                c.SourcePath
+                c.SourcePath,
+                c.Relationships.Select(MapRelationship).ToList()
             ))
             .ToList();
         return TypedResults.Ok(
@@ -444,6 +519,244 @@ public static class ProjectionsEndpoints
                 .ToList()
         );
         return TypedResults.Ok(new ApiResult<EntityDetail>(detail));
+    }
+
+    private static async Task<
+        Results<Ok<ApiResult<EntityRelationshipsResult>>, ProblemHttpResult>
+    > GetEntityRelationships(
+        string slug,
+        string kind,
+        string entitySlug,
+        IWorkspaceStore workspaces,
+        IWorkspaceMemberStore members,
+        IEntityStore store,
+        IEntityRefStore refs,
+        IConventionLoader loader,
+        IWorkspaceWorkingTree tree,
+        HttpContext http,
+        CancellationToken ct
+    )
+    {
+        var access = await WorkspaceAccess.RequireAccessAsync(http, slug, workspaces, members, ct);
+        if (access is null)
+            return Problems.WorkspaceNotFound(slug);
+        var ws = access.Workspace;
+
+        var entity = await store.FindAsync(ws.Id, kind, entitySlug, ct);
+        if (entity is null)
+            return Problems.NotFound($"No entity {kind}/{entitySlug} in workspace {slug}.");
+
+        var path = await tree.ResolvePathAsync(ws, ct);
+        var conventions = string.IsNullOrEmpty(path)
+            ? Array.Empty<Convention>()
+            : (await loader.LoadAsync(ws, path, ct)).Conventions.ToArray();
+
+        // Index conventions by id, plus a forward (kind→rule) and inverse
+        // (inverse_kind→rule) map per convention for folder display lookup.
+        var conventionsById = conventions.ToDictionary(c => c.Id, c => c, StringComparer.Ordinal);
+        var rulesByConventionAndKind =
+            new Dictionary<(string conv, string kind), ConventionRelationship>();
+        var rulesByConventionAndInverse =
+            new Dictionary<(string conv, string kind), ConventionRelationship>();
+        foreach (var c in conventions)
+        {
+            foreach (var r in c.Relationships)
+            {
+                rulesByConventionAndKind[(c.Id, r.Kind)] = r;
+                if (!string.IsNullOrWhiteSpace(r.Inverse))
+                    rulesByConventionAndInverse[(c.Id, r.Inverse!)] = r;
+            }
+        }
+
+        // For incoming refs we need to look up the source entity to find its
+        // convention. One workspace-wide list keeps this O(1) per ref.
+        var allEntities = await store.ListByWorkspaceAsync(ws.Id, ct);
+        var entitiesById = allEntities.ToDictionary(e => e.Id);
+
+        var outRefs = await refs.ListByFromAsync(entity.Id, ct);
+        var inRefs = await refs.ListByToAsync(entity.Id, ct);
+
+        var folders = new List<EntityRelationshipFolder>();
+
+        // Outgoing folders: group by relationship label, look up rule on the
+        // current entity's convention.
+        foreach (var group in outRefs.GroupBy(r => r.Relationship, StringComparer.Ordinal))
+        {
+            ConventionRelationship? rule = null;
+            rulesByConventionAndKind.TryGetValue((entity.ConventionId, group.Key), out rule);
+            folders.Add(BuildFolder(group, rule, "out", entitiesById));
+        }
+
+        // Incoming folders: group by relationship label. For each ref, the
+        // source convention's rule with `inverse: <this label>` carries the
+        // display info (inverse_name / inverse_icon).
+        foreach (var group in inRefs.GroupBy(r => r.Relationship, StringComparer.Ordinal))
+        {
+            ConventionRelationship? rule = null;
+            // Take any ref in the group; its FROM entity tells us which convention to consult.
+            var sample = group.First();
+            if (entitiesById.TryGetValue(sample.FromEntityId, out var fromEntity))
+            {
+                rulesByConventionAndInverse.TryGetValue(
+                    (fromEntity.ConventionId, group.Key),
+                    out rule
+                );
+            }
+            folders.Add(BuildFolder(group, rule, "in", entitiesById, useInverseDisplay: true));
+        }
+
+        // Stable order: folder.order asc, then folder.kind asc.
+        folders.Sort(
+            (a, b) =>
+            {
+                var byOrder = a.Order.CompareTo(b.Order);
+                return byOrder != 0 ? byOrder : string.CompareOrdinal(a.Kind, b.Kind);
+            }
+        );
+
+        var result = new EntityRelationshipsResult(
+            EntityId: entity.Id,
+            Kind: entity.Kind,
+            Slug: entity.Slug,
+            Path: entity.Path,
+            Folders: folders
+        );
+        return TypedResults.Ok(new ApiResult<EntityRelationshipsResult>(result));
+    }
+
+    private static EntityRelationshipFolder BuildFolder(
+        IEnumerable<EntityRefProjection> refs,
+        ConventionRelationship? rule,
+        string direction,
+        IReadOnlyDictionary<Guid, EntityProjection> entitiesById,
+        bool useInverseDisplay = false
+    )
+    {
+        var refList = refs.ToList();
+        var kind = refList[0].Relationship;
+        string name;
+        string? icon;
+        string? description;
+        int order;
+        if (rule is null)
+        {
+            name = HumanizeKind(kind);
+            icon = null;
+            description = null;
+            order = 100;
+        }
+        else if (useInverseDisplay)
+        {
+            name = rule.InverseName ?? HumanizeKind(kind);
+            icon = rule.InverseIcon;
+            description = rule.Description;
+            order = rule.Order;
+        }
+        else
+        {
+            name = rule.Name;
+            icon = rule.Icon;
+            description = rule.Description;
+            order = rule.Order;
+        }
+
+        var items = refList
+            .Select(r => BuildItem(r, direction, entitiesById))
+            .OrderBy(i => i.Kind ?? string.Empty, StringComparer.Ordinal)
+            .ThenBy(i => i.Slug ?? i.Path ?? i.Url ?? string.Empty, StringComparer.Ordinal)
+            .ToList();
+
+        return new EntityRelationshipFolder(kind, name, icon, description, order, direction, items);
+    }
+
+    private static EntityRelationshipItem BuildItem(
+        EntityRefProjection r,
+        string direction,
+        IReadOnlyDictionary<Guid, EntityProjection> entitiesById
+    )
+    {
+        // For incoming refs, the "target" from the current entity's perspective
+        // is the source: r.from_entity_id. For outgoing, it's r.to_entity_id.
+        var targetId = direction == "in" ? r.FromEntityId : r.ToEntityId;
+        EntityProjection? target = null;
+        if (targetId is not null && entitiesById.TryGetValue(targetId.Value, out var t))
+            target = t;
+
+        // Parse structured ref-shape from the metadata JSONB (kind, url, expanded_from, raw).
+        string metadataKind = "entity";
+        string? url = null;
+        string? raw = null;
+        string? expandedFrom = null;
+        if (!string.IsNullOrWhiteSpace(r.MetadataJson))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(r.MetadataJson);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String)
+                    metadataKind = k.GetString()!;
+                if (root.TryGetProperty("url", out var u) && u.ValueKind == JsonValueKind.String)
+                    url = u.GetString();
+                if (root.TryGetProperty("raw", out var rw) && rw.ValueKind == JsonValueKind.String)
+                    raw = rw.GetString();
+                if (
+                    root.TryGetProperty("expanded_from", out var ef)
+                    && ef.ValueKind == JsonValueKind.String
+                )
+                    expandedFrom = ef.GetString();
+            }
+            catch
+            {
+                // Treat malformed metadata as bare entity ref; the resolver populates
+                // valid JSON in v1+ so this branch only fires for legacy unmigrated rows.
+            }
+        }
+
+        return new EntityRelationshipItem(
+            EntityId: target?.Id,
+            Kind: target?.Kind ?? r.TargetKind,
+            Slug: target?.Slug ?? r.TargetSlug,
+            Path: target?.Path,
+            MetadataKind: target is not null ? "entity" : metadataKind,
+            Url: url,
+            Raw: raw,
+            ExpandedFrom: expandedFrom
+        );
+    }
+
+    private static ConventionRelationshipSummary MapRelationship(ConventionRelationship r) =>
+        new(
+            Kind: r.Kind,
+            Name: r.Name,
+            Icon: r.Icon,
+            Description: r.Description,
+            Order: r.Order,
+            SourceKind: r.Source.Kind,
+            SourceKey: r.Source.Key,
+            SourceLiterals: r.Source.Literals,
+            FilterKind: r.Filter?.Kind,
+            FilterPattern: r.Filter?.Pattern,
+            Interpret: r.Interpret.ToString().ToLowerInvariant(),
+            TargetKindAny: r.TargetKind.Any,
+            TargetKindAllowed: r.TargetKind.Allowed,
+            Inverse: r.Inverse,
+            InverseName: r.InverseName,
+            InverseIcon: r.InverseIcon,
+            Metadata: r.Metadata
+        );
+
+    private static string HumanizeKind(string kind)
+    {
+        if (string.IsNullOrWhiteSpace(kind))
+            return string.Empty;
+        var parts = kind.Split(
+            new[] { '_', '-' },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        );
+        return string.Join(
+            ' ',
+            parts.Select(p => p.Length == 0 ? p : char.ToUpperInvariant(p[0]) + p[1..])
+        );
     }
 
     [AiCapability(

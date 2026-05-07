@@ -2,8 +2,10 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Creuser.Core.Projections;
 using Creuser.Core.Repositories;
+using Creuser.Projections.Accessors;
 using Creuser.Scripting;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
@@ -25,10 +27,15 @@ namespace Creuser.Projections.Scanner;
 public sealed class ProjectionScanner
 {
     private readonly TimeProvider _time;
+    private readonly ComputedAccessorRegistry _accessors;
 
     public ProjectionScanner(TimeProvider time)
+        : this(time, ComputedAccessorRegistry.Default) { }
+
+    public ProjectionScanner(TimeProvider time, ComputedAccessorRegistry accessors)
     {
         _time = time;
+        _accessors = accessors;
     }
 
     public ScanResult Scan(
@@ -102,35 +109,36 @@ public sealed class ProjectionScanner
             }
         }
 
-        // Second pass: resolve refs against the populated entity index.
+        // Build a kind-agnostic path index too, for target_kind: any path lookups.
+        var entityByPath = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        var entityBySlug = new Dictionary<string, List<(string Kind, Guid Id)>>(
+            StringComparer.Ordinal
+        );
+        foreach (var e in entities)
+        {
+            entityByPath[e.Path] = e.Id;
+            if (!entityBySlug.TryGetValue(e.Slug, out var list))
+            {
+                list = new List<(string, Guid)>();
+                entityBySlug[e.Slug] = list;
+            }
+            list.Add((e.Kind, e.Id));
+        }
+
+        // Second pass: resolve pending refs against the entity index.
         var resolvedRefs = new List<EntityRefProjection>();
         var unresolvedCount = 0;
         var resolvedCount = 0;
         foreach (var pending in collectedRefs)
         {
-            Guid? toId = null;
-            if (
-                pending.SelectKind == "path"
-                && entityByKindPath.TryGetValue(
-                    (pending.TargetKind ?? string.Empty, pending.TargetPath ?? string.Empty),
-                    out var pathId
-                )
-            )
-            {
-                toId = pathId;
-            }
-            else if (
-                pending.SelectKind == "frontmatter"
-                && entityByKindSlug.TryGetValue(
-                    (pending.TargetKind ?? string.Empty, pending.TargetSlug ?? string.Empty),
-                    out var slugId
-                )
-            )
-            {
-                toId = slugId;
-            }
-
-            if (toId is null)
+            var resolution = ResolvePending(
+                pending,
+                entityByKindSlug,
+                entityByKindPath,
+                entityByPath,
+                entityBySlug
+            );
+            if (resolution.ToId is null)
                 unresolvedCount++;
             else
                 resolvedCount++;
@@ -140,21 +148,47 @@ public sealed class ProjectionScanner
                     Id: Guid.NewGuid(),
                     WorkspaceId: workspace.Id,
                     FromEntityId: pending.FromEntityId,
-                    ToEntityId: toId,
+                    ToEntityId: resolution.ToId,
                     Relationship: pending.Relationship,
-                    TargetKind: pending.TargetKind,
-                    TargetSlug: pending.TargetSlug
-                        ?? (
-                            pending.SelectKind == "path"
-                                ? Path.GetFileNameWithoutExtension(
-                                    pending.TargetPath ?? string.Empty
-                                )
-                                : null
-                        ),
-                    MetadataJson: null
+                    TargetKind: resolution.TargetKind,
+                    TargetSlug: resolution.TargetSlug,
+                    MetadataJson: BuildRefMetadataJson(pending, resolution)
                 )
             );
         }
+
+        // Third pass: emit inverse edges. For every pending rule that declared an
+        // `inverse:`, mirror the resolved edges so the CDFS shows the relationship
+        // from the target's side without the author duplicating frontmatter.
+        var inverseRefs = new List<EntityRefProjection>();
+        foreach (var pending in collectedRefs)
+        {
+            if (string.IsNullOrWhiteSpace(pending.InverseKind))
+                continue;
+            var resolution = ResolvePending(
+                pending,
+                entityByKindSlug,
+                entityByKindPath,
+                entityByPath,
+                entityBySlug
+            );
+            if (resolution.ToId is null)
+                continue; // can't reverse an edge whose forward target didn't resolve to an entity
+            inverseRefs.Add(
+                new EntityRefProjection(
+                    Id: Guid.NewGuid(),
+                    WorkspaceId: workspace.Id,
+                    FromEntityId: resolution.ToId.Value,
+                    ToEntityId: pending.FromEntityId,
+                    Relationship: pending.InverseKind!,
+                    TargetKind: pending.FromEntityKind,
+                    TargetSlug: pending.FromEntitySlug,
+                    MetadataJson: BuildInverseMetadataJson(pending)
+                )
+            );
+            resolvedCount++;
+        }
+        resolvedRefs.AddRange(inverseRefs);
 
         sw.Stop();
         var byKind = entities.GroupBy(e => e.Kind).ToDictionary(g => g.Key, g => g.Count());
@@ -176,11 +210,7 @@ public sealed class ProjectionScanner
         return new ScanResult(entities, resolvedRefs, report);
     }
 
-    private static (
-        EntityProjection? Entity,
-        IReadOnlyList<PendingRef> Refs,
-        bool SchemaOk
-    ) TryProject(
+    private (EntityProjection? Entity, IReadOnlyList<PendingRef> Refs, bool SchemaOk) TryProject(
         Workspace workspace,
         string workingTreePath,
         string relativePath,
@@ -254,7 +284,13 @@ public sealed class ProjectionScanner
             return (null, Array.Empty<PendingRef>(), false);
         }
 
-        var metadataJson = BuildMetadataJson(frontmatter, convention.Metadata.Computed, fullPath);
+        var metadataJson = BuildMetadataJson(
+            frontmatter,
+            convention.Metadata.Computed,
+            fullPath,
+            relativePath,
+            bytes
+        );
         var entityId = Guid.NewGuid();
         var entity = new EntityProjection(
             Id: entityId,
@@ -268,15 +304,31 @@ public sealed class ProjectionScanner
             LastSeenAt: now
         );
 
-        var refs = BuildRefs(entity, convention, relativePath, frontmatter);
+        var refs = BuildPendingRefs(
+            entity,
+            convention,
+            relativePath,
+            frontmatter,
+            bytes,
+            workingTreePath
+        );
         return (entity, refs, schemaOk);
     }
 
-    private static IReadOnlyList<PendingRef> BuildRefs(
+    /// <summary>
+    /// First-pass ref builder: walks the convention's relationship rules, yields
+    /// source values per rule, applies the per-rule filter, classifies each value
+    /// (URL / glob / path / slug) into a <see cref="PendingRef"/>, and expands
+    /// globs against the working tree. Resolution itself happens in the second
+    /// pass once all entities are indexed.
+    /// </summary>
+    private static IReadOnlyList<PendingRef> BuildPendingRefs(
         EntityProjection from,
         Convention convention,
         string relativePath,
-        IReadOnlyDictionary<string, object?>? frontmatter
+        IReadOnlyDictionary<string, object?>? frontmatter,
+        byte[] bytes,
+        string workingTreePath
     )
     {
         var pending = new List<PendingRef>();
@@ -285,54 +337,288 @@ public sealed class ProjectionScanner
 
         foreach (var rel in convention.Relationships)
         {
-            if (!string.IsNullOrWhiteSpace(rel.SelectPath))
-            {
-                var resolved = rel
-                    .SelectPath.Replace("{file_dir}", fileDir, StringComparison.Ordinal)
-                    .Replace("{parent_dir}", parentDir, StringComparison.Ordinal);
-                pending.Add(
-                    new PendingRef(
-                        FromEntityId: from.Id,
-                        Relationship: rel.Kind,
-                        TargetKind: rel.TargetKind,
-                        TargetSlug: null,
-                        TargetPath: resolved,
-                        SelectKind: "path"
-                    )
-                );
-            }
-            else if (
-                !string.IsNullOrWhiteSpace(rel.SelectFrontmatter)
-                && frontmatter is not null
-                && frontmatter.TryGetValue(rel.SelectFrontmatter, out var fmValue)
+            var via = DescribeSourceVia(rel.Source);
+            foreach (
+                var raw in EnumerateSourceValues(rel.Source, frontmatter, bytes, fileDir, parentDir)
             )
             {
-                foreach (var slug in EnumerateRefValues(fmValue))
+                if (raw is null)
+                    continue;
+                var trimmed = raw.Trim();
+                if (trimmed.Length == 0)
+                    continue;
+
+                var classified = Classify(trimmed, rel.Interpret);
+
+                if (rel.Filter is not null && !MatchesFilter(trimmed, classified, rel.Filter))
+                    continue;
+
+                if (classified == PendingRefShape.Glob)
                 {
-                    pending.Add(
-                        new PendingRef(
-                            FromEntityId: from.Id,
-                            Relationship: rel.Kind,
-                            TargetKind: rel.TargetKind,
-                            TargetSlug: slug,
-                            TargetPath: null,
-                            SelectKind: "frontmatter"
-                        )
-                    );
+                    foreach (var globMatch in ExpandGlob(workingTreePath, trimmed))
+                    {
+                        pending.Add(
+                            BuildPath(
+                                from,
+                                rel,
+                                globMatch,
+                                raw: trimmed,
+                                via: $"glob:{trimmed}",
+                                expandedFrom: trimmed
+                            )
+                        );
+                    }
+                    continue;
                 }
+
+                pending.Add(
+                    classified switch
+                    {
+                        PendingRefShape.Url => BuildUrl(from, rel, trimmed, via),
+                        PendingRefShape.EntityByPath => BuildPath(
+                            from,
+                            rel,
+                            trimmed,
+                            raw: trimmed,
+                            via,
+                            expandedFrom: null
+                        ),
+                        PendingRefShape.EntityBySlug => BuildSlug(from, rel, trimmed, via),
+                        _ => BuildSlug(from, rel, trimmed, via),
+                    }
+                );
             }
         }
         return pending;
     }
 
-    private static IEnumerable<string> EnumerateRefValues(object? value)
+    private static PendingRef BuildPath(
+        EntityProjection from,
+        ConventionRelationship rel,
+        string path,
+        string raw,
+        string? via,
+        string? expandedFrom
+    ) =>
+        new(
+            FromEntityId: from.Id,
+            FromEntityKind: from.Kind,
+            FromEntitySlug: from.Slug,
+            Relationship: rel.Kind,
+            Shape: PendingRefShape.EntityByPath,
+            TargetKindFilter: rel.TargetKind,
+            Raw: raw,
+            Path: path,
+            Slug: null,
+            Url: null,
+            Via: via,
+            ExpandedFrom: expandedFrom,
+            UserMetadata: rel.Metadata,
+            InverseKind: rel.Inverse
+        );
+
+    private static PendingRef BuildSlug(
+        EntityProjection from,
+        ConventionRelationship rel,
+        string slug,
+        string? via
+    ) =>
+        new(
+            FromEntityId: from.Id,
+            FromEntityKind: from.Kind,
+            FromEntitySlug: from.Slug,
+            Relationship: rel.Kind,
+            Shape: PendingRefShape.EntityBySlug,
+            TargetKindFilter: rel.TargetKind,
+            Raw: slug,
+            Path: null,
+            Slug: slug,
+            Url: null,
+            Via: via,
+            ExpandedFrom: null,
+            UserMetadata: rel.Metadata,
+            InverseKind: rel.Inverse
+        );
+
+    private static PendingRef BuildUrl(
+        EntityProjection from,
+        ConventionRelationship rel,
+        string url,
+        string? via
+    ) =>
+        new(
+            FromEntityId: from.Id,
+            FromEntityKind: from.Kind,
+            FromEntitySlug: from.Slug,
+            Relationship: rel.Kind,
+            Shape: PendingRefShape.Url,
+            TargetKindFilter: rel.TargetKind,
+            Raw: url,
+            Path: null,
+            Slug: null,
+            Url: url,
+            Via: via,
+            ExpandedFrom: null,
+            UserMetadata: rel.Metadata,
+            InverseKind: null // never reverse a URL — there's no entity on the other side
+        );
+
+    /// <summary>
+    /// Yield raw string values from a rule's source. Frontmatter lists yield
+    /// each item; path-template yields the (interpolated) path; glob yields
+    /// the glob pattern itself (the expander applies later); literal yields
+    /// each declared literal. body-* sources are placeholders for Stage F.
+    /// </summary>
+    private static IEnumerable<string?> EnumerateSourceValues(
+        ConventionRefSource source,
+        IReadOnlyDictionary<string, object?>? frontmatter,
+        byte[] bytes,
+        string fileDir,
+        string parentDir
+    )
+    {
+        switch (source.Kind)
+        {
+            case "frontmatter":
+                if (
+                    frontmatter is null
+                    || string.IsNullOrWhiteSpace(source.Key)
+                    || !frontmatter.TryGetValue(source.Key, out var fmValue)
+                )
+                    yield break;
+                foreach (var v in YamlScalars(fmValue))
+                    yield return v;
+                yield break;
+            case "path-template":
+                if (string.IsNullOrWhiteSpace(source.Key))
+                    yield break;
+                yield return source
+                    .Key.Replace("{file_dir}", fileDir, StringComparison.Ordinal)
+                    .Replace("{parent_dir}", parentDir, StringComparison.Ordinal);
+                yield break;
+            case "glob":
+                // The pattern is the value; the resolver classifies it as a glob
+                // and expands. Carries through Auto interpretation paths too.
+                if (!string.IsNullOrWhiteSpace(source.Key))
+                    yield return source.Key;
+                yield break;
+            case "literal":
+                if (source.Literals is not null)
+                    foreach (var v in source.Literals)
+                        yield return v;
+                yield break;
+            case "body-links":
+                foreach (var v in ExtractBodyLinks(bytes))
+                    yield return v;
+                yield break;
+            case "body-code-refs":
+                foreach (var v in ExtractBodyCodeRefs(bytes))
+                    yield return v;
+                yield break;
+            default:
+                yield break;
+        }
+    }
+
+    /// <summary>
+    /// Extract markdown links from the file body (frontmatter stripped).
+    /// Yields the URL portion of each <c>[text](url)</c>; the resolver's
+    /// auto-classifier turns each into the right shape (URL / path / slug).
+    /// Reference-style links (<c>[label]: url</c>) match too.
+    /// </summary>
+    private static IEnumerable<string> ExtractBodyLinks(byte[] bytes)
+    {
+        var body = StripFrontmatter(SafeUtf8(bytes));
+        if (string.IsNullOrEmpty(body))
+            yield break;
+        foreach (Match m in MarkdownInlineLink.Matches(body))
+            yield return m.Groups[1].Value.Trim();
+        foreach (Match m in MarkdownReferenceLink.Matches(body))
+            yield return m.Groups[1].Value.Trim();
+    }
+
+    /// <summary>
+    /// Extract code-reference paths from the body — inline-code spans whose
+    /// content looks like a workspace-relative file path. Catches patterns
+    /// like <c>`src/Foo.cs`</c>, <c>`packages/db/repo.ts:42`</c>. Less
+    /// aggressive than markdown-link extraction so prose doesn't blow up
+    /// the ref count.
+    /// </summary>
+    private static IEnumerable<string> ExtractBodyCodeRefs(byte[] bytes)
+    {
+        var body = StripFrontmatter(SafeUtf8(bytes));
+        if (string.IsNullOrEmpty(body))
+            yield break;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match m in InlineCodeRef.Matches(body))
+        {
+            var raw = m.Groups[1].Value.Trim();
+            // Strip a `:line` suffix if present — the resolver works on paths,
+            // and the line number is preserved on the unresolved metadata side
+            // by the raw value embed.
+            var colon = raw.IndexOf(':');
+            var path = colon > 0 && raw[(colon + 1)..].All(char.IsDigit) ? raw[..colon] : raw;
+            if (seen.Add(path))
+                yield return path;
+        }
+    }
+
+    private static string StripFrontmatter(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return string.Empty;
+        if (!text.StartsWith("---", StringComparison.Ordinal))
+            return text;
+        var end = text.IndexOf("\n---", 3, StringComparison.Ordinal);
+        if (end <= 0)
+            return text;
+        var after = end + 4;
+        if (after < text.Length && text[after] == '\n')
+            after++;
+        return after >= text.Length ? string.Empty : text[after..];
+    }
+
+    private static string SafeUtf8(byte[] bytes)
+    {
+        try
+        {
+            return Encoding.UTF8.GetString(bytes);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    // [text](url) — naive but good enough for body extractors. Excludes
+    // images (those have a `!` prefix outside the alt text); image-style
+    // (`![](src)`) won't match here.
+    private static readonly Regex MarkdownInlineLink = new(
+        @"(?<!\!)\[(?:[^\]]*)\]\(([^)\s]+)\)",
+        RegexOptions.Compiled
+    );
+
+    // [label]: url — reference-style link definitions, one per line.
+    private static readonly Regex MarkdownReferenceLink = new(
+        @"^\s*\[[^\]]+\]:\s+(\S+)\s*$",
+        RegexOptions.Compiled | RegexOptions.Multiline
+    );
+
+    // `path/to/file.ext` or `path/to/file.ext:42`. Requires a `/` plus a
+    // dotted file extension to avoid matching arbitrary inline code like
+    // <c>`foo`</c> or <c>`x.y.z`</c> (no slashes → not a path).
+    private static readonly Regex InlineCodeRef = new(
+        @"`([\w\-./]+/[\w\-]+\.[\w]{1,8}(?::\d+)?)`",
+        RegexOptions.Compiled
+    );
+
+    private static IEnumerable<string?> YamlScalars(object? value)
     {
         if (value is null)
             yield break;
         if (value is string s)
         {
-            if (!string.IsNullOrWhiteSpace(s))
-                yield return s.Trim();
+            yield return s;
             yield break;
         }
         if (value is IEnumerable<object?> list)
@@ -341,19 +627,249 @@ public sealed class ProjectionScanner
             {
                 if (item is null)
                     continue;
-                var t = item.ToString();
-                if (!string.IsNullOrWhiteSpace(t))
-                    yield return t.Trim();
+                yield return item.ToString();
             }
+            yield break;
         }
-        else
+        yield return value.ToString();
+    }
+
+    private static string? DescribeSourceVia(ConventionRefSource source) =>
+        source.Kind switch
         {
-            // Single non-string scalar (number, bool); treat as one ref.
-            var t = value.ToString();
-            if (!string.IsNullOrWhiteSpace(t))
-                yield return t.Trim();
+            "frontmatter" => $"frontmatter.{source.Key}",
+            "path-template" => $"path-template:{source.Key}",
+            "glob" => $"glob:{source.Key}",
+            "literal" => "literal",
+            _ => source.Kind,
+        };
+
+    /// <summary>
+    /// Decide what shape a yielded value should resolve as. <c>auto</c> sniffs
+    /// (URL → glob → path → slug); the other modes force an interpretation.
+    /// </summary>
+    private static PendingRefShape Classify(string value, ConventionRefInterpret interpret)
+    {
+        return interpret switch
+        {
+            ConventionRefInterpret.Url => PendingRefShape.Url,
+            ConventionRefInterpret.Glob => PendingRefShape.Glob,
+            ConventionRefInterpret.Path => PendingRefShape.EntityByPath,
+            ConventionRefInterpret.Slug => PendingRefShape.EntityBySlug,
+            ConventionRefInterpret.RefObject => PendingRefShape.EntityBySlug, // structured object support deferred
+            _ => SniffAuto(value),
+        };
+    }
+
+    private static PendingRefShape SniffAuto(string value)
+    {
+        if (
+            value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+        )
+            return PendingRefShape.Url;
+        if (LooksLikeGlob(value))
+            return PendingRefShape.Glob;
+        if (LooksLikePath(value))
+            return PendingRefShape.EntityByPath;
+        return PendingRefShape.EntityBySlug;
+    }
+
+    private static bool LooksLikeGlob(string s)
+    {
+        foreach (var ch in s)
+            if (ch == '*' || ch == '?' || ch == '[')
+                return true;
+        return false;
+    }
+
+    private static bool LooksLikePath(string s)
+    {
+        if (s.Contains('/'))
+            return true;
+        var ext = Path.GetExtension(s);
+        return ext.Length >= 2;
+    }
+
+    private static bool MatchesFilter(
+        string value,
+        PendingRefShape shape,
+        ConventionRefFilter filter
+    )
+    {
+        switch (filter.Kind)
+        {
+            case "glob":
+            {
+                var pattern = filter.Pattern;
+                var negate = pattern.StartsWith('!');
+                if (negate)
+                    pattern = pattern[1..];
+                var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
+                matcher.AddInclude(pattern);
+                var pseudoRoot = "/";
+                var match = matcher.Match(pseudoRoot, value.StartsWith('/') ? value : "/" + value);
+                var hit = match.HasMatches;
+                return negate ? !hit : hit;
+            }
+            case "regex":
+                try
+                {
+                    return Regex.IsMatch(value, filter.Pattern);
+                }
+                catch
+                {
+                    return false;
+                }
+            case "type":
+            {
+                var typeName = shape switch
+                {
+                    PendingRefShape.Url => "url",
+                    PendingRefShape.Glob => "glob",
+                    PendingRefShape.EntityByPath => "path",
+                    PendingRefShape.EntityBySlug => "slug",
+                    _ => "slug",
+                };
+                return string.Equals(
+                    typeName,
+                    filter.Pattern.Trim(),
+                    StringComparison.OrdinalIgnoreCase
+                );
+            }
+            default:
+                return true;
         }
     }
+
+    private static IEnumerable<string> ExpandGlob(string workingTreePath, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(workingTreePath) || !Directory.Exists(workingTreePath))
+            yield break;
+        var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
+        matcher.AddInclude(pattern);
+        var dir = new DirectoryInfoWrapper(new DirectoryInfo(workingTreePath));
+        var match = matcher.Execute(dir);
+        foreach (var file in match.Files)
+            yield return file.Path.Replace('\\', '/');
+    }
+
+    /// <summary>
+    /// Resolve one pending ref against the entity index. Produces the resolved
+    /// entity id (or null if unresolved), plus the canonical <c>target_kind</c>
+    /// / <c>target_slug</c> values to write back into <c>entity_refs</c>.
+    /// </summary>
+    private static (Guid? ToId, string? TargetKind, string? TargetSlug) ResolvePending(
+        PendingRef pending,
+        Dictionary<(string kind, string slug), Guid> byKindSlug,
+        Dictionary<(string kind, string path), Guid> byKindPath,
+        Dictionary<string, Guid> byPath,
+        Dictionary<string, List<(string Kind, Guid Id)>> bySlug
+    )
+    {
+        switch (pending.Shape)
+        {
+            case PendingRefShape.EntityBySlug:
+            {
+                var slug = pending.Slug ?? string.Empty;
+                if (pending.TargetKindFilter.Any)
+                {
+                    if (bySlug.TryGetValue(slug, out var entries) && entries.Count > 0)
+                        return (entries[0].Id, entries[0].Kind, slug);
+                    return (null, null, slug);
+                }
+                foreach (var k in pending.TargetKindFilter.Allowed)
+                {
+                    if (byKindSlug.TryGetValue((k, slug), out var id))
+                        return (id, k, slug);
+                }
+                return (null, pending.TargetKindFilter.Allowed.FirstOrDefault(), slug);
+            }
+            case PendingRefShape.EntityByPath:
+            {
+                var path = pending.Path ?? string.Empty;
+                if (pending.TargetKindFilter.Any)
+                {
+                    if (byPath.TryGetValue(path, out var id))
+                    {
+                        // Walk byKindPath to recover the kind for this entity.
+                        // O(N) over the kind dimension — N is the number of
+                        // kinds in the workspace, which is small.
+                        foreach (var ((k, p), kid) in byKindPath)
+                            if (kid == id && p == path)
+                                return (kid, k, Path.GetFileNameWithoutExtension(path));
+                    }
+                    return (null, null, Path.GetFileNameWithoutExtension(path));
+                }
+                foreach (var k in pending.TargetKindFilter.Allowed)
+                {
+                    if (byKindPath.TryGetValue((k, path), out var id))
+                        return (id, k, Path.GetFileNameWithoutExtension(path));
+                }
+                return (
+                    null,
+                    pending.TargetKindFilter.Allowed.FirstOrDefault(),
+                    Path.GetFileNameWithoutExtension(path)
+                );
+            }
+            case PendingRefShape.Url:
+                return (null, null, null);
+            default:
+                return (null, null, null);
+        }
+    }
+
+    private static string BuildRefMetadataJson(
+        PendingRef pending,
+        (Guid? ToId, string? TargetKind, string? TargetSlug) resolution
+    )
+    {
+        var meta = new Dictionary<string, object?>(StringComparer.Ordinal);
+        string kind;
+        if (pending.Shape == PendingRefShape.Url)
+            kind = "url";
+        else if (resolution.ToId is not null)
+            kind = "entity";
+        else
+            kind = pending.Shape == PendingRefShape.EntityByPath ? "file" : "slug";
+        meta["kind"] = kind;
+        if (!string.IsNullOrWhiteSpace(pending.Via))
+            meta["via"] = pending.Via;
+        if (!string.IsNullOrWhiteSpace(pending.Raw))
+            meta["raw"] = pending.Raw;
+        if (!string.IsNullOrWhiteSpace(pending.ExpandedFrom))
+            meta["expanded_from"] = pending.ExpandedFrom;
+        if (pending.Url is not null)
+            meta["url"] = pending.Url;
+        if (pending.Path is not null && kind != "entity")
+            meta["path"] = pending.Path;
+        if (pending.UserMetadata is not null)
+        {
+            foreach (var (k, v) in pending.UserMetadata)
+                meta[k] = ExpandMetadataTemplate(v, pending);
+        }
+        return JsonSerializer.Serialize(meta);
+    }
+
+    private static string BuildInverseMetadataJson(PendingRef pending)
+    {
+        var meta = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["kind"] = "entity",
+            ["inverse_of"] = pending.Relationship,
+        };
+        if (!string.IsNullOrWhiteSpace(pending.Via))
+            meta["via"] = pending.Via;
+        return JsonSerializer.Serialize(meta);
+    }
+
+    /// <summary>
+    /// Tiny <c>${value}</c> placeholder substitution for per-edge metadata
+    /// templates. v1 supports just <c>${value}</c>; richer variables land
+    /// alongside the structured ops endpoint.
+    /// </summary>
+    private static string ExpandMetadataTemplate(string template, PendingRef pending) =>
+        template.Replace("${value}", pending.Raw, StringComparison.Ordinal);
 
     private static IReadOnlyDictionary<string, object?>? TryReadFrontmatter(
         byte[] bytes,
@@ -377,10 +893,12 @@ public sealed class ProjectionScanner
         }
     }
 
-    private static string BuildMetadataJson(
+    private string BuildMetadataJson(
         IReadOnlyDictionary<string, object?>? frontmatter,
         IReadOnlyDictionary<string, string> computed,
-        string fullPath
+        string fullPath,
+        string relativePath,
+        byte[] bytes
     )
     {
         var merged = new Dictionary<string, object?>();
@@ -389,41 +907,31 @@ public sealed class ProjectionScanner
             foreach (var (k, v) in frontmatter)
                 merged[k] = v;
         }
+        if (computed.Count == 0)
+            return JsonSerializer.Serialize(merged);
+
+        var ctx = new AccessorContext(
+            FullPath: fullPath,
+            RelativePath: relativePath,
+            Frontmatter: frontmatter,
+            ReadBytes: () => bytes
+        );
         foreach (var (key, accessor) in computed)
         {
+            if (!_accessors.TryGet(accessor, out var field))
+                continue; // unknown accessor: scanner stays silent; schema validation surfaces it
             try
             {
-                var value = ResolveComputed(accessor, fullPath);
+                var value = field.Resolve(ctx);
                 if (value is not null)
                     merged[key] = value;
             }
             catch
             {
-                // best effort
+                // best effort — accessor failures don't block the scan
             }
         }
         return JsonSerializer.Serialize(merged);
-    }
-
-    private static object? ResolveComputed(string accessor, string fullPath) =>
-        accessor switch
-        {
-            "file.line_count" => CountLines(fullPath),
-            "file.mtime" => File.GetLastWriteTimeUtc(fullPath).ToString("O"),
-            "file.size" => new FileInfo(fullPath).Length,
-            // git.* accessors land alongside the IWorkspaceWorkingTree shell-out
-            // path in v0.2 — recording the contract here so consumers can
-            // expect the namespace.
-            _ => null,
-        };
-
-    private static int CountLines(string fullPath)
-    {
-        var n = 0;
-        using var reader = new StreamReader(fullPath);
-        while (reader.ReadLine() is not null)
-            n++;
-        return n;
     }
 
     private static string Sha256(byte[] bytes) =>
@@ -445,17 +953,39 @@ public sealed class ProjectionScanner
     }
 
     /// <summary>
-    /// Internal staging shape for pre-resolved refs. The first pass collects
-    /// these; the second pass resolves them against the populated entity index.
+    /// Internal staging shape for pre-classified refs. The first pass collects
+    /// these (one per yielded source value, after filter + classification + glob
+    /// expansion); the second pass resolves them against the populated entity
+    /// index; the third pass walks them to emit reverse edges.
     /// </summary>
     private sealed record PendingRef(
         Guid FromEntityId,
+        string FromEntityKind,
+        string FromEntitySlug,
         string Relationship,
-        string? TargetKind,
-        string? TargetSlug,
-        string? TargetPath,
-        string SelectKind
+        PendingRefShape Shape,
+        ConventionRefTargetKind TargetKindFilter,
+        string Raw,
+        string? Path,
+        string? Slug,
+        string? Url,
+        string? Via,
+        string? ExpandedFrom,
+        IReadOnlyDictionary<string, string>? UserMetadata,
+        string? InverseKind
     );
+
+    /// <summary>
+    /// Classification of a yielded source value. Drives both the second-pass
+    /// resolver (which lookup table to probe) and the metadata envelope kind.
+    /// </summary>
+    private enum PendingRefShape
+    {
+        EntityBySlug,
+        EntityByPath,
+        Url,
+        Glob, // transient — expanded into per-match EntityByPath refs in the first pass
+    }
 
     public sealed record ScanResult(
         IReadOnlyList<EntityProjection> Entities,

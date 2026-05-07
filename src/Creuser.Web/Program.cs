@@ -137,6 +137,7 @@ builder.Services.AddScoped<IEntityRefStore, entityRefsRepository>();
 builder.Services.AddScoped<IConventionLoader, ConventionLoader>();
 builder.Services.AddScoped<ProjectionScanner>();
 builder.Services.AddScoped<IProjectionSyncService, ProjectionSyncService>();
+builder.Services.AddScoped<Creuser.Projections.Authoring.ConventionEditor>();
 builder.Services.AddScoped<
     IToolLoopToolRegistry,
     Creuser.Projections.ToolLoop.ProjectionToolLoopRegistry
@@ -450,6 +451,8 @@ app.MapSchedulesEndpoints();
 app.MapDashboardsEndpoints();
 app.MapMembersEndpoints();
 app.MapProjectionsEndpoints();
+app.MapConventionsSchemaEndpoints();
+app.MapConventionsAuthoringEndpoints();
 app.MapPlansEndpoints();
 app.MapPingEndpoints();
 app.MapEchoEndpoints();
